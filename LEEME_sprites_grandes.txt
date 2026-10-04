@@ -1,0 +1,28 @@
+PARCHE: SPRITES GRANDES + IMPORTACION DESDE ARCHIVOS
+Requiere los parches anteriores (incluido el de sprites y el de rendimiento). Extrae sobre la solucion sobrescribiendo.
+No hay proyectos nuevos. Para ejecutar la primera vez: dotnet build (copia la carpeta sprites/ junto al ejecutable).
+
+COMO ANADIR UN SPRITE (2 pasos)
+  1) Copia su .png a samples/MiniCraft/sprites/   (cualquier tamano, fondo transparente; el nombre del archivo es el nombre del sprite)
+  2) En Blocks.cs, AL FINAL de los registros:
+         Arbusto = Registry.Register("arbusto", BlockDef.Sprite("arbusto", "mi_arbusto", BlockRender.Cross));
+     y usalo desde una etapa de generacion (como DecorationStage) o a mano con world.SetCell.
+
+TAMANO
+  Por defecto un sprite mide (pixeles / pixelsPerBlock) bloques: 48x36 px a 16 px/bloque = 3 x 2,25 bloques. Puede ser mayor que una celda.
+  Para forzarlo: sprites.json (por sprite) o BlockDef.Sprite(..., width, height) (por bloque).
+  El sprite se ancla en el centro de la base de su celda y sobresale por arriba y por los lados.
+  Cross: cuadrado de lado "ancho" en planta con dos planos cruzados. Billboard: un plano que mira a la camara.
+
+MOTOR
+  GF.Engine:   SpritePacker (empaquetado, probado), SpriteManifest, SpriteAtlas/SpriteAtlasBuilder, SpriteLoader.LoadFolder(...)
+  GF.World.Voxel: BlockDef.Sprite(nombre, sprite, ...), el mallador y el renderer usan el SpriteAtlas; los chunks con sprites que
+               sobresalen ya no se recortan por error.
+  Un nombre que no exista sale como un tablero magenta; los errores de carga se escriben en la consola con el prefijo [sprites].
+
+NOTAS
+  - Los sprites de ejemplo (6 .png, incluido bush_large.png de 48x36) estan generados por codigo para que veas el sistema; sustituyelos por tu arte.
+  - Los bloques de sprites que ya tenias (grass_tuft, flower_*, rock) conservan su nombre, asi que los mundos guardados siguen siendo validos.
+    Se anaden tall_grass y bush al final del registro.
+  - Limitacion: un sprite grande solo se puede apuntar/romper por su celda de anclaje, no por todo su dibujo.
+  - Con muchos sprites grandes de alta resolucion lejos, sin mipmaps puede haber centelleo; si te pasa, lo vemos.

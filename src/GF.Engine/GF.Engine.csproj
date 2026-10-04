@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="MonoGame.Framework.DesktopGL" Version="$(MonoGameVersion)" />
+    <ProjectReference Include="..\GF.Core\GF.Core.csproj" />
+  </ItemGroup>
+</Project>

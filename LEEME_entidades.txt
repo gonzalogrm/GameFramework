@@ -1,0 +1,18 @@
+PARCHE: ENTIDADES CON INDICE ESPACIAL
+Requiere tener aplicado antes el parche de origen flotante. Extrae sobre la solucion sobrescribiendo.
+No hay proyectos nuevos: no hace falta tocar ningun .csproj ni el .sln.
+
+NUEVOS
+  src/GF.World/Entities/Entity.cs          Entity, EntityDef, EntityRecord, SimulationTier
+  src/GF.World/Entities/EntityStore.cs     indices por id / columna de chunks / region, niveles de simulacion, consultas, export/import
+  src/GF.World.Voxel/BoxRenderer.cs        cajas de color (entidades) con origen flotante
+  samples/MiniCraft/EntityTypes.cs         aldeano y caravana
+  samples/MiniCraft/NpcSystem.cs           IA: destinos, fisica de las entidades activas, poblacion inicial
+  tests/GF.World.Tests/EntityTests.cs
+
+MODIFICADOS
+  src/GF.World/Map/WorldScale.cs           + DeltaX (distancia por el camino corto en un mundo que se envuelve)
+  src/GF.World.Voxel/VoxelWorldRenderer.cs + gancho afterOpaque en Draw
+  samples/MiniCraft/PlayScene.cs           integra el almacen, la IA, el dibujo y el guardado
+  samples/MiniCraft/MapScene.cs            + marcadores de entidades
+  samples/MiniCraft/SaveSystem.cs          + entities.json

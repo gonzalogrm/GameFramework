@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ServerGarbageCollector>false</ServerGarbageCollector>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\GF.World.Voxel\GF.World.Voxel.csproj" />
+    <ProjectReference Include="..\..\src\GF.World.Tiles\GF.World.Tiles.csproj" />
+    <ProjectReference Include="..\..\src\GF.UI\GF.UI.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Se copia junto al ejecutable: edita samples/MiniCraft/worldsettings.json y compila/ejecuta -->
+    <Content Include="worldsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Cada .png de sprites/ es un sprite (más sprites.json opcional con tamaños) -->
+    <Content Include="sprites\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

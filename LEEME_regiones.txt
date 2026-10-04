@@ -1,0 +1,18 @@
+PARCHE: ARCHIVOS POR REGION CON INDICE Y CACHE
+Requiere los parches anteriores (origen flotante, entidades, configuracion). Extrae sobre la solucion sobrescribiendo.
+No hay proyectos nuevos: no hace falta tocar el .sln ni ningun .csproj.
+
+NUEVOS
+  src/GF.World/RegionChunkStore.cs          IChunkStore por regiones (sin MonoGame)
+  tests/GF.World.Tests/RegionStoreTests.cs  9 tests
+MODIFICADOS
+  samples/MiniCraft/PlayScene.cs            usa RegionChunkStore (+ FileChunkStore como lectura de guardados antiguos); flush al guardar; estadisticas en F3
+  samples/MiniCraft/SaveSystem.cs           + RegionsDir (%AppData%/MiniCraft/world/regions)
+
+FORMATO  r.X.Y.Z.rgn : cabecera de 32 bytes + registros { 0xC7, slot, longitud, datos Deflate }, de solo-anadir.
+INDICE   se reconstruye al abrir la region (recorre cabeceras); leer un chunk = Seek + Read.
+CACHE    hasta 16 regiones abiertas con su indice (LRU). Parametro maxOpenRegions.
+COMPACTA al cerrar una region, si las versiones obsoletas pesan mas que las vigentes y pasan de 64 KB.
+RECUPERA una cola truncada por un apagado a medias: se descarta y los chunks anteriores siguen intactos.
+MIGRA    los mundos guardados con un archivo por chunk se siguen leyendo; al volver a guardarse pasan a regiones.
+         La carpeta chunks/ antigua se puede borrar cuando quieras (los chunks no editados se regeneran igual).

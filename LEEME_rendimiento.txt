@@ -1,0 +1,31 @@
+PARCHE: RENDIMIENTO
+Requiere los parches anteriores (origen flotante, entidades, configuracion, regiones, sprites).
+Extrae sobre la solucion sobrescribiendo. No hay proyectos nuevos: no hace falta tocar el .sln.
+
+ANTES DE NADA: EJECUTA EN RELEASE
+    dotnet run -c Release --project samples/MiniCraft
+En Debug el JIT no optimiza y el ruido, la generacion y el mallado van varias veces mas lentos.
+
+QUE CAMBIA
+  Generacion (la generacion YA era multihilo; lo que limitaba era el reparto y el trabajo repetido)
+    TerrainColumnCache  altura y bioma de cada columna se calculan UNA vez (antes: una por cada chunk vertical, mas otra vez
+                        en arboles y decoracion). TerrainStage escribe directo al array y salta chunks de aire / de piedra maciza.
+    ChunkManager        MaxConcurrentJobs cuenta solo trabajos en ejecucion (antes tambien los terminados, y se atascaba);
+                        los resultados se incorporan por presupuesto de tiempo (ApplyBudgetMs) en vez de 4 por frame;
+                        el recorrido de chunks pedidos solo se repite cuando hace falta; estadisticas de generacion.
+  Mallado
+    CanMesh / AreNeighborsSettled   un chunk no se malla hasta que sus vecinos estan cargados: antes se mallaba de nuevo cada vez
+                        que cargaba uno de sus 26 vecinos (decenas de veces durante la carga inicial). Las ediciones siguen siendo inmediatas.
+    ChunkMesher         salida inmediata en chunks de aire, tablas en arrays (BlockTable), vecinos interiores leidos del array,
+                        listas reutilizadas por hilo.
+    VoxelWorldRenderer  subida a la GPU por presupuesto de tiempo (UploadBudgetMs) y seleccion de los N mas cercanos en una sola pasada.
+  Medicion
+    FrameProfiler + F3  tiempos del hilo principal (chunks, malla, entidades, dibujo) y ms/chunk de generacion y mallado.
+  Proceso
+    Program.cs / MiniCraft.csproj   GC con latencia sostenida, GC de estacion (no servidor), TieredPGO.
+    worldsettings.json  + WorkerThreads (0 = automatico: nucleos - 2; ~60 % generan y el resto malla).
+
+COMO LEER F3
+    Generacion X ms/chunk, Mallado Y ms/chunk   coste en los hilos de fondo (no afecta a los FPS directamente)
+    Tiempos del hilo principal                  si "dibujo" domina, el cuello de botella es la GPU/llamadas de dibujo
+                                                (baja ViewDistance); si domina "chunks" o "malla", pega ahi el numero y lo afinamos.

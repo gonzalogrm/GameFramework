@@ -1,0 +1,16 @@
+PARCHE: ORIGEN FLOTANTE
+Extrae este zip sobre la carpeta de la solucion, sobrescribiendo los archivos existentes.
+No hay archivos nuevos en proyectos (solo Vec3d.cs y un test): no hace falta tocar ningun .csproj ni el .sln.
+
+Archivos:
+  src/GF.Core/Vec3d.cs                       NUEVO  posicion en doble precision
+  src/GF.Core/Coordinates.cs                 IntMath.FloorToInt(double)
+  src/GF.World/Map/WorldScale.cs             WrapX(double)
+  src/GF.Engine/Cameras.cs                   ICamera3D con Position Vec3d y ViewRelativeTo(origen)
+  src/GF.World.Voxel/ChunkMesher.cs          vertices LOCALES al chunk
+  src/GF.World.Voxel/VoxelWorldRenderer.cs   matriz de mundo por chunk relativa a la camara
+  src/GF.World.Voxel/VoxelPhysics.cs         colision en double
+  src/GF.World.Voxel/VoxelRaycaster.cs       raycast en double
+  samples/MiniCraft/PlayScene.cs             posicion del jugador en Vec3d
+  samples/MiniCraft/SaveSystem.cs            posicion guardada en double
+  tests/GF.World.Tests/FloatingOriginTests.cs NUEVO

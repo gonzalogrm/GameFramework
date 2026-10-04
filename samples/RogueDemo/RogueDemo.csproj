@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\GF.World.Tiles\GF.World.Tiles.csproj" />
+    <ProjectReference Include="..\..\src\GF.UI\GF.UI.csproj" />
+  </ItemGroup>
+</Project>

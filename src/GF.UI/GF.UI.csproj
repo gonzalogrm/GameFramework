@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Myra" Version="1.6.6" />
+    <ProjectReference Include="..\GF.Engine\GF.Engine.csproj" />
+  </ItemGroup>
+</Project>

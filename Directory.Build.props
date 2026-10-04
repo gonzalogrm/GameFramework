@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Versiones flotantes: fija las exactas cuando compiles por primera vez -->
+    <MonoGameVersion>3.8.*</MonoGameVersion>
+    <MyraVersion>1.5.*</MyraVersion>
+  </PropertyGroup>
+</Project>

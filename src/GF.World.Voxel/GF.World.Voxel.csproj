@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\GF.World\GF.World.csproj" />
+    <ProjectReference Include="..\GF.Engine\GF.Engine.csproj" />
+  </ItemGroup>
+</Project>

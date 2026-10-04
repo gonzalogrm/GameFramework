@@ -1,0 +1,22 @@
+PARCHE: SPRITES 2D EN EL MOTOR
+Requiere los parches anteriores (origen flotante, entidades, configuracion, regiones). Extrae sobre la solucion sobrescribiendo.
+No hay proyectos nuevos: no hace falta tocar el .sln ni ningun .csproj.
+
+MOTOR (GF.World.Voxel)
+  BlockDef.cs              BlockRender { Cube, Cross, Billboard }, SpriteWidth/Height, Selectable, BlockDef.Sprite(...)
+  ChunkMesher.cs           Cross -> dos planos cruzados dentro de la malla del chunk. Billboard -> solo la instancia.
+  VoxelWorldRenderer.cs    pasada de sprites con recorte por alfa (AlphaTestEffect) y billboards orientados a la camara
+  VoxelRaycaster.cs        el cursor tambien apunta a los sprites (aunque no tengan colision)
+
+MINICRAFT
+  Blocks.cs, AtlasFactory.cs   4 bloques-sprite nuevos y sus tiles con fondo transparente
+  DecorationStage.cs   NUEVO   hierba, flores y rocas por bioma, sin costuras entre chunks
+  WorldSettings.cs, worldsettings.json   + PropDensityMultiplier
+  PlayScene.cs         etapa de decoracion, hotbar de 9 slots (flor y roca), colocar sobre un sprite lo sustituye
+
+COMO AÑADIR UN SPRITE PROPIO
+  1) Dibuja el tile en el atlas con fondo transparente (alfa 0).
+  2) Blocks.cs:  Mi = Registry.Register("mi", BlockDef.Sprite("mi", TileMi, BlockRender.Cross | Billboard, ancho, alto));
+     (anade bloques siempre al final del registro: el orden son los ids guardados en disco)
+  3) Colocalo desde una IGenerationStage (como DecorationStage) o a mano con world.SetCell.
+  Cross: muy barato, para mucha cantidad (hierba, flores).  Billboard: mira siempre a la camara, solo se dibuja a <= BillboardDistance bloques (64 por defecto).

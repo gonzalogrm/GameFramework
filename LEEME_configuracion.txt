@@ -1,0 +1,32 @@
+PARCHE: CONFIGURACION DEL MUNDO
+Requiere tener aplicados los parches de origen flotante y entidades. Extrae sobre la solucion sobrescribiendo.
+No hay proyectos nuevos en la solucion: no hace falta tocar el .sln.
+
+COMO SE USA
+  Edita samples/MiniCraft/worldsettings.json (cada parametro lleva su explicacion y su rango).
+  Se copia junto al ejecutable al compilar. Pulsa "Nuevo mundo" para generar con los valores nuevos.
+  "Continuar" usa la configuracion guardada con ese mundo: cambiar el terreno de un mundo ya generado
+  haria que los chunks nuevos no encajasen con los viejos.
+  Los valores fuera de rango se ajustan y el menu principal lo avisa.
+  Los guardados anteriores dejan de ser compatibles (version 4): empieza un mundo nuevo.
+
+PARAMETROS DE LA PETICION
+  VerticalChunks      chunks en vertical; altura = VerticalChunks * ChunkSize (4 -> 64, 8 -> 128, 16 -> 256)
+  ContinentSize       tamano de los continentes en bloques
+  DetailSize / MountainSize / *Amplitude / *Octaves   resto del ruido del relieve
+  y ademas: nivel del mar, clima, biomas, arboles, distancia de vision, poblacion, escala del mundo
+
+NUEVOS
+  samples/MiniCraft/WorldSettings.cs
+  samples/MiniCraft/worldsettings.json
+MODIFICADOS
+  samples/MiniCraft/MiniCraft.csproj       copia el json al compilar
+  samples/MiniCraft/MiniCraftClimate.cs    relieve y clima parametrizados; Classify() pasa aqui
+  samples/MiniCraft/Biomes.cs              sin Classify (ahora en MiniCraftClimate)
+  samples/MiniCraft/TerrainStage.cs, TreeStage.cs, NpcSystem.cs, MapScene.cs
+  samples/MiniCraft/MainMenuScene.cs       lee la configuracion y muestra avisos
+  samples/MiniCraft/SaveSystem.cs          guarda la configuracion con el mundo
+  samples/MiniCraft/PlayScene.cs           alto, vision y niebla salen de la configuracion
+
+OPCIONAL
+  Borra samples/MiniCraft/MiniCraftWorld.cs: ya no lo usa nadie (su escala y nivel del mar viven ahora en WorldSettings).

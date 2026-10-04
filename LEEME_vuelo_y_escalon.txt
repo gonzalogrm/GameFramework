@@ -1,0 +1,18 @@
+PARCHE: MODO VOLAR + ESCALON AUTOMATICO
+Requiere los parches anteriores. Extrae sobre la solucion sobrescribiendo.
+No hay proyectos nuevos; el proyecto de tests pasa a referenciar GF.World.Voxel (ya incluido en su .csproj).
+
+TECLAS (MiniCraftGame.cs)
+  F            activa / desactiva el vuelo        (Espacio sube, Ctrl o C baja, Shift acelera)
+  G            activa / desactiva el escalon automatico
+  Ambos arrancan desactivados; al cambiarlos sale un aviso en pantalla y el estado aparece tambien en F3.
+
+COMO FUNCIONA EL ESCALON
+  VoxelPhysics.MoveAndCollide(..., stepHeight): si andando chocas con un bloque, se prueba a subir stepHeight, avanzar y apoyarse
+  arriba. No se sube si hay un techo bajo, si la pared es mas alta que el escalon, ni en el aire o volando.
+  Por defecto stepHeight = 0, asi que NPCs y demas llamadores se comportan igual que antes.
+
+ARCHIVOS
+  src/GF.World.Voxel/VoxelPhysics.cs
+  samples/MiniCraft/MiniCraftGame.cs, samples/MiniCraft/PlayScene.cs
+  tests/GF.World.Tests/GF.World.Tests.csproj, StepPhysicsTests.cs
