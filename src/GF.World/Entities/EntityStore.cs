@@ -27,6 +27,7 @@ public sealed class EntityStore
     private readonly HashSet<Entity> _active = new();
     private readonly HashSet<Entity> _approx = new();
     private readonly List<Entity> _scratch = new();
+    private readonly List<Entity> _rayScratch = new();
     private Entity[] _farSnapshot = Array.Empty<Entity>();
     private int _farCursor;
     private double _nearTimer;
@@ -37,6 +38,12 @@ public sealed class EntityStore
         _shape = chunkShape;
         _scale = scale;
     }
+
+    /// <summary>
+    /// Tipos de entidad. Al crear una entidad se le asigna su definición (y con ella su prototipo de propiedades). Asígnalo antes de
+    /// crear o importar entidades; sin él las entidades funcionan igual, pero sin propiedades.
+    /// </summary>
+    public Registry<EntityDef>? Definitions { get; set; }
 
     /// <summary>Reloj de simulación en segundos.</summary>
     public double Time { get; private set; }
@@ -85,6 +92,7 @@ public sealed class EntityStore
     private Entity Create(long id, ushort typeId, Vec3d position, double speed, string? tag, Vec3d? destination)
     {
         var e = new Entity(id, typeId) { Speed = speed, Tag = tag };
+        if (Definitions != null && typeId < Definitions.Count) e.Def = Definitions.Get(typeId);
         _all[id] = e;
         e.Position = Normalize(position);
         e.Column = ColumnOf(e.Position);
@@ -319,6 +327,64 @@ public sealed class EntityStore
     public IEnumerable<Entity> InColumn(ChunkCoord column) =>
         _byColumn.TryGetValue(new ChunkCoord(_scale.WrapChunkX(column.X), 0, column.Z), out var set) ? set : Enumerable.Empty<Entity>();
 
+    // ------------------------------------------------------------------ puntería e inspección
+
+    /// <summary>
+    /// Primera entidad que corta un rayo (caja alineada con los ejes: ancho x alto x ancho de su EntityDef). 'direction' debe estar
+    /// normalizada. Solo mira las entidades cercanas, usando el índice espacial.
+    /// </summary>
+    public Entity? Raycast(Vec3d origin, Vec3d direction, double maxDistance, out double distance)
+    {
+        _rayScratch.Clear();
+        QueryRadius(origin, maxDistance + 2.0, _rayScratch);
+
+        Entity? best = null;
+        double bestT = maxDistance;
+        foreach (var e in _rayScratch)
+        {
+            double w = e.Def?.Width ?? 0.6, h = e.Def?.Height ?? 1.8;
+            // Todo relativo al origen del rayo (y X por el camino corto, por la costura este-oeste).
+            double cx = _scale.DeltaX(origin.X, e.Position.X), cy = e.Position.Y - origin.Y, cz = e.Position.Z - origin.Z;
+            if (RayHitsBox(direction, cx - w / 2, cy, cz - w / 2, cx + w / 2, cy + h, cz + w / 2, out double t) && t < bestT)
+            {
+                best = e;
+                bestT = t;
+            }
+        }
+        _rayScratch.Clear();
+        distance = bestT;
+        return best;
+    }
+
+    private static bool RayHitsBox(Vec3d d, double minX, double minY, double minZ, double maxX, double maxY, double maxZ, out double t)
+    {
+        double tmin = 0, tmax = double.MaxValue;
+        t = 0;
+        if (!Slab(d.X, minX, maxX, ref tmin, ref tmax) ||
+            !Slab(d.Y, minY, maxY, ref tmin, ref tmax) ||
+            !Slab(d.Z, minZ, maxZ, ref tmin, ref tmax)) return false;
+        t = tmin;
+        return true;
+    }
+
+    private static bool Slab(double dir, double min, double max, ref double tmin, ref double tmax)
+    {
+        if (Math.Abs(dir) < 1e-12) return min <= 0 && 0 <= max;   // paralelo al plano: el origen (0) debe estar dentro de la losa
+        double t1 = min / dir, t2 = max / dir;
+        if (t1 > t2) (t1, t2) = (t2, t1);
+        tmin = Math.Max(tmin, t1);
+        tmax = Math.Min(tmax, t2);
+        return tmin <= tmax;
+    }
+
+    /// <summary>Cuántas entidades tienen algún cambio de propiedad guardado (el resto comparte su prototipo sin gastar nada).</summary>
+    public int CountWithOverrides()
+    {
+        int n = 0;
+        foreach (var e in _all.Values) if (e.OverrideCount > 0) n++;
+        return n;
+    }
+
     // ------------------------------------------------------------------ persistencia
 
     public List<EntityRecord> Export(Registry<EntityDef> defs)
@@ -327,8 +393,12 @@ public sealed class EntityStore
         foreach (var e in _all.Values)
         {
             var d = e.Destination;
+            List<PropertyRecord>? props = null;   // solo las propiedades cambiadas
+            foreach (var (id, value) in e.RawOverrides)
+                (props ??= new List<PropertyRecord>()).Add(new PropertyRecord(PropertyIds.NameOf(id), value.Number, value.Text));
+
             list.Add(new EntityRecord(e.Id, defs.Get(e.TypeId).Name, e.Position.X, e.Position.Y, e.Position.Z,
-                d?.X, d?.Y, d?.Z, e.Speed, e.Tag));
+                d?.X, d?.Y, d?.Z, e.Speed, e.Tag, props));
         }
         return list;
     }
@@ -337,6 +407,7 @@ public sealed class EntityStore
     public void Import(IEnumerable<EntityRecord> records, Registry<EntityDef> defs, double time)
     {
         Clear();
+        Definitions ??= defs;
         Time = time;
         foreach (var r in records)
         {
@@ -344,7 +415,8 @@ public sealed class EntityStore
             Vec3d? dest = r.DestX.HasValue && r.DestY.HasValue && r.DestZ.HasValue
                 ? new Vec3d(r.DestX.Value, r.DestY.Value, r.DestZ.Value)
                 : null;
-            Create(r.Id, type, new Vec3d(r.X, r.Y, r.Z), r.Speed, r.Tag, dest);
+            var entity = Create(r.Id, type, new Vec3d(r.X, r.Y, r.Z), r.Speed, r.Tag, dest);
+            if (r.Props != null) foreach (var p in r.Props) entity.ImportProperty(p);
             _nextId = Math.Max(_nextId, r.Id + 1);
         }
     }

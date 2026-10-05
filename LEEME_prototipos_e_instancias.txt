@@ -1,0 +1,33 @@
+PARCHE: PROTOTIPOS E INSTANCIAS (propiedades por instancia con memoria minima) + INSPECTOR
+Requiere los parches anteriores. Extrae sobre la solucion sobrescribiendo. No hay proyectos nuevos.
+
+IDEA
+  Prototype           el TIPO: propiedades y valores por defecto, una sola vez en memoria. Puede heredar (perro > criatura).
+  Instancia           remite a su prototipo y solo guarda lo que ha CAMBIADO (PropertyOverrides: arrays de tamaño exacto).
+                      Sin cambios no reserva nada. Si un valor vuelve al del prototipo, el cambio se borra y la memoria se libera.
+  Entidades           Entity.Def / Entity.Prototype; Get/GetFloat/GetInt/GetBool/GetText, Set(nombre, valor), ResetProperty, Properties.
+  Bloques             BlockDef.Props es el prototipo del tipo. Una CELDA solo guarda cambios si los tiene (Chunk.CellProperties,
+                      un diccionario casi siempre null). BlockRef(world, blocks, celda) da el acceso: Get/Set/TryGetFloat/Properties.
+                      Reemplazar el bloque de una celda por otro tipo borra sus cambios (es otra instancia).
+  Persistencia        Entidades: EntityRecord.Props (solo lo cambiado, en entities.json). Bloques: van dentro del payload del chunk en las
+                      regiones (formato compatible: los chunks antiguos se leen igual). Se guardan por NOMBRE de propiedad.
+
+COMO DEFINIR UN TIPO
+    var criatura = new Prototype("criatura").Text("name", "").Float("hp", 10f).Float("max_hp", 10f);
+    var perro = criatura.Derive("perro").Text("species", "Perro").Float("hp", 12f);
+    Registry.Register("dog", new EntityDef("dog", 4.5, r,g,b, ancho, alto, perro));        // EntityTypes.cs
+    BlockDef.Cube("stone", tile) with { Props = BlockProto.Derive("piedra").Float("durability", 3f) }   // Blocks.cs
+  Y para usarlo:   perro.Set("hp", 7f);   perro.GetFloat("hp");   new BlockRef(world, Blocks.Registry, celda).Set("durability", 2f);
+
+EN EL JUEGO
+  I             activa/desactiva el INSPECTOR: muestra las propiedades de lo que apuntas (entidad o bloque), cuales has cambiado y su
+                valor por defecto. Abajo, en F3: cuantas instancias tienen cambios guardados.
+  Clic izq.     sobre una ENTIDAD: la golpea (-1 de "hp"; al llegar a 0 muere). Solo ese individuo guarda su "hp".
+                sobre un BLOQUE: lo pica. Cada golpe resta 1 de "durability" (stone 3, log 2, el resto 1): solo el bloque golpeado
+                guarda su valor. Para volver a romper todo de un golpe, pon durability = 1 en Blocks.cs.
+  Nuevo         tipo de entidad "dog" (4 perros junto al jugador) y nombres propios en aldeanos y perros.
+
+ARCHIVOS
+  NUEVOS     src/GF.Core/Properties.cs, src/GF.World.Voxel/BlockRef.cs, samples/MiniCraft/Inspector.cs, 3 archivos de tests
+  MODIFICADOS GF.World: Chunk, World, RegionChunkStore, Entities/Entity, Entities/EntityStore
+              GF.World.Voxel: BlockDef.  MiniCraft: Blocks, EntityTypes, NpcSystem, PlayScene, MiniCraftGame

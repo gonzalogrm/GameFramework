@@ -22,7 +22,11 @@ public sealed class NpcSystem
         public bool NeedsUnstuck = true;
     }
 
-    private const double MaxActiveSpeed = 12.0;   // por encima, la física por pasos atravesaría bloques
+    private const double MaxActiveSpeed = 2.0;   // por encima, la física por pasos atravesaría bloques
+
+    private static readonly string[] VillagerNames =
+        { "Roser", "Ovejo", "Cona", "Manek", "Hernan", "Pablo", "Oriol", "Carmen", "Pazaco" };
+    private static readonly string[] DogNames = { "Pixel", "Lola", "Toby", "Nala", "Thor", "Luna", "Bruno", "Kira" };
 
     private readonly EntityStore _store;
     private readonly World<ushort> _world;
@@ -110,6 +114,18 @@ public sealed class NpcSystem
             double x = player.X + Math.Cos(angle) * r, z = player.Z + Math.Sin(angle) * r;
             var pos = new Vec3d(x, GroundY(x, z), z);
             var e = _store.Spawn(EntityTypes.Villager, pos, villager.DefaultSpeed);
+            e.Set("name", VillagerNames[_rng.Next(VillagerNames.Length)]);   // lo único propio de cada aldeano; el resto, del prototipo
+            _store.SetDestination(e, WanderTarget(pos));
+        }
+
+        var dog = EntityTypes.Registry.Get(EntityTypes.Dog);
+        for (int i = 0; i < 4; i++)
+        {
+            double angle = _rng.NextDouble() * Math.PI * 2, r = 4 + _rng.NextDouble() * 12;
+            double x = player.X + Math.Cos(angle) * r, z = player.Z + Math.Sin(angle) * r;
+            var pos = new Vec3d(x, GroundY(x, z), z);
+            var e = _store.Spawn(EntityTypes.Dog, pos, dog.DefaultSpeed);
+            e.Set("name", DogNames[_rng.Next(DogNames.Length)]);
             _store.SetDestination(e, WanderTarget(pos));
         }
 

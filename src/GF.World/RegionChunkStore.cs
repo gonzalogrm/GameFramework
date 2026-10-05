@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 using GF.Core;
 
 namespace GF.World;
@@ -24,6 +25,9 @@ namespace GF.World;
 public sealed class RegionChunkStore<TCell> : IChunkStore<TCell>, IDisposable where TCell : unmanaged
 {
     private readonly record struct RegionKey(int X, int Y, int Z);
+
+    /// <summary>Marca que, tras las celdas, el payload trae los cambios de instancia de los bloques. Los payloads antiguos no la tienen.</summary>
+    private const int PropertiesMarker = 0xA5;
 
     private readonly string _dir;
     private readonly int _rx, _ry, _rz, _maxOpen;
@@ -150,8 +154,30 @@ public sealed class RegionChunkStore<TCell> : IChunkStore<TCell>, IDisposable wh
     {
         using var ms = new MemoryStream();
         using (var ds = new DeflateStream(ms, CompressionLevel.Fastest, leaveOpen: true))
+        {
             ds.Write(MemoryMarshal.AsBytes(chunk.Cells.AsSpan()));
+            if (chunk.CellProperties is { Count: > 0 } properties)
+            {
+                ds.WriteByte(PropertiesMarker);
+                using var writer = new BinaryWriter(ds, Encoding.UTF8, leaveOpen: true);
+                PropertySerializer.WriteCellMap(writer, properties);
+            }
+        }
         return ms.ToArray();
+    }
+
+    private static Dictionary<int, PropertyOverrides>? ReadProperties(Stream ds)
+    {
+        if (ds.ReadByte() != PropertiesMarker) return null;   // payload antiguo o sin cambios de instancia
+        try
+        {
+            using var reader = new BinaryReader(ds, Encoding.UTF8, leaveOpen: true);
+            return PropertySerializer.ReadCellMap(reader);
+        }
+        catch (Exception e) when (e is EndOfStreamException or InvalidDataException or IOException or FormatException)
+        {
+            return null;   // las celdas son lo importante: si las propiedades están dañadas, se pierden solo ellas
+        }
     }
 
     private static bool Inflate(byte[] payload, Chunk<TCell> chunk)
@@ -161,6 +187,7 @@ public sealed class RegionChunkStore<TCell> : IChunkStore<TCell>, IDisposable wh
             using var ms = new MemoryStream(payload, writable: false);
             using var ds = new DeflateStream(ms, CompressionMode.Decompress);
             ds.ReadExactly(MemoryMarshal.AsBytes(chunk.Cells.AsSpan()));
+            chunk.CellProperties = ReadProperties(ds);
             return true;
         }
         catch (Exception e) when (e is EndOfStreamException or InvalidDataException or IOException)

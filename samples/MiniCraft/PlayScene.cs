@@ -9,6 +9,7 @@ using GF.World.Voxel;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Myra.Graphics2D;
+using Myra.Graphics2D.Brushes;
 using Myra.Graphics2D.UI;
 
 namespace MiniCraft;
@@ -16,7 +17,7 @@ namespace MiniCraft;
 public sealed class PlayScene : UiScene
 {
     private const int LowestChunkY = 0;   // la altura (nº de chunks en vertical) sale de WorldSettings.VerticalChunks
-    private const float EyeHeight = 1.90f; //1.62f
+    private const float EyeHeight = 1.80f;
     private const float Reach = 6f;
     private const float AutosaveSeconds = 60f;
     private static readonly Vector3 BodySize = new(0.6f, 1.8f, 0.6f);
@@ -36,6 +37,7 @@ public sealed class PlayScene : UiScene
     private RegionChunkStore<ushort> _store = null!;
     private VoxelWorldRenderer _renderer = null!;
     private SpriteAtlas _sprites = null!;
+    private FarTerrainRenderer? _far;   // terreno lejano por niveles de detalle (null si está desactivado)
     private MiniCraftClimate _climate = null!;
     private Task<World<MapCell>> _mapTask = null!;
     private World<MapCell>? _map;
@@ -43,7 +45,10 @@ public sealed class PlayScene : UiScene
     private NpcSystem _npcs = null!;
     private BoxRenderer _boxes = null!;
     private Hotbar _hotbar = null!;
-    private Label _debug = null!, _status = null!;
+    private Label _debug = null!, _status = null!, _inspector = null!;
+    private Entity? _entityTarget;
+    private bool _inspecting;
+    private float _inspectTimer;
     private Vec3d _pos = new(0, 64, 0);   // doble precisión: a 100.000 bloques del origen un float pierde 1/128 de bloque
     private Vector3 _vel;
     private bool _onGround, _loaded, _spawned, _needsUnstuck, _entitiesInit;
@@ -69,6 +74,13 @@ public sealed class PlayScene : UiScene
         root.Widgets.Add(_hotbar.Root);
         _debug = new Label { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(8), Visible = false };
         root.Widgets.Add(_debug);
+        _inspector = new Label
+        {
+            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8), Padding = new Thickness(8),
+            Background = new SolidBrush(new Color(0, 0, 0, 160)), Visible = false,
+        };
+        root.Widgets.Add(_inspector);
         _status = new Label { Text = "Generando mundo...", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 60, 0, 0) };
         root.Widgets.Add(_status);
         return root;
@@ -95,6 +107,11 @@ public sealed class PlayScene : UiScene
 
         int cs = _settings.ChunkSize, layers = _settings.VerticalChunks, view = _settings.ViewDistance;
         float viewBlocks = view * cs;
+        // Terreno lejano (LOD): si está activo, la niebla y el plano lejano de la cámara se alejan hasta su límite.
+        float farBlocks = _settings.FarDistanceChunks * cs;
+        bool farEnabled = farBlocks > viewBlocks * 1.25f;
+        float fogRange = farEnabled ? farBlocks : viewBlocks;
+        float fogStart = fogRange * (farEnabled ? 0.45f : 0.55f), fogEnd = fogRange * (farEnabled ? 0.98f : 0.95f);
         // Hilos de fondo: ~60 % a generar chunks y el resto a mallarlos; se dejan libres un par de núcleos para el juego.
         int workers = _settings.WorkerThreads > 0 ? _settings.WorkerThreads : Math.Max(2, Environment.ProcessorCount - 2);
         int genThreads = Math.Max(1, (int)Math.Round(workers * 0.6));
@@ -121,18 +138,31 @@ public sealed class PlayScene : UiScene
         {
             MaxMeshingJobs = meshThreads,
             CanMesh = _chunks.AreNeighborsSettled,   // no mallar hasta que los vecinos estén cargados: cada chunk se malla una vez, no diez
-            FogColor = MiniCraftGame.SkyColor, FogStart = viewBlocks * 0.55f, FogEnd = viewBlocks * 0.95f,
+            FogColor = MiniCraftGame.SkyColor, FogStart = fogStart, FogEnd = fogEnd,
         };
 
-        _camera.FarPlane = Math.Max(500f, viewBlocks * 1.6f);
+        _camera.FarPlane = Math.Max(500f, fogRange * 1.2f);
+        if (farEnabled) _camera.NearPlane = 0.15f;   // más precisión de profundidad a distancia
+
+        // Terreno LEJANO: relieve aproximado que llega mucho más lejos que los chunks y gana detalle al acercarte. Dentro de la
+        // distancia de chunks lo sustituyen los bloques (con colinas finas, árboles, sprites y entidades).
+        if (farEnabled)
+        {
+            _far = new FarTerrainRenderer(Game.GraphicsDevice, new MiniCraftFarSource(_climate, _scale), _scale.HeightBlocks)
+            {
+                FarDistance = farBlocks, SplitFactor = _settings.FarDetail,
+                FogColor = MiniCraftGame.SkyColor, FogStart = fogStart, FogEnd = fogEnd,
+            };
+        }
 
         // Entidades: índice espacial + IA. El almacén se engancha al mundo para activarse al cargar chunks.
         _entities = new EntityStore(_world.Shape, _scale);
         _entities.Attach(_world);
+        _entities.Definitions = EntityTypes.Registry;   // cada entidad remite a su tipo y a su prototipo de propiedades
         _npcs = new NpcSystem(_entities, _world, _climate, _scale, () => _map, _seed);
         _boxes = new BoxRenderer(Game.GraphicsDevice, _scale)
         {
-            FogColor = MiniCraftGame.SkyColor, FogStart = viewBlocks * 0.55f, FogEnd = viewBlocks * 0.95f,
+            FogColor = MiniCraftGame.SkyColor, FogStart = fogStart, FogEnd = fogEnd,
         };
         if (_save != null && SaveSystem.TryLoadEntities() is { } savedEntities)
             _entities.Import(savedEntities.Entities, EntityTypes.Registry, savedEntities.Time);
@@ -158,6 +188,7 @@ public sealed class PlayScene : UiScene
         _renderer.Dispose();
         _boxes.Dispose();
         _sprites.Dispose();
+        _far?.Dispose();
     }
 
     private void Save()
@@ -258,6 +289,12 @@ public sealed class PlayScene : UiScene
             _autoStep = !_autoStep;
             ShowMessage(_autoStep ? "Escalon automatico activado" : "Escalon automatico desactivado");
         }
+        if (input.Pressed("Inspect"))
+        {
+            _inspecting = !_inspecting;
+            _inspector.Visible = _inspecting;
+            _inspectTimer = 0;
+        }
 
         if (!_entitiesInit && _map != null)
         {
@@ -291,7 +328,7 @@ public sealed class PlayScene : UiScene
         if (input.IsDown("Left")) wish -= right;
         if (wish != Vector3.Zero) wish.Normalize();
         bool sprint = input.IsDown("Sprint");
-        float speed = _flying ? (sprint ? 20f : 10f) : (sprint ? 20f : 5.5f);
+        float speed = _flying ? (sprint ? 50f : 10f) : (sprint ? 50f : 5.5f);
         _vel.X = wish.X * speed;
         _vel.Z = wish.Z * speed;
         if (_flying)
@@ -334,6 +371,8 @@ public sealed class PlayScene : UiScene
             _chunks.Update(new CellCoord(IntMath.FloorToInt(_pos.X), IntMath.FloorToInt(_pos.Y), IntMath.FloorToInt(_pos.Z)));
         using (_prof.Measure("malla"))
             _renderer.Update(_camera.Position);
+        using (_prof.Measure("lejano"))
+            _far?.Update(_camera.Position);
         using (_prof.Measure("entidades"))
         {
             _entities.Update(dt, _pos);
@@ -341,10 +380,28 @@ public sealed class PlayScene : UiScene
         }
 
         _target = VoxelRaycaster.Raycast(_world, Blocks.Registry, _camera.Position, _camera.Forward, Reach, out var hit) ? hit : null;
+
+        // ¿Hay una entidad más cerca que el bloque apuntado? Manda la más cercana.
+        double blockDistance = _target?.Distance ?? Reach;
+        _entityTarget = _entities.Raycast(_camera.Position, _camera.Forward.ToVec3d(), Math.Min(Reach, blockDistance), out _);
+        if (_entityTarget != null) _target = null;
+
+        if (input.LeftClicked)
+        {
+            if (_entityTarget != null) Attack(_entityTarget);
+            else if (_target is { } mined) Mine(mined.Cell);
+        }
+
+        if (_inspecting && (_inspectTimer -= dt) <= 0f)
+        {
+            _inspectTimer = 0.1f;
+            _inspector.Text = _entityTarget != null ? Inspector.Describe(_entityTarget, _scale)
+                : _target is { } looked ? Inspector.Describe(_world, Blocks.Registry, looked.Cell)
+                : "Apunta a un bloque o a una entidad";
+        }
         if (_target is { } t)
         {
-            if (input.LeftClicked) _world.SetCell(t.Cell, Blocks.Air);
-            else if (input.RightClicked)
+            if (input.RightClicked)
             {
                 ushort block = _hotbarBlocks[_selected];
                 // Si apuntas a un sprite (hierba, flor...), el bloque nuevo lo sustituye; si no, se coloca contra la cara.
@@ -358,10 +415,44 @@ public sealed class PlayScene : UiScene
     public override void Draw(GameTime gameTime)
     {
         using (_prof.Measure("dibujo"))
-            _renderer.Draw(_camera, () => _boxes.Draw(_camera, ActiveBoxes()));
+            _renderer.Draw(_camera, () =>
+            {
+                _far?.Draw(_camera);   // tras los chunks: donde hay bloques, la prueba de profundidad oculta el terreno lejano
+                _boxes.Draw(_camera, ActiveBoxes());
+            });
         if (_target is { } t) _renderer.DrawOutline(_camera, t.Cell);
         UpdateDebug(gameTime);
         base.Draw(gameTime);   // UI encima
+    }
+
+    private string FarInfo() => _far == null ? "desactivado"
+        : $"{_far.TilesDrawn} tiles dibujados, {_far.CachedTiles} en cache, {_far.PendingTiles} pendientes, {_far.AverageBuildMs:0.0} ms/tile";
+
+    /// <summary>Un golpe quita 1 de vida. La entidad solo guarda su "hp" nueva (lo demás sigue en el prototipo); al llegar a 0 muere.</summary>
+    private void Attack(Entity entity)
+    {
+        if (entity.Prototype == null) return;
+        float hp = entity.GetFloat("hp") - 1f;
+        if (hp > 0f) { entity.Set("hp", hp); return; }
+
+        string name = entity.GetText("name");
+        ShowMessage($"{entity.GetText("species")}{(name.Length > 0 ? " " + name : "")} ha muerto");
+        _entities.Remove(entity);
+    }
+
+    /// <summary>
+    /// Cada golpe resta 1 a la durabilidad del bloque (stone 3, log 2, el resto 1). Solo el bloque golpeado guarda su valor nuevo;
+    /// los demás comparten el del prototipo. Los sprites y otros tipos sin propiedades se rompen de un golpe.
+    /// </summary>
+    private void Mine(CellCoord cell)
+    {
+        var block = new BlockRef(_world, Blocks.Registry, cell);
+        if (block.TryGetFloat("durability", out float durability) && durability > 1f)
+        {
+            block.Set("durability", durability - 1f);
+            return;
+        }
+        _world.SetCell(cell, Blocks.Air);   // sustituir el bloque borra también sus cambios de instancia
     }
 
     private IEnumerable<EntityBox> ActiveBoxes()
@@ -400,9 +491,12 @@ public sealed class PlayScene : UiScene
                       $"Chunks cargados {_world.LoadedChunkCount}, con malla {_renderer.MeshedChunks}, visibles {_renderer.VisibleChunks}\n" +
                       $"Mallado pendiente {_renderer.PendingMeshes} | Sprites cargados {_sprites.Count}, billboards {_renderer.BillboardsDrawn} | Mapa {(_map != null ? "listo" : "generando")}\n" +
                       $"Entidades {_entities.Count} (activas {_entities.ActiveCount}, aproximadas {_entities.ApproximateCount})\n" +
+                      $"Instancias con cambios guardados: bloques {_world.CellOverrideCount}, entidades {_entities.CountWithOverrides()} " +
+                      $"(el resto comparte los valores de su prototipo)\n" +
                       $"Regiones abiertas {_store.OpenRegions} (aciertos {_store.CacheHits}, fallos {_store.CacheMisses}) | chunks escritos {_store.ChunksWritten}\n" +
                       $"Generacion {_chunks.AverageGenerationMs:0.0} ms/chunk ({_chunks.RunningJobs} en curso, {_chunks.PendingCount} pedidos) | " +
                       $"Mallado {_renderer.AverageMeshMs:0.0} ms/chunk\n" +
+                      $"Terreno lejano: {FarInfo()}\n" +
                       $"Tiempos del hilo principal (ms): {_prof.Report()}";
     }
 

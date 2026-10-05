@@ -49,6 +49,8 @@ public sealed class WorldSettings
     public float PropDensityMultiplier { get; set; } = 1f;    // hierba, flores y rocas (sprites)
 
     // ----- Juego -----
+    public int FarDistanceChunks { get; set; } = 64;          // terreno lejano (LOD) hasta esta distancia, en chunks; 0 = desactivado
+    public float FarDetail { get; set; } = 1.6f;              // más = más detalle lejano y más tiles
     public int ViewDistance { get; set; } = 6;                // en chunks
     public int Villagers { get; set; } = 8;
     public int Caravans { get; set; } = 60;
@@ -58,6 +60,18 @@ public sealed class WorldSettings
     // ----- Derivados -----
     [JsonIgnore] public int WorldHeight => VerticalChunks * ChunkSize;
     [JsonIgnore] public int SeaLevel => Math.Clamp((int)Math.Round(WorldHeight * SeaLevelFraction), 1, WorldHeight - 1);
+
+    /// <summary>
+    /// Copia los ajustes que solo afectan a CÓMO se ve y se rinde el juego (no al terreno generado): distancias de visión y
+    /// hilos. Así "Continuar" respeta los valores actuales de worldsettings.json aunque el mundo se creara con otros.
+    /// </summary>
+    public void ApplyViewSettingsFrom(WorldSettings other)
+    {
+        ViewDistance = other.ViewDistance;
+        FarDistanceChunks = other.FarDistanceChunks;
+        FarDetail = other.FarDetail;
+        WorkerThreads = other.WorkerThreads;
+    }
 
     public WorldScale CreateScale() => new(MapWidth, MapHeight, RegionChunksX, RegionChunksZ, ChunkSize, ChunkSize);
 
@@ -157,6 +171,8 @@ public sealed class WorldSettings
         PropDensityMultiplier = F(nameof(PropDensityMultiplier), PropDensityMultiplier, 0f, 5f);
 
         ViewDistance = I(nameof(ViewDistance), ViewDistance, 2, 24);
+        FarDistanceChunks = I(nameof(FarDistanceChunks), FarDistanceChunks, 0, 512);
+        FarDetail = F(nameof(FarDetail), FarDetail, 0.8f, 4f);
         Villagers = I(nameof(Villagers), Villagers, 0, 100);
         Caravans = I(nameof(Caravans), Caravans, 0, 2000);
         MapSamplesPerAxis = I(nameof(MapSamplesPerAxis), MapSamplesPerAxis, 1, 16);

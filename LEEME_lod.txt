@@ -1,0 +1,35 @@
+PARCHE: LOD - TERRENO LEJANO POR NIVELES DE DETALLE
+Requiere los parches anteriores (incluido el de prototipos). Extrae sobre la solucion sobrescribiendo. No hay proyectos nuevos.
+
+QUE HACE
+  Hasta ViewDistance chunks, como siempre: bloques, con colinas finas, arboles, sprites y entidades.
+  MAS ALLA (hasta FarDistanceChunks, por defecto 64 = 1024 bloques) se dibuja un terreno aproximado de baja resolucion que
+  se refina segun te acercas. Se generan mallas directamente de la funcion de terreno, sin crear chunks.
+
+COMO FUNCIONA
+  Quadtree de tiles de 32x32 celdas alrededor de la camara. Nivel 0: 128 bloques de lado, muestras cada 4. Cada nivel duplica el lado
+  y la separacion (8, 16, 32...). Un tile se divide en cuatro si la camara esta a menos de FarDetail x su lado, asi la resolucion
+  angular es casi constante.
+  Se ve el relieve porque (1) las alturas se muestrean FILTRADAS (SampleLod: solo las octavas de ruido que la separacion entre muestras
+  puede representar; las colinas pequenas aparecen al acercarte, continentes y cordilleras estan siempre) y (2) cada vertice lleva
+  luz calculada con la pendiente (sol desde el noroeste). El color es el del bioma, como en el mapamundi.
+  Las mallas se generan en hilos de fondo (2 a la vez), se guardan en cache (400 tiles) y se suben con presupuesto de tiempo.
+  Mientras llega un tile se dibuja su antecesor ya listo (sin huecos). Las grietas entre niveles se tapan con una falda.
+  Convive con los chunks: se dibuja despues y 0,3 bloques por debajo de la superficie real, asi donde hay bloques estos lo tapan por
+  profundidad, y donde aun no han cargado se ve el terreno aproximado (la carga inicial ya no deja el cielo vacio).
+  La niebla y el plano lejano de la camara se alejan hasta FarDistanceChunks.
+
+CONFIGURACION (worldsettings.json, solo afectan a como se ve; "Continuar" usa siempre los actuales)
+  FarDistanceChunks   0 desactiva el terreno lejano. Mas = ves mas lejos (mas tiles que generar, 64 va bien; probar 128-256)
+  FarDetail           0.8..4. Mas = mas detalle en la distancia y mas tiles
+  ViewDistance        distancia de los chunks reales: ahora puedes bajarla (p. ej. 4-6) y ganar FPS sin perder horizonte
+
+MOTOR (GF.World.Voxel)       IFarTerrainSource, FarTileKey/FarTileSelector/FarTileBuilder (sin GPU, probados), FarTerrainRenderer
+NOISE (GF.Core)              Fbm2PeriodicBandLimited
+MINICRAFT                    MiniCraftFarSource, MiniCraftClimate.SampleLod, WorldSettings, MainMenuScene, PlayScene
+F3                           linea "Terreno lejano": tiles dibujados / en cache / pendientes / ms por tile; tiempo "lejano" en el perfil
+
+LIMITACIONES
+  - Los arboles, sprites y entidades solo existen en la zona de chunks; a lo lejos no hay (se podrian anadir bosques aproximados).
+  - El color del terreno lejano es el del bioma: junto al limite de los chunks la hierba de las texturas es algo distinta.
+  - El corte entre la zona de bloques y el terreno lejano se nota si la niebla es corta: FarDistanceChunks grande lo suaviza.

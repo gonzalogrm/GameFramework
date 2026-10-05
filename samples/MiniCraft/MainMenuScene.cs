@@ -14,7 +14,11 @@ public sealed class MainMenuScene : UiScene
 
         var items = new List<(string, Action)>();
         if (save != null)
-            items.Add(("Continuar", () => Game.Scenes.Reset(new PlayScene(save.Seed, save.Settings, save))));
+            items.Add(("Continuar", () =>
+            {
+                save.Settings.ApplyViewSettingsFrom(settings);   // visión y rendimiento: los de worldsettings.json actual
+                Game.Scenes.Reset(new PlayScene(save.Seed, save.Settings, save));
+            }));
         items.Add(("Nuevo mundo", () =>
         {
             SaveSystem.Delete();

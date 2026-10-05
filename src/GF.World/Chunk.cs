@@ -12,6 +12,12 @@ public sealed class Chunk<TCell> where TCell : unmanaged
     /// <summary>true si se editó después de generarse/cargarse (World.SetCell); solo estos chunks se guardan.</summary>
     public bool IsModified { get; set; }
 
+    /// <summary>
+    /// Propiedades de instancia de las celdas que se han salido del prototipo de su tipo de bloque: índice local -> cambios.
+    /// Casi siempre null; solo existen entradas para las celdas con algún cambio, el resto comparte los valores del prototipo.
+    /// </summary>
+    public Dictionary<int, PropertyOverrides>? CellProperties { get; set; }
+
     public Chunk(ChunkCoord coord, ChunkShape shape)
     {
         Coord = coord;

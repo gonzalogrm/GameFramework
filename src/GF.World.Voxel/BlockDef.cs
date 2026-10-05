@@ -22,6 +22,13 @@ public enum BlockRender
 public sealed record BlockDef(string Name, bool Solid, bool Opaque, int[] FaceTiles, bool Translucent = false,
     BlockRender Render = BlockRender.Cube, float SpriteWidth = 0f, float SpriteHeight = 0f, string? SpriteName = null)
 {
+    /// <summary>
+    /// Propiedades del TIPO de bloque (prototipo): valores por defecto compartidos por todos los bloques de este tipo. Una celda
+    /// concreta solo guarda las que cambie (ver BlockRef). null = este tipo no tiene propiedades. Se asigna con 'with':
+    ///     BlockDef.Cube("piedra", 3) with { Props = bloque.Derive("piedra").Float("durabilidad", 3f) }
+    /// </summary>
+    public Prototype? Props { get; init; }
+
     /// <summary>Se puede apuntar con el cursor y romper: los bloques sólidos y los sprites (aunque no tengan colisión).</summary>
     public bool Selectable => Solid || Render != BlockRender.Cube;
 

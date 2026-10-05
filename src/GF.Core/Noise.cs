@@ -80,6 +80,32 @@ public static class NoiseExtensions
         return sum / norm;
     }
 
+    /// <summary>
+    /// Como Fbm2Periodic, pero suma solo las primeras 'usedOctaves' octavas (las de menor frecuencia) CON LA MISMA normalización que si
+    /// se sumasen las 'octaves' completas. Es el filtro paso bajo exacto de la función completa: sirve para muestrearla de forma
+    /// gruesa (terreno lejano) sin el ruido de aliasing de las octavas más finas que la separación entre muestras.
+    /// </summary>
+    public static float Fbm2PeriodicBandLimited(this INoise n, float x, float z, float periodX, float frequency,
+        int octaves, int usedOctaves, float lacunarity = 2f, float gain = 0.5f)
+    {
+        double u = x / (double)periodX;
+        u -= Math.Floor(u);
+        double theta = 2.0 * Math.PI * u;
+        float cos = (float)Math.Cos(theta), sin = (float)Math.Sin(theta);
+
+        float sum = 0, amp = 1, freq = frequency, norm = 0;
+        for (int i = 0; i < octaves; i++)
+        {
+            if (i < usedOctaves)
+            {
+                float r = periodX * freq / (2f * MathF.PI);
+                sum += n.Sample(r * cos, r * sin, z * freq) * amp;
+            }
+            norm += amp; amp *= gain; freq *= lacunarity;
+        }
+        return sum / norm;
+    }
+
     public static float Fbm2(this INoise n, float x, float y, int octaves = 4, float lacunarity = 2f, float gain = 0.5f)
     {
         float sum = 0, amp = 1, freq = 1, norm = 0;

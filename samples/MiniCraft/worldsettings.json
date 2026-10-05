@@ -13,12 +13,12 @@
 
   // ---------- RELIEVE ----------
   "SeaLevelFraction": 0.1,    // nivel del mar como fraccion de la altura (0.1..0.9)
-  "ContinentSize": 20000,      // TAMANO DE LOS CONTINENTES (500..100000). Mayor = continentes mas grandes
-  "MountainSize": 200,       // tamano de las cordilleras (200..50000)
-  "DetailSize": 70,          // tamano de las colinas (10..2000). Mayor = terreno mas suave
+  "ContinentSize": 30000,      // TAMANO DE LOS CONTINENTES (500..100000). Mayor = continentes mas grandes
+  "MountainSize": 500,       // tamano de las cordilleras (200..50000)
+  "DetailSize": 100,          // tamano de las colinas (10..2000). Mayor = terreno mas suave
   "ContinentAmplitude": 0.50, // desnivel entre mares y llanuras (fraccion de la altura, 0..1)
   "MountainAmplitude": 1.50,  // altura de las cordilleras (0..1.5)
-  "DetailAmplitude": 0.40,    // altura de las colinas (0..0.5)
+  "DetailAmplitude": 0.30,    // altura de las colinas (0..0.5)
   "LandBias": 0.0,            // -0.5..0.5. Positivo = mas tierra, negativo = mas oceano
   "ContinentOctaves": 3,      // capas de ruido (1..8). Mas capas = bordes mas irregulares, algo mas lento
   "MountainOctaves": 4,
@@ -34,14 +34,16 @@
   "ClimateWarmth": 0.0,          // -0.5..0.5. Sube o baja todas las temperaturas (mas desiertos / mas tundra)
   "ClimateWetness": 0.0,         // -0.5..0.5. Sube o baja toda la humedad (mas junglas / mas desiertos)
   "BeachHeight": 2,              // bloques de playa sobre el nivel del mar (0..6)
-  "MountainFraction": 0.40,      // a partir de que fraccion de la tierra emergida hay montanas
+  "MountainFraction": 0.30,      // a partir de que fraccion de la tierra emergida hay montanas
   "SnowPeakFraction": 0.70,      // y cumbres nevadas (no menor que MountainFraction)
   "TreeDensityMultiplier": 0.5,  // 0..5. Multiplica la densidad de arboles de todos los biomas
-  "PropDensityMultiplier": 1.0,  // 0..5. Multiplica la hierba, flores y rocas (sprites 2D). 0 = sin sprites
+  "PropDensityMultiplier": 0.5,  // 0..5. Multiplica la hierba, flores y rocas (sprites 2D). 0 = sin sprites
 
   // ---------- JUEGO ----------
-  "ViewDistance": 16,          // distancia de vision en chunks (2..24). Mucho mayor = muchisimo mas coste
-  "Villagers": 20,             // aldeanos iniciales alrededor del jugador
+  "ViewDistance": 12,          // distancia de vision en chunks (2..24). Mucho mayor = muchisimo mas coste
+  "FarDistanceChunks": 24,   // TERRENO LEJANO (LOD): hasta cuantos chunks se ve el relieve aproximado (0 = sin terreno lejano). 64 = 1024 bloques
+  "FarDetail": 2.0,           // 0.8..4. Mas detalle en la distancia (y mas tiles que generar). Los chunks siguen mandando en su zona
+  "Villagers": 10,             // aldeanos iniciales alrededor del jugador
   "Caravans": 60,             // caravanas repartidas por el mundo
   "MapSamplesPerAxis": 6,      // precision del mapamundi: muestras por region = n*n (1..16)
   "WorkerThreads": 0          // hilos de fondo para generar y mallar chunks (0 = automatico: nucleos - 2). Sube si te sobran nucleos
