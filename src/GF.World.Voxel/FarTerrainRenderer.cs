@@ -14,8 +14,12 @@ namespace GF.World.Voxel;
 /// lejos poco, y el detalle va llegando según te acercas. Las mallas se generan en hilos de fondo a partir de un
 /// IFarTerrainSource (sin chunks), se guardan en una caché y se suben a la GPU con presupuesto de tiempo.
 /// - Mientras llega un tile, se dibuja su antecesor más cercano ya listo (o sus hijos), así que no quedan huecos.
-/// - Se dibuja DESPUÉS de los chunks y 0,3 bloques por debajo de la superficie real: donde hay bloques estos lo tapan por la prueba
-///   de profundidad; donde aún no han cargado, se ve el terreno aproximado. Los chunks mandan siempre en su zona.
+/// - Solo existe en un ANILLO: entre el agujero central (Hole: la zona donde ya hay chunks) y FarDistance. Los tiles enteros dentro del
+///   agujero no se seleccionan y las celdas que caen dentro no se generan ni se dibujan. El agujero lo da el juego a partir de los chunks
+///   realmente cargados, así que si los chunks van por detrás, el terreno lejano rellena lo que falte. Cuando el agujero cambia, solo
+///   se rehacen los tiles que lo tocan (la malla anterior se sigue dibujando hasta que llega la nueva).
+/// - Se dibuja DESPUÉS de los chunks y 0,3 bloques por debajo de la superficie real, para que las celdas que asoman un poco bajo los
+///   chunks (en el borde del agujero) queden tapadas por la prueba de profundidad.
 /// - Origen flotante: cada tile se coloca con una matriz relativa a la cámara.
 /// </summary>
 public sealed class FarTerrainRenderer : IDisposable
@@ -32,9 +36,12 @@ public sealed class FarTerrainRenderer : IDisposable
         public float MinY { get; }
         public float MaxY { get; }
         public long LastUsed;
+        /// <summary>Parte del agujero central con la que se construyó esta malla; si ya no coincide, hay que rehacerla.</summary>
+        public FarHole BuiltClip { get; }
 
-        public Tile(GraphicsDevice device, FarTileData data)
+        public Tile(GraphicsDevice device, FarTileData data, FarHole clip)
         {
+            BuiltClip = clip;
             Vertices = new VertexBuffer(device, VertexPositionColor.VertexDeclaration, data.Vertices.Length, BufferUsage.WriteOnly);
             Vertices.SetData(data.Vertices);
             Indices = new IndexBuffer(device, IndexElementSize.SixteenBits, data.Indices.Length, BufferUsage.WriteOnly);
@@ -48,7 +55,7 @@ public sealed class FarTerrainRenderer : IDisposable
     }
 
     private readonly record struct DrawItem(FarTileKey Key, Tile Tile, float OffsetY);
-    private readonly record struct Built(FarTileKey Key, FarTileData Data);
+    private readonly record struct Built(FarTileKey Key, FarTileData Data, FarHole Clip);
 
     private readonly GraphicsDevice _device;
     private readonly IFarTerrainSource _source;
@@ -83,10 +90,16 @@ public sealed class FarTerrainRenderer : IDisposable
     public int MaxUploadsPerFrame { get; set; } = 4;
     public double UploadBudgetMs { get; set; } = 2.0;
     /// <summary>Desplazamiento vertical de todo el terreno lejano (negativo: queda bajo los chunks, que lo tapan).</summary>
-    public float VerticalOffset { get; set; } = -0.0f;
+    public float VerticalOffset { get; set; } = -0.3f;
     public Color FogColor { get; set; } = Color.CornflowerBlue;
     public float FogStart { get; set; } = 400f;
     public float FogEnd { get; set; } = 1000f;
+
+    /// <summary>
+    /// Zona central (en bloques del mundo) donde ya hay chunks y por tanto no hay terreno lejano. Asígnala antes de Update cada vez
+    /// que cambie. default = sin agujero.
+    /// </summary>
+    public FarHole Hole { get; set; }
 
     public int TilesDrawn { get; private set; }
     public int CachedTiles => _tiles.Count;
@@ -111,14 +124,17 @@ public sealed class FarTerrainRenderer : IDisposable
         while (uploads < MaxUploadsPerFrame && _results.TryDequeue(out var built))
         {
             _pending.Remove(built.Key);
+            // Si el agujero se encogió mientras se generaba (los chunks se descargaron), esta malla carece de una parte que ya no
+            // cubren los chunks: dejaría un vacío. Se descarta y el tile se vuelve a pedir con el agujero actual.
+            if (!ClipFor(built.Key).Contains(built.Clip)) continue;
             if (_tiles.TryGetValue(built.Key, out var old)) old.Dispose();
-            _tiles[built.Key] = new Tile(_device, built.Data) { LastUsed = _frame };
+            _tiles[built.Key] = new Tile(_device, built.Data, built.Clip) { LastUsed = _frame };
             uploads++;
             if (Stopwatch.GetElapsedTime(start).TotalMilliseconds >= UploadBudgetMs) break;
         }
 
         // 2) Qué tiles quiere el quadtree, y qué se dibuja mientras llegan.
-        FarTileSelector.Select(cameraPosition.X, cameraPosition.Z, FarDistance, BaseTileBlocks, SplitFactor, _zExtent, _wanted);
+        FarTileSelector.Select(cameraPosition.X, cameraPosition.Z, FarDistance, BaseTileBlocks, SplitFactor, _zExtent, _wanted, Hole);
         int top = FarTileSelector.TopLevel(FarDistance, BaseTileBlocks);
 
         _draw.Clear();
@@ -130,6 +146,8 @@ public sealed class FarTerrainRenderer : IDisposable
             {
                 tile.LastUsed = _frame;
                 _draw.Add(new DrawItem(key, tile, 0f));
+                // El agujero se movió y este tile lo toca: hay que rehacerlo (mientras tanto se sigue dibujando el anterior).
+                if (tile.BuiltClip != ClipFor(key) && !_pending.Contains(key)) _toRequest.Add((key, distance));
                 continue;
             }
 
@@ -172,20 +190,28 @@ public sealed class FarTerrainRenderer : IDisposable
         Evict();
     }
 
+    private FarHole ClipFor(FarTileKey key)
+    {
+        long size = (long)BaseTileBlocks << key.Level;
+        return Hole.ClipTo((long)key.X * size, (long)key.Z * size, size);
+    }
+
     private void Launch(FarTileKey key)
     {
         _pending.Add(key);
         Interlocked.Increment(ref _running);
         var source = _source;
+        var hole = Hole;
+        var clip = ClipFor(key);
         Task.Run(() =>
         {
             try
             {
                 long t0 = Stopwatch.GetTimestamp();
-                var data = FarTileBuilder.Build(source, key, BaseTileBlocks, TileCells);
+                var data = FarTileBuilder.Build(source, key, BaseTileBlocks, TileCells, hole);
                 Interlocked.Add(ref _buildTicks, Stopwatch.GetTimestamp() - t0);
                 Interlocked.Increment(ref _builtCount);
-                _results.Enqueue(new Built(key, data));
+                _results.Enqueue(new Built(key, data, clip));
             }
             catch (Exception e) { _failures.Enqueue(e); }
             finally { Interlocked.Decrement(ref _running); }

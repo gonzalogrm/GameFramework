@@ -1,0 +1,25 @@
+PARCHE: EL TERRENO LEJANO NUNCA SE QUITA ANTES DE QUE EL CHUNK SE VEA
+Requiere el parche del anillo de LOD. Extrae sobre la solucion sobrescribiendo. No hay proyectos nuevos.
+
+EL FALLO
+  El agujero se calculaba con los chunks CARGADOS (sus datos en memoria). Pero un chunk no se ve hasta que su MALLA esta construida
+  y subida a la GPU, y eso va despues y en segundo plano (ademas espera a que carguen sus vecinos). En ese intervalo ya se habia quitado
+  el terreno lejano y todavia no estaba el chunk: un vacio.
+
+LA REGLA, AHORA
+  El terreno lejano solo se quita de un sitio cuando el chunk que lo sustituye YA SE VE.
+  1) El agujero se calcula con columnas con malla (VoxelWorldRenderer.HasMesh). Una columna cuenta si todos sus chunks verticales
+     tienen su malla construida (aunque sea vacia, como los del cielo). El agujero solo crece cuando eso es cierto.
+     Orden de los hechos: chunk cargado -> malla construida y subida -> el agujero crece -> se rehacen los tiles que lo tocan
+     -> la malla nueva sustituye a la anterior. Mientras tanto se sigue dibujando la antigua (que solapa, tapada por los chunks).
+  2) Salvaguarda en el otro sentido: si el agujero se encoge mientras un tile se esta generando (los chunks se descargan al moverte
+     rapido), el tile terminado se descarta si le faltan celdas que ya no cubre ningun chunk, y se pide de nuevo con el agujero actual.
+
+ARCHIVOS
+  GF.World.Voxel/VoxelWorldRenderer.cs   HasMesh(chunk), BuiltChunkCount
+  GF.World.Voxel/FarTerrainTypes.cs      FarHole.Contains, FarHoleBuilder (calculo puro del agujero, probado)
+  GF.World.Voxel/FarTerrainRenderer.cs   descarta mallas que dejarian un vacio
+  MiniCraft/PlayScene.cs                 "cubierto" = con malla; usa FarHoleBuilder
+  tests/FarHoleOrderTests.cs             el agujero nunca incluye una columna aun no visible (propiedad probada con 200 casos aleatorios)
+
+F3 sigue mostrando "anillo desde X hasta Y": veras X crecer a medida que los chunks se ven, no cuando solo estan cargados.

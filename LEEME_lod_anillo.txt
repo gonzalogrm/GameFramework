@@ -1,0 +1,24 @@
+PARCHE: EL TERRENO LEJANO (LOD) SOLO EN UN ANILLO
+Requiere el parche de LOD. Extrae sobre la solucion sobrescribiendo. No hay proyectos nuevos.
+
+LO QUE CAMBIA
+  El terreno lejano ya no se genera ni se dibuja donde hay chunks. Solo existe ENTRE dos distancias:
+    FarCloseChunks     (nuevo)  donde empieza. 0 = automatico: ViewDistance, es decir, justo donde acaban los chunks.
+    FarDistanceChunks           donde acaba.
+  Dentro del anillo interior no se selecciona ningun tile, y las celdas que caen en el agujero no se generan ni se dibujan.
+
+COMO SE DECIDE EL AGUJERO (no donde "deberian" estar los chunks, sino donde estan)
+  Cada vez que cambia el chunk de la camara o el numero de chunks cargados, se calcula el mayor cuadrado de columnas COMPLETAMENTE
+  cargadas alrededor del jugador, con tope FarCloseChunks. Ese es el agujero. Por eso:
+    - al empezar, mientras los chunks cargan, el agujero crece poco a poco y el terreno lejano rellena lo que falta;
+    - si vuelas tan rapido que los chunks van por detras, el agujero se encoge y el terreno lejano cubre lo que falta;
+    - cerca de los polos, lo que cae fuera del mundo no cuenta como "sin cargar".
+  Cuando el agujero cambia solo se rehacen los tiles que lo tocan (un anillo de unos 10-15), en segundo plano; mientras llega la
+  malla nueva se sigue dibujando la anterior. Los demas tiles no se rehacen.
+  Las celdas que asoman un poco por el borde interior del agujero quedan 0,3 bloques por debajo de los chunks, que las tapan.
+
+ARCHIVOS
+  GF.World.Voxel/FarTerrainTypes.cs      FarHole; el selector y el constructor de mallas lo respetan
+  GF.World.Voxel/FarTerrainRenderer.cs   propiedad Hole, tiles obsoletos, anillo
+  MiniCraft: WorldSettings.cs, worldsettings.json (+FarCloseChunks), PlayScene.cs (calculo del agujero; F3 muestra "anillo desde X hasta Y")
+  tests/FarHoleTests.cs                  geometria del agujero, recorte por tile, selector y constructor

@@ -17,6 +17,71 @@ public interface IFarTerrainSource
     void Sample(int wx, int wz, int spacing, out float height, out Color color);
 }
 
+/// <summary>
+/// Agujero central del terreno lejano: rectángulo en bloques del mundo, [MinX, MaxX) x [MinZ, MaxZ), donde ya hay chunks reales.
+/// El terreno lejano solo existe ENTRE este agujero y la distancia máxima: lo que cae dentro no se selecciona, no se genera y no se
+/// dibuja. default = sin agujero.
+/// </summary>
+public readonly record struct FarHole(int MinX, int MinZ, int MaxX, int MaxZ)
+{
+    public static readonly FarHole Empty = default;
+
+    public bool IsEmpty => MaxX <= MinX || MaxZ <= MinZ;
+
+    /// <summary>¿El cuadrado [x0, x0+size) x [z0, z0+size) cae entero dentro del agujero?</summary>
+    public bool ContainsCell(long x0, long z0, long size) =>
+        !IsEmpty && x0 >= MinX && x0 + size <= MaxX && z0 >= MinZ && z0 + size <= MaxZ;
+
+    public bool Intersects(long x0, long z0, long size) =>
+        !IsEmpty && x0 < MaxX && x0 + size > MinX && z0 < MaxZ && z0 + size > MinZ;
+
+    /// <summary>¿Este agujero contiene entero al otro? (Un agujero vacío siempre está contenido.)</summary>
+    public bool Contains(FarHole other) =>
+        other.IsEmpty || (!IsEmpty && other.MinX >= MinX && other.MinZ >= MinZ && other.MaxX <= MaxX && other.MaxZ <= MaxZ);
+
+    /// <summary>Punto estrictamente dentro del agujero (el borde no cuenta).</summary>
+    public bool ContainsPoint(double x, double z) => !IsEmpty && x > MinX && x < MaxX && z > MinZ && z < MaxZ;
+
+    /// <summary>
+    /// La parte del agujero que cae dentro de un tile (Empty si no lo toca). Una malla solo depende del agujero a través de esto:
+    /// si dos agujeros distintos recortan igual a un tile, su malla es la misma y no hay que rehacerla.
+    /// </summary>
+    public FarHole ClipTo(long x0, long z0, long size)
+    {
+        if (!Intersects(x0, z0, size)) return Empty;
+        return new FarHole(Math.Max(MinX, (int)x0), Math.Max(MinZ, (int)z0),
+                           Math.Min(MaxX, (int)(x0 + size)), Math.Min(MaxZ, (int)(z0 + size)));
+    }
+}
+
+/// <summary>
+/// Cálculo del agujero a partir de qué columnas de chunks están ya "cubiertas" (visibles). Pura y sin GPU.
+/// Regla: el terreno lejano solo se quita de un sitio cuando el chunk que lo sustituye ya se ve; nunca antes.
+/// </summary>
+public static class FarHoleBuilder
+{
+    /// <summary>
+    /// Mayor radio r (0..maxRadius) tal que TODAS las columnas a distancia &lt;= r del chunk (cx, cz) están cubiertas;
+    /// -1 si ni la propia columna lo está.
+    /// </summary>
+    public static int CoveredRadius(int cx, int cz, int maxRadius, Func<int, int, bool> columnCovered)
+    {
+        for (int r = 0; r <= maxRadius; r++)
+        for (int dz = -r; dz <= r; dz++)
+        for (int dx = -r; dx <= r; dx++)
+        {
+            if (Math.Max(Math.Abs(dx), Math.Abs(dz)) != r) continue;   // solo el anillo r
+            if (!columnCovered(cx + dx, cz + dz)) return r - 1;
+        }
+        return maxRadius;
+    }
+
+    /// <summary>El cuadrado de (2r+1) x (2r+1) chunks centrado en (cx, cz), en bloques. radius &lt; 0 = sin agujero.</summary>
+    public static FarHole ForRadius(int cx, int cz, int radius, int chunkSize) => radius < 0
+        ? default
+        : new FarHole((cx - radius) * chunkSize, (cz - radius) * chunkSize, (cx + radius + 1) * chunkSize, (cz + radius + 1) * chunkSize);
+}
+
 /// <summary>Un tile del quadtree: nivel 0 = el más fino; cada nivel duplica el lado. X/Z en unidades de tile de ese nivel.</summary>
 public readonly record struct FarTileKey(int Level, int X, int Z)
 {
@@ -53,7 +118,7 @@ public static class FarTileSelector
     /// <param name="zExtent">Extensión del mundo en Z (de 0 a zExtent): no se generan tiles fuera.</param>
     /// <param name="result">Tiles elegidos con su distancia a la cámara (se vacía antes).</param>
     public static void Select(double camX, double camZ, double farDistance, int baseTile, double splitFactor,
-        double zExtent, List<(FarTileKey Key, double Distance)> result)
+        double zExtent, List<(FarTileKey Key, double Distance)> result, FarHole hole = default)
     {
         result.Clear();
         int top = TopLevel(farDistance, baseTile);
@@ -65,15 +130,16 @@ public static class FarTileSelector
 
         for (int tz = z0; tz <= z1; tz++)
         for (int tx = x0; tx <= x1; tx++)
-            Visit(new FarTileKey(top, tx, tz), camX, camZ, farDistance, baseTile, splitFactor, zExtent, result);
+            Visit(new FarTileKey(top, tx, tz), camX, camZ, farDistance, baseTile, splitFactor, zExtent, result, hole);
     }
 
     private static void Visit(FarTileKey key, double camX, double camZ, double farDistance, int baseTile,
-        double splitFactor, double zExtent, List<(FarTileKey, double)> result)
+        double splitFactor, double zExtent, List<(FarTileKey, double)> result, FarHole hole)
     {
         long size = (long)baseTile << key.Level;
         double minX = (double)key.X * size, minZ = (double)key.Z * size;
         if (minZ >= zExtent || minZ + size <= 0) return;   // más allá de los polos
+        if (hole.ContainsCell((long)minX, (long)minZ, size)) return;   // entero dentro del agujero: ya hay chunks
 
         double dx = Math.Max(Math.Max(minX - camX, camX - (minX + size)), 0.0);
         double dz = Math.Max(Math.Max(minZ - camZ, camZ - (minZ + size)), 0.0);
@@ -83,7 +149,7 @@ public static class FarTileSelector
         if (key.Level > 0 && distance < size * splitFactor)
         {
             foreach (var child in key.Children)
-                Visit(child, camX, camZ, farDistance, baseTile, splitFactor, zExtent, result);
+                Visit(child, camX, camZ, farDistance, baseTile, splitFactor, zExtent, result, hole);
             return;
         }
         result.Add((key, distance));
@@ -115,7 +181,8 @@ public static class FarTileBuilder
     private static readonly Vector3 LightDir = Vector3.Normalize(new Vector3(-0.5f, 0.75f, -0.45f));
 
     /// <param name="baseTile">Lado en bloques de un tile de nivel 0. baseTile y cells deben ser potencias de dos con baseTile &gt;= cells.</param>
-    public static FarTileData Build(IFarTerrainSource source, FarTileKey key, int baseTile, int cells)
+    /// <param name="hole">Las celdas enteras dentro de este agujero (donde ya hay chunks) no se generan.</param>
+    public static FarTileData Build(IFarTerrainSource source, FarTileKey key, int baseTile, int cells, FarHole hole = default)
     {
         int size = baseTile << key.Level;
         int spacing = size / cells;
@@ -169,6 +236,9 @@ public static class FarTileBuilder
         for (int j = 0; j < cells; j++)
         for (int i = 0; i < cells; i++)
         {
+            // Las celdas enteras dentro del agujero central (donde ya hay chunks) no se generan.
+            if (hole.ContainsCell(originX + i * spacing, originZ + j * spacing, spacing)) continue;
+
             int a = j * vc + i, b = a + 1, c = a + vc, d = c + 1;
             indices[k++] = (short)a; indices[k++] = (short)b; indices[k++] = (short)d;
             indices[k++] = (short)a; indices[k++] = (short)d; indices[k++] = (short)c;
@@ -177,11 +247,17 @@ public static class FarTileBuilder
         for (int edge = 0; edge < 4; edge++)
         for (int t = 0; t < cells; t++)
         {
+            // Tampoco las faldas de los bordes del tile que quedan dentro del agujero.
+            double midX = edge < 2 ? originX + (t + 0.5) * spacing : originX + (edge == 2 ? 0 : size);
+            double midZ = edge < 2 ? originZ + (edge == 0 ? 0 : size) : originZ + (t + 0.5) * spacing;
+            if (hole.ContainsPoint(midX, midZ)) continue;
+
             int top0 = EdgeVertex(edge, t, cells, vc), top1 = EdgeVertex(edge, t + 1, cells, vc);
             int bottom0 = skirtBase + edge * vc + t, bottom1 = bottom0 + 1;
             indices[k++] = (short)top0; indices[k++] = (short)top1; indices[k++] = (short)bottom1;
             indices[k++] = (short)top0; indices[k++] = (short)bottom1; indices[k++] = (short)bottom0;
         }
+        if (k < indices.Length) Array.Resize(ref indices, k);
 
         return new FarTileData(vertices, indices, minY, maxY);
     }

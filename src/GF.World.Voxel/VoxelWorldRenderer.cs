@@ -138,6 +138,13 @@ public sealed class VoxelWorldRenderer : IDisposable
     public int VisibleChunks { get; private set; }
     public int BillboardsDrawn { get; private set; }
     public int MeshedChunks => _meshes.Count;
+    /// <summary>
+    /// ¿Este chunk ya tiene su malla construida y subida (aunque esté vacía)? Es lo que realmente se ve; que sus DATOS estén
+    /// cargados no basta, porque el mallado va después y en segundo plano. Se vuelve false al descargarlo.
+    /// </summary>
+    public bool HasMesh(ChunkCoord c) => _built.Contains(c);
+    /// <summary>Cuántos chunks tienen ya su malla (cambia solo al construirse la primera vez o al descargarse).</summary>
+    public int BuiltChunkCount => _built.Count;
     /// <summary>Chunks esperando o en proceso de mallado.</summary>
     public int PendingMeshes => _dirty.Count + _inFlight.Count;
     public double AverageMeshMs

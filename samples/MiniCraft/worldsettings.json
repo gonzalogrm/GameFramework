@@ -9,12 +9,12 @@
   "RegionChunksX": 32,        // chunks por region en X (1..256). Anchura del mundo = MapWidth * RegionChunksX * ChunkSize
   "RegionChunksZ": 32,
   "ChunkSize": 16,            // 8, 16 o 32
-  "VerticalChunks": 8,        // CHUNKS EN VERTICAL (2..32). Altura del mundo = VerticalChunks * ChunkSize. 4 -> 64 bloques, 8 -> 128, 16 -> 256
+  "VerticalChunks": 6,        // CHUNKS EN VERTICAL (2..32). Altura del mundo = VerticalChunks * ChunkSize. 4 -> 64 bloques, 8 -> 128, 16 -> 256
 
   // ---------- RELIEVE ----------
   "SeaLevelFraction": 0.1,    // nivel del mar como fraccion de la altura (0.1..0.9)
   "ContinentSize": 30000,      // TAMANO DE LOS CONTINENTES (500..100000). Mayor = continentes mas grandes
-  "MountainSize": 500,       // tamano de las cordilleras (200..50000)
+  "MountainSize": 300,       // tamano de las cordilleras (200..50000)
   "DetailSize": 100,          // tamano de las colinas (10..2000). Mayor = terreno mas suave
   "ContinentAmplitude": 0.50, // desnivel entre mares y llanuras (fraccion de la altura, 0..1)
   "MountainAmplitude": 1.50,  // altura de las cordilleras (0..1.5)
@@ -41,8 +41,9 @@
 
   // ---------- JUEGO ----------
   "ViewDistance": 12,          // distancia de vision en chunks (2..24). Mucho mayor = muchisimo mas coste
-  "FarDistanceChunks": 24,   // TERRENO LEJANO (LOD): hasta cuantos chunks se ve el relieve aproximado (0 = sin terreno lejano). 64 = 1024 bloques
-  "FarDetail": 2.0,           // 0.8..4. Mas detalle en la distancia (y mas tiles que generar). Los chunks siguen mandando en su zona
+  "FarCloseChunks": 8,        // DISTANCIA CERCANA del terreno lejano, en chunks: por dentro de ella no hay malla lejana (0 = automatico: ViewDistance)
+  "FarDistanceChunks": 32,   // DISTANCIA LEJANA (LOD): el relieve aproximado se genera solo entre FarCloseChunks y esta distancia (0 = sin terreno lejano). 64 = 1024 bloques
+  "FarDetail": 2,           // 0.8..4. Mas detalle en la distancia (y mas tiles que generar). Los chunks siguen mandando en su zona
   "Villagers": 10,             // aldeanos iniciales alrededor del jugador
   "Caravans": 60,             // caravanas repartidas por el mundo
   "MapSamplesPerAxis": 6,      // precision del mapamundi: muestras por region = n*n (1..16)

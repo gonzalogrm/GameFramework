@@ -37,6 +37,8 @@ public sealed class PlayScene : UiScene
     private RegionChunkStore<ushort> _store = null!;
     private VoxelWorldRenderer _renderer = null!;
     private SpriteAtlas _sprites = null!;
+    private (int X, int Z, int Loaded) _holeKey = (int.MinValue, 0, 0);   // para no recalcular el agujero si nada cambió
+    private int _coveredRadius, _farCloseChunks, _holeRadius;
     private FarTerrainRenderer? _far;   // terreno lejano por niveles de detalle (null si está desactivado)
     private MiniCraftClimate _climate = null!;
     private Task<World<MapCell>> _mapTask = null!;
@@ -110,8 +112,10 @@ public sealed class PlayScene : UiScene
         // Terreno lejano (LOD): si está activo, la niebla y el plano lejano de la cámara se alejan hasta su límite.
         float farBlocks = _settings.FarDistanceChunks * cs;
         bool farEnabled = farBlocks > viewBlocks * 1.25f;
+        // Distancia CERCANA del terreno lejano: por dentro no hay malla lejana (0 = el borde de los chunks).
+        _farCloseChunks = _settings.FarCloseChunks > 0 ? _settings.FarCloseChunks : view;
         float fogRange = farEnabled ? farBlocks : viewBlocks;
-        float fogStart = fogRange * (farEnabled ? 0.45f : 0.55f), fogEnd = fogRange * (farEnabled ? 0.98f : 0.95f);
+        float fogStart = fogRange * (farEnabled ? 0.05f : 0.55f), fogEnd = fogRange * (farEnabled ? 0.98f : 0.95f);
         // Hilos de fondo: ~60 % a generar chunks y el resto a mallarlos; se dejan libres un par de núcleos para el juego.
         int workers = _settings.WorkerThreads > 0 ? _settings.WorkerThreads : Math.Max(2, Environment.ProcessorCount - 2);
         int genThreads = Math.Max(1, (int)Math.Round(workers * 0.6));
@@ -328,7 +332,7 @@ public sealed class PlayScene : UiScene
         if (input.IsDown("Left")) wish -= right;
         if (wish != Vector3.Zero) wish.Normalize();
         bool sprint = input.IsDown("Sprint");
-        float speed = _flying ? (sprint ? 50f : 10f) : (sprint ? 50f : 5.5f);
+        float speed = _flying ? (sprint ? 40f : 10f) : (sprint ? 40f : 5.5f);
         _vel.X = wish.X * speed;
         _vel.Z = wish.Z * speed;
         if (_flying)
@@ -372,7 +376,13 @@ public sealed class PlayScene : UiScene
         using (_prof.Measure("malla"))
             _renderer.Update(_camera.Position);
         using (_prof.Measure("lejano"))
-            _far?.Update(_camera.Position);
+        {
+            if (_far != null)
+            {
+                _far.Hole = ComputeFarHole();
+                _far.Update(_camera.Position);
+            }
+        }
         using (_prof.Measure("entidades"))
         {
             _entities.Update(dt, _pos);
@@ -426,7 +436,37 @@ public sealed class PlayScene : UiScene
     }
 
     private string FarInfo() => _far == null ? "desactivado"
-        : $"{_far.TilesDrawn} tiles dibujados, {_far.CachedTiles} en cache, {_far.PendingTiles} pendientes, {_far.AverageBuildMs:0.0} ms/tile";
+        : $"{_far.TilesDrawn} tiles dibujados, {_far.CachedTiles} en cache, {_far.PendingTiles} pendientes, {_far.AverageBuildMs:0.0} ms/tile | " +
+          $"anillo desde {_holeRadius} chunks hasta {_settings.FarDistanceChunks}";
+
+    /// <summary>
+    /// Agujero central del terreno lejano: el cuadrado de chunks con su MALLA ya construida alrededor de la cámara (no basta con que
+    /// sus datos estén cargados: hasta que no se ve, el terreno lejano sigue ahí), con un máximo de
+    /// FarCloseChunks. Dentro no hay malla lejana; si los chunks van por detrás (carga inicial, vuelo rápido), el agujero se encoge
+    /// y el terreno lejano rellena lo que falte.
+    /// </summary>
+    private FarHole ComputeFarHole()
+    {
+        var cc = _world.Shape.ToChunk(new CellCoord(IntMath.FloorToInt(_pos.X), 0, IntMath.FloorToInt(_pos.Z)));
+        var key = (cc.X, cc.Z, _renderer.BuiltChunkCount);   // cambia al construirse o descargarse una malla
+        if (key != _holeKey)
+        {
+            _holeKey = key;
+            _coveredRadius = FarHoleBuilder.CoveredRadius(cc.X, cc.Z, _farCloseChunks, ColumnCovered);
+        }
+
+        _holeRadius = Math.Min(_farCloseChunks, _coveredRadius);
+        if (_holeRadius < 0) { _holeRadius = 0; return default; }
+        return FarHoleBuilder.ForRadius(cc.X, cc.Z, _holeRadius, _world.Shape.SizeX);
+    }
+
+    private bool ColumnCovered(int cx, int cz)
+    {
+        if (cz < 0 || cz >= _scale.ChunkCountZ) return true;   // más allá de los polos no hay nada que cubrir
+        for (int cy = 0; cy < _settings.VerticalChunks; cy++)
+            if (!_renderer.HasMesh(new ChunkCoord(cx, cy, cz))) return false;   // sin malla aún: no se ve, no se puede quitar el lejano
+        return true;
+    }
 
     /// <summary>Un golpe quita 1 de vida. La entidad solo guarda su "hp" nueva (lo demás sigue en el prototipo); al llegar a 0 muere.</summary>
     private void Attack(Entity entity)

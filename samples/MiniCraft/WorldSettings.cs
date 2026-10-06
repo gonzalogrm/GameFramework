@@ -49,6 +49,7 @@ public sealed class WorldSettings
     public float PropDensityMultiplier { get; set; } = 1f;    // hierba, flores y rocas (sprites)
 
     // ----- Juego -----
+    public int FarCloseChunks { get; set; } = 0;              // el terreno lejano empieza a esta distancia (chunks); 0 = automático: ViewDistance
     public int FarDistanceChunks { get; set; } = 64;          // terreno lejano (LOD) hasta esta distancia, en chunks; 0 = desactivado
     public float FarDetail { get; set; } = 1.6f;              // más = más detalle lejano y más tiles
     public int ViewDistance { get; set; } = 6;                // en chunks
@@ -68,6 +69,7 @@ public sealed class WorldSettings
     public void ApplyViewSettingsFrom(WorldSettings other)
     {
         ViewDistance = other.ViewDistance;
+        FarCloseChunks = other.FarCloseChunks;
         FarDistanceChunks = other.FarDistanceChunks;
         FarDetail = other.FarDetail;
         WorkerThreads = other.WorkerThreads;
@@ -171,6 +173,7 @@ public sealed class WorldSettings
         PropDensityMultiplier = F(nameof(PropDensityMultiplier), PropDensityMultiplier, 0f, 5f);
 
         ViewDistance = I(nameof(ViewDistance), ViewDistance, 2, 24);
+        FarCloseChunks = I(nameof(FarCloseChunks), FarCloseChunks, 0, 512);
         FarDistanceChunks = I(nameof(FarDistanceChunks), FarDistanceChunks, 0, 512);
         FarDetail = F(nameof(FarDetail), FarDetail, 0.8f, 4f);
         Villagers = I(nameof(Villagers), Villagers, 0, 100);
