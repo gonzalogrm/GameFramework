@@ -1,5 +1,6 @@
 using GF.Engine;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
 
 namespace MiniCraft;
@@ -9,6 +10,21 @@ public static class AtlasFactory
 {
     private const int T = 16, N = 4;
 
+    /// <summary>
+    /// Atlas de bloques desde el contenido compilado por MGCB (Content/blocks.png, 64x64: rejilla 4x4 de tiles de 16 px; edítalo con
+    /// cualquier programa de dibujo). Si no está en el contenido (aún no se ha compilado), se genera por código como antes.
+    /// </summary>
+    public static TextureAtlas Load(ContentManager content, GraphicsDevice device)
+    {
+        try { return new TextureAtlas(content.Load<Texture2D>("blocks"), T); }
+        catch (ContentLoadException e)
+        {
+            Console.Error.WriteLine("[contenido] no se pudo cargar 'blocks' (" + e.Message + "): se genera el atlas por código");
+            return Create(device);
+        }
+    }
+
+    /// <summary>Atlas generado por código: respaldo si falta el contenido compilado.</summary>
     public static TextureAtlas Create(GraphicsDevice device)
     {
         var data = new Color[N * T * N * T];

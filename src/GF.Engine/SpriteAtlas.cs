@@ -66,6 +66,13 @@ public sealed class SpriteAtlasBuilder
         _items.Add((name, width, height, pixels, sizeInBlocks ?? new Vector2(width / 16f, height / 16f)));
     }
 
+    /// <summary>Como Add, pero si ya hay un sprite con ese nombre lo sustituye (los sprites sueltos mandan sobre los compilados).</summary>
+    public void AddOrReplace(string name, int width, int height, Color[] pixels, Vector2? sizeInBlocks = null)
+    {
+        if (_names.Remove(name)) _items.RemoveAll(i => string.Equals(i.Name, name, StringComparison.OrdinalIgnoreCase));
+        Add(name, width, height, pixels, sizeInBlocks);
+    }
+
     public SpriteAtlas Build(GraphicsDevice device)
     {
         var all = new List<(string Name, int Width, int Height, Color[] Pixels, Vector2 Size)>(_items)

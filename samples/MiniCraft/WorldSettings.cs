@@ -49,6 +49,8 @@ public sealed class WorldSettings
     public float PropDensityMultiplier { get; set; } = 1f;    // hierba, flores y rocas (sprites)
 
     // ----- Juego -----
+    public int FadeChunks { get; set; } = 2;                  // anchura (chunks) de la franja donde los bloques se disuelven sobre el terreno lejano; 0 = sin fundido
+    public float FadeInSeconds { get; set; } = 0.6f;          // un chunk recién construido tarda esto en aparecer (disolviéndose desde nada)
     public int FarCloseChunks { get; set; } = 0;              // el terreno lejano empieza a esta distancia (chunks); 0 = automático: ViewDistance
     public int FarDistanceChunks { get; set; } = 64;          // terreno lejano (LOD) hasta esta distancia, en chunks; 0 = desactivado
     public float FarDetail { get; set; } = 1.6f;              // más = más detalle lejano y más tiles
@@ -69,6 +71,8 @@ public sealed class WorldSettings
     public void ApplyViewSettingsFrom(WorldSettings other)
     {
         ViewDistance = other.ViewDistance;
+        FadeChunks = other.FadeChunks;
+        FadeInSeconds = other.FadeInSeconds;
         FarCloseChunks = other.FarCloseChunks;
         FarDistanceChunks = other.FarDistanceChunks;
         FarDetail = other.FarDetail;
@@ -173,6 +177,8 @@ public sealed class WorldSettings
         PropDensityMultiplier = F(nameof(PropDensityMultiplier), PropDensityMultiplier, 0f, 5f);
 
         ViewDistance = I(nameof(ViewDistance), ViewDistance, 2, 24);
+        FadeChunks = I(nameof(FadeChunks), FadeChunks, 0, 8);
+        FadeInSeconds = F(nameof(FadeInSeconds), FadeInSeconds, 0f, 3f);
         FarCloseChunks = I(nameof(FarCloseChunks), FarCloseChunks, 0, 512);
         FarDistanceChunks = I(nameof(FarDistanceChunks), FarDistanceChunks, 0, 512);
         FarDetail = F(nameof(FarDetail), FarDetail, 0.8f, 4f);

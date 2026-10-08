@@ -6,45 +6,47 @@
   // ---------- ESCALA ----------
   "MapWidth": 200,            // regiones en X (8..2000). El mundo se envuelve: este y oeste se conectan
   "MapHeight": 100,            // regiones en Z, de polo a polo (4..500)
-  "RegionChunksX": 32,        // chunks por region en X (1..256). Anchura del mundo = MapWidth * RegionChunksX * ChunkSize
-  "RegionChunksZ": 32,
-  "ChunkSize": 16,            // 8, 16 o 32
+  "RegionChunksX": 64,        // chunks por region en X (1..256). Anchura del mundo = MapWidth * RegionChunksX * ChunkSize
+  "RegionChunksZ": 64,
+  "ChunkSize": 32,            // 8, 16 o 32
   "VerticalChunks": 6,        // CHUNKS EN VERTICAL (2..32). Altura del mundo = VerticalChunks * ChunkSize. 4 -> 64 bloques, 8 -> 128, 16 -> 256
 
   // ---------- RELIEVE ----------
-  "SeaLevelFraction": 0.1,    // nivel del mar como fraccion de la altura (0.1..0.9)
-  "ContinentSize": 30000,      // TAMANO DE LOS CONTINENTES (500..100000). Mayor = continentes mas grandes
-  "MountainSize": 300,       // tamano de las cordilleras (200..50000)
+  "SeaLevelFraction": 0.5,    // nivel del mar como fraccion de la altura (0.1..0.9)
+  "ContinentSize": 100000,      // TAMANO DE LOS CONTINENTES (500..100000). Mayor = continentes mas grandes
+  "MountainSize": 10000,       // tamano de las cordilleras (200..50000)
   "DetailSize": 100,          // tamano de las colinas (10..2000). Mayor = terreno mas suave
   "ContinentAmplitude": 0.50, // desnivel entre mares y llanuras (fraccion de la altura, 0..1)
-  "MountainAmplitude": 1.50,  // altura de las cordilleras (0..1.5)
-  "DetailAmplitude": 0.30,    // altura de las colinas (0..0.5)
+  "MountainAmplitude": 1.00,  // altura de las cordilleras (0..1.5)
+  "DetailAmplitude": 0.25,    // altura de las colinas (0..0.5)
   "LandBias": 0.0,            // -0.5..0.5. Positivo = mas tierra, negativo = mas oceano
   "ContinentOctaves": 3,      // capas de ruido (1..8). Mas capas = bordes mas irregulares, algo mas lento
   "MountainOctaves": 4,
   "DetailOctaves": 4,
   "MinHeightFraction": 0.05,  // fondo marino minimo (fraccion de la altura)
-  "MaxHeightFraction": 0.95,  // cumbre maxima (fraccion de la altura)
+  "MaxHeightFraction": 0.98,  // cumbre maxima (fraccion de la altura)
 
   // ---------- CLIMA Y BIOMAS ----------
-  "TemperatureNoiseSize": 4000,  // tamano de las manchas de temperatura
-  "HumidityNoiseSize": 3500,     // tamano de las manchas de humedad
+  "TemperatureNoiseSize": 8000,  // tamano de las manchas de temperatura
+  "HumidityNoiseSize": 7000,     // tamano de las manchas de humedad
   "LatitudeWeight": 0.8,         // 0..1. Cuanto manda la latitud (frio en los polos, calor en el ecuador)
   "AltitudeCooling": 0.4,        // 0..1. Cuanto enfria la altura
   "ClimateWarmth": 0.0,          // -0.5..0.5. Sube o baja todas las temperaturas (mas desiertos / mas tundra)
   "ClimateWetness": 0.0,         // -0.5..0.5. Sube o baja toda la humedad (mas junglas / mas desiertos)
   "BeachHeight": 2,              // bloques de playa sobre el nivel del mar (0..6)
-  "MountainFraction": 0.30,      // a partir de que fraccion de la tierra emergida hay montanas
+  "MountainFraction": 0.40,      // a partir de que fraccion de la tierra emergida hay montanas
   "SnowPeakFraction": 0.70,      // y cumbres nevadas (no menor que MountainFraction)
   "TreeDensityMultiplier": 0.5,  // 0..5. Multiplica la densidad de arboles de todos los biomas
   "PropDensityMultiplier": 0.5,  // 0..5. Multiplica la hierba, flores y rocas (sprites 2D). 0 = sin sprites
 
   // ---------- JUEGO ----------
-  "ViewDistance": 12,          // distancia de vision en chunks (2..24). Mucho mayor = muchisimo mas coste
-  "FarCloseChunks": 8,        // DISTANCIA CERCANA del terreno lejano, en chunks: por dentro de ella no hay malla lejana (0 = automatico: ViewDistance)
-  "FarDistanceChunks": 32,   // DISTANCIA LEJANA (LOD): el relieve aproximado se genera solo entre FarCloseChunks y esta distancia (0 = sin terreno lejano). 64 = 1024 bloques
-  "FarDetail": 2,           // 0.8..4. Mas detalle en la distancia (y mas tiles que generar). Los chunks siguen mandando en su zona
-  "Villagers": 10,             // aldeanos iniciales alrededor del jugador
+  "ViewDistance": 8,          // distancia de vision en chunks (2..24). Mucho mayor = muchisimo mas coste
+  "FadeChunks": 2,            // SHADER DE FUNDIDO: anchura en chunks de la franja donde los bloques se disuelven sobre el terreno lejano (0 = sin fundido; necesita FarDistanceChunks > ViewDistance)
+  "FadeInSeconds": 0.5,       // 0..3. Lo que tarda en aparecer, disolviendose, un chunk recien construido (0 = aparece de golpe)
+  "FarCloseChunks": 6,        // DISTANCIA CERCANA del terreno lejano, en chunks: por dentro de ella no hay malla lejana (0 = automatico: ViewDistance)
+  "FarDistanceChunks": 24,   // DISTANCIA LEJANA (LOD): el relieve aproximado se genera solo entre FarCloseChunks y esta distancia (0 = sin terreno lejano). 64 = 1024 bloques
+  "FarDetail": 2.0,           // 0.8..4. Mas detalle en la distancia (y mas tiles que generar). Los chunks siguen mandando en su zona
+  "Villagers": 20,             // aldeanos iniciales alrededor del jugador
   "Caravans": 60,             // caravanas repartidas por el mundo
   "MapSamplesPerAxis": 6,      // precision del mapamundi: muestras por region = n*n (1..16)
   "WorkerThreads": 0          // hilos de fondo para generar y mallar chunks (0 = automatico: nucleos - 2). Sube si te sobran nucleos

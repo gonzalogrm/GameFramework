@@ -3,6 +3,7 @@ using System.Text;
 using GF.Core;
 using GF.World;
 using GF.World.Entities;
+using GF.World.Events;
 using GF.World.Map;
 using GF.World.Voxel;
 
@@ -11,7 +12,7 @@ namespace MiniCraft;
 /// <summary>Texto del panel de inspección: el tipo (prototipo), la instancia y qué propiedades ha cambiado respecto a él.</summary>
 public static class Inspector
 {
-    public static string Describe(Entity e, WorldScale scale)
+    public static string Describe(Entity e, WorldScale scale, EventHub? hub = null)
     {
         var sb = new StringBuilder();
         sb.Append("ENTIDAD #").Append(e.Id).Append("   ").AppendLine(e.Prototype?.ChainName ?? e.Def?.Name ?? "(sin tipo)");
@@ -24,11 +25,12 @@ public static class Inspector
             ? string.Create(CultureInfo.InvariantCulture, $"Destino: {d.X:0}, {d.Z:0}")
             : "Destino: ninguno");
         sb.AppendLine();
+        AppendEvents(sb, hub, e.Prototype);
         AppendProperties(sb, e.Properties);
         return sb.ToString();
     }
 
-    public static string Describe(World<ushort> world, BlockRegistry blocks, CellCoord cell)
+    public static string Describe(World<ushort> world, BlockRegistry blocks, CellCoord cell, EventHub? hub = null)
     {
         var block = new BlockRef(world, blocks, cell);
         var def = block.Def;
@@ -39,9 +41,18 @@ public static class Inspector
         sb.AppendLine($"Celda: {cell.X}, {cell.Y}, {cell.Z}   Chunk: {chunk.X}, {chunk.Y}, {chunk.Z}");
         sb.AppendLine($"Solido: {(def.Solid ? "si" : "no")}   Opaco: {(def.Opaque ? "si" : "no")}   Dibujo: {def.Render}");
         sb.AppendLine();
+        AppendEvents(sb, hub, def.Props);
         if (def.Props == null) sb.AppendLine("Este tipo no tiene propiedades.");
         else AppendProperties(sb, block.Properties);
         return sb.ToString();
+    }
+
+    /// <summary>La lista de eventos que procesa este tipo (la comparten todas sus instancias).</summary>
+    private static void AppendEvents(StringBuilder sb, EventHub? hub, Prototype? prototype)
+    {
+        if (hub == null) return;
+        var kinds = hub.AcceptedKinds(prototype);
+        sb.AppendLine("Eventos que procesa: " + (kinds.Count == 0 ? "ninguno" : string.Join(", ", kinds.Select(k => k.Name))));
     }
 
     private static void AppendProperties(StringBuilder sb, IEnumerable<PropertyView> properties)

@@ -22,7 +22,7 @@ public sealed class NpcSystem
         public bool NeedsUnstuck = true;
     }
 
-    private const double MaxActiveSpeed = 2.0;   // por encima, la física por pasos atravesaría bloques
+    private const double MaxActiveSpeed = 10.0;   // por encima, la física por pasos atravesaría bloques
 
     private static readonly string[] VillagerNames =
         { "Roser", "Ovejo", "Cona", "Manek", "Hernan", "Pablo", "Oriol", "Carmen", "Pazaco" };

@@ -3,10 +3,13 @@ using GF.Engine;
 using GF.UI;
 using GF.World;
 using GF.World.Entities;
+using GF.World.Events;
 using GF.World.Map;
 using GF.World.Tiles;
 using GF.World.Voxel;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Content;
+using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Myra.Graphics2D;
 using Myra.Graphics2D.Brushes;
@@ -17,7 +20,7 @@ namespace MiniCraft;
 public sealed class PlayScene : UiScene
 {
     private const int LowestChunkY = 0;   // la altura (nº de chunks en vertical) sale de WorldSettings.VerticalChunks
-    private const float EyeHeight = 1.80f;
+    private const float EyeHeight = 1.62f;
     private const float Reach = 6f;
     private const float AutosaveSeconds = 60f;
     private static readonly Vector3 BodySize = new(0.6f, 1.8f, 0.6f);
@@ -44,6 +47,7 @@ public sealed class PlayScene : UiScene
     private Task<World<MapCell>> _mapTask = null!;
     private World<MapCell>? _map;
     private EntityStore _entities = null!;
+    private EventHub _events = null!;
     private NpcSystem _npcs = null!;
     private BoxRenderer _boxes = null!;
     private Hotbar _hotbar = null!;
@@ -113,7 +117,11 @@ public sealed class PlayScene : UiScene
         float farBlocks = _settings.FarDistanceChunks * cs;
         bool farEnabled = farBlocks > viewBlocks * 1.25f;
         // Distancia CERCANA del terreno lejano: por dentro no hay malla lejana (0 = el borde de los chunks).
-        _farCloseChunks = _settings.FarCloseChunks > 0 ? _settings.FarCloseChunks : view;
+        // Fundido: los bloques se disuelven en las últimas FadeChunks filas de chunks y el terreno lejano empieza justo debajo, así que
+        // lo que se descarta deja ver el relieve aproximado. Sin terreno lejano no hay nada que mostrar detrás: sin fundido.
+        int fadeChunks = Math.Clamp(_settings.FadeChunks, 0, Math.Max(0, view - 2));
+        _farCloseChunks = _settings.FarCloseChunks > 0 ? _settings.FarCloseChunks : (farEnabled && fadeChunks > 0 ? view - fadeChunks : view);
+        var fadeBand = farEnabled && fadeChunks > 0 ? FadeBand.For(_farCloseChunks, view, cs) : FadeBand.Disabled;
         float fogRange = farEnabled ? farBlocks : viewBlocks;
         float fogStart = fogRange * (farEnabled ? 0.05f : 0.55f), fogEnd = fogRange * (farEnabled ? 0.98f : 0.95f);
         // Hilos de fondo: ~60 % a generar chunks y el resto a mallarlos; se dejan libres un par de núcleos para el juego.
@@ -135,12 +143,32 @@ public sealed class PlayScene : UiScene
             MinChunkZ = 0, MaxChunkZ = _scale.ChunkCountZ - 1,   // los polos
             Store = _store,
         };
-        // Sprites 2D: cada .png de la carpeta sprites/ es un sprite, de cualquier tamaño (ver LEEME).
-        _sprites = SpriteLoader.LoadFolder(Game.GraphicsDevice, Path.Combine(AppContext.BaseDirectory, "sprites"), out var spriteMessages);
+        // Sprites 2D: cada textura de Content/sprites/ (compilada por MGCB) es un sprite, de cualquier tamaño. Los .png sueltos de una
+        // carpeta sprites/ junto al ejecutable los sustituyen o amplían sin recompilar el contenido (ver LEEME). Un ContentManager propio,
+        // porque las texturas sueltas solo hacen falta para empaquetar el atlas.
+        List<string> spriteMessages;
+        using (var spriteContent = new ContentManager(Game.Services, Game.Content.RootDirectory))
+            _sprites = SpriteLoader.LoadContent(Game.GraphicsDevice, spriteContent, "sprites",
+                Path.Combine(AppContext.BaseDirectory, "sprites"), out spriteMessages);
         foreach (var message in spriteMessages) Console.Error.WriteLine("[sprites] " + message);
-        _renderer = new VoxelWorldRenderer(Game.GraphicsDevice, _world, Blocks.Registry, AtlasFactory.Create(Game.GraphicsDevice), _sprites)
+
+        // Shader de desvanecimiento de los chunks (Content/Effects/ChunkFade.fx, compilado por MGCB). Es opcional: sin él se usan
+        // BasicEffect y AlphaTestEffect como antes.
+        Effect? chunkFade = null;
+        if (fadeBand.Enabled)
+        {
+            try { chunkFade = Game.Content.Load<Effect>("Effects/ChunkFade"); }
+            catch (ContentLoadException e)
+            {
+                Console.Error.WriteLine("[contenido] sin el efecto 'Effects/ChunkFade' (" + e.Message + "): los bloques no se desvanecen");
+                fadeBand = FadeBand.Disabled;
+                _farCloseChunks = _settings.FarCloseChunks > 0 ? _settings.FarCloseChunks : view;   // sin fundido, sin solape
+            }
+        }
+        _renderer = new VoxelWorldRenderer(Game.GraphicsDevice, _world, Blocks.Registry, AtlasFactory.Load(Game.Content, Game.GraphicsDevice), _sprites, chunkFade)
         {
             MaxMeshingJobs = meshThreads,
+            FadeStart = fadeBand.Start, FadeEnd = fadeBand.End, FadeInSeconds = _settings.FadeInSeconds,
             CanMesh = _chunks.AreNeighborsSettled,   // no mallar hasta que los vecinos estén cargados: cada chunk se malla una vez, no diez
             FogColor = MiniCraftGame.SkyColor, FogStart = fogStart, FogEnd = fogEnd,
         };
@@ -163,6 +191,12 @@ public sealed class PlayScene : UiScene
         _entities = new EntityStore(_world.Shape, _scale);
         _entities.Attach(_world);
         _entities.Definitions = EntityTypes.Registry;   // cada entidad remite a su tipo y a su prototipo de propiedades
+
+        // Eventos: cada prototipo declara cuáles procesa (GameEvents.Register). Los manejadores avisan al jugador con Notify.
+        _events = new EventHub(_entities);
+        GameEvents.Register(_events);
+        _events.Message += ShowMessage;
+        _events.Delivered += OnDelivered;
         _npcs = new NpcSystem(_entities, _world, _climate, _scale, () => _map, _seed);
         _boxes = new BoxRenderer(Game.GraphicsDevice, _scale)
         {
@@ -373,6 +407,7 @@ public sealed class PlayScene : UiScene
 
         using (_prof.Measure("chunks"))
             _chunks.Update(new CellCoord(IntMath.FloorToInt(_pos.X), IntMath.FloorToInt(_pos.Y), IntMath.FloorToInt(_pos.Z)));
+        _renderer.Time = gameTime.TotalGameTime.TotalSeconds;   // fundido de entrada de los chunks nuevos
         using (_prof.Measure("malla"))
             _renderer.Update(_camera.Position);
         using (_prof.Measure("lejano"))
@@ -405,10 +440,13 @@ public sealed class PlayScene : UiScene
         if (_inspecting && (_inspectTimer -= dt) <= 0f)
         {
             _inspectTimer = 0.1f;
-            _inspector.Text = _entityTarget != null ? Inspector.Describe(_entityTarget, _scale)
-                : _target is { } looked ? Inspector.Describe(_world, Blocks.Registry, looked.Cell)
+            _inspector.Text = _entityTarget != null ? Inspector.Describe(_entityTarget, _scale, _events)
+                : _target is { } looked ? Inspector.Describe(_world, Blocks.Registry, looked.Cell, _events)
                 : "Apunta a un bloque o a una entidad";
         }
+
+        if (input.Pressed("Talk")) Talk();
+        if (input.Pressed("Fireball")) CastFireball();
         if (_target is { } t)
         {
             if (input.RightClicked)
@@ -435,9 +473,49 @@ public sealed class PlayScene : UiScene
         base.Draw(gameTime);   // UI encima
     }
 
+    /// <summary>Emite un evento de conversación al objetivo (entidad o bloque). Quien no lo acepte lo recibe y lo ignora.</summary>
+    private void Talk()
+    {
+        var ev = new GameEvent(GameEvents.Conversation);
+        if (_entityTarget != null) _events.Send(_entityTarget, ev);
+        else if (_target is { } t) _events.Send(new BlockRef(_world, Blocks.Registry, t.Cell), ev);
+        else ShowMessage("No hay nadie a quien hablar: apunta a algo");
+    }
+
+    /// <summary>
+    /// Emite una bola de fuego (3 de daño) sobre lo apuntado. La reciben TODAS las entidades a menos de 3 bloques y los bloques a menos
+    /// de 2; cada una la procesa solo si su tipo acepta el fuego. Criaturas: sufren daño. Tronco y hojas: arden. El resto: la ignoran.
+    /// </summary>
+    private void CastFireball()
+    {
+        Vec3d center;
+        if (_entityTarget != null)
+        {
+            // La posición de una entidad es canónica (X envuelta); los bloques usan las coordenadas cercanas al jugador.
+            double x = _pos.X + _scale.DeltaX(_pos.X, _entityTarget.Position.X);
+            center = new Vec3d(x, _entityTarget.Position.Y, _entityTarget.Position.Z);
+        }
+        else if (_target is { } t) center = new Vec3d(t.Cell.X + 0.5, t.Cell.Y + 0.5, t.Cell.Z + 0.5);
+        else { ShowMessage("Apunta a algo para lanzar la bola de fuego"); return; }
+
+        var ev = new GameEvent(GameEvents.Fireball, Amount: 3f);
+        var cell = new CellCoord((int)Math.Floor(center.X), (int)Math.Floor(center.Y), (int)Math.Floor(center.Z));
+        int entities = _events.Broadcast(center, 3.0, ev);
+        int blocks = BlockEvents.Broadcast(_events, _world, Blocks.Registry, cell, 2, ev);
+        ShowMessage($"Bola de fuego: la procesan {entities} entidades y {blocks} bloques");
+    }
+
+    /// <summary>Solo las conversaciones ignoradas se cuentan al jugador: el resto lo narran los manejadores.</summary>
+    private void OnDelivered(Delivery delivery)
+    {
+        if (delivery.Result == DeliveryResult.Ignored && delivery.Event.Kind.Is(GameEvents.Conversation))
+            ShowMessage($"{delivery.Target.Label} recibe '{delivery.Event.Kind.Name}' pero no lo procesa");
+    }
+
     private string FarInfo() => _far == null ? "desactivado"
         : $"{_far.TilesDrawn} tiles dibujados, {_far.CachedTiles} en cache, {_far.PendingTiles} pendientes, {_far.AverageBuildMs:0.0} ms/tile | " +
-          $"anillo desde {_holeRadius} chunks hasta {_settings.FarDistanceChunks}";
+          $"anillo desde {_holeRadius} chunks hasta {_settings.FarDistanceChunks} | " +
+          $"fundido {(_renderer.FadeActive ? "si" : "no")}, {_renderer.FadingChunks} chunks apareciendo";
 
     /// <summary>
     /// Agujero central del terreno lejano: el cuadrado de chunks con su MALLA ya construida alrededor de la cámara (no basta con que
@@ -448,7 +526,7 @@ public sealed class PlayScene : UiScene
     private FarHole ComputeFarHole()
     {
         var cc = _world.Shape.ToChunk(new CellCoord(IntMath.FloorToInt(_pos.X), 0, IntMath.FloorToInt(_pos.Z)));
-        var key = (cc.X, cc.Z, _renderer.BuiltChunkCount);   // cambia al construirse o descargarse una malla
+        var key = (cc.X, cc.Z, _renderer.VisibilityVersion);   // cambia al construirse una malla, terminar su fundido o descargarse
         if (key != _holeKey)
         {
             _holeKey = key;
@@ -464,21 +542,15 @@ public sealed class PlayScene : UiScene
     {
         if (cz < 0 || cz >= _scale.ChunkCountZ) return true;   // más allá de los polos no hay nada que cubrir
         for (int cy = 0; cy < _settings.VerticalChunks; cy++)
-            if (!_renderer.HasMesh(new ChunkCoord(cx, cy, cz))) return false;   // sin malla aún: no se ve, no se puede quitar el lejano
+            if (!_renderer.IsFullyVisible(new ChunkCoord(cx, cy, cz))) return false;   // aún sin malla o disolviéndose: no se puede quitar el lejano
         return true;
     }
 
-    /// <summary>Un golpe quita 1 de vida. La entidad solo guarda su "hp" nueva (lo demás sigue en el prototipo); al llegar a 0 muere.</summary>
-    private void Attack(Entity entity)
-    {
-        if (entity.Prototype == null) return;
-        float hp = entity.GetFloat("hp") - 1f;
-        if (hp > 0f) { entity.Set("hp", hp); return; }
-
-        string name = entity.GetText("name");
-        ShowMessage($"{entity.GetText("species")}{(name.Length > 0 ? " " + name : "")} ha muerto");
-        _entities.Remove(entity);
-    }
+    /// <summary>
+    /// Un golpe es un EVENTO de daño de 1 punto enviado a la entidad: lo procesa quien acepte "dano" (toda criatura) y baja su "hp";
+    /// al llegar a 0 muere. Cualquier otra cosa que lo reciba lo ignora.
+    /// </summary>
+    private void Attack(Entity entity) => _events.Send(entity, new GameEvent(GameEvents.Melee, Amount: 1f));
 
     /// <summary>
     /// Cada golpe resta 1 a la durabilidad del bloque (stone 3, log 2, el resto 1). Solo el bloque golpeado guarda su valor nuevo;

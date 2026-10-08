@@ -1,4 +1,5 @@
 using GF.Core;
+using GF.World.Events;
 
 namespace GF.World.Entities;
 
@@ -28,7 +29,7 @@ public sealed record EntityRecord(long Id, string Type, double X, double Y, doub
 /// La posición solo cambia a través de EntityStore.Move (para mantener los índices espaciales coherentes);
 /// las coordenadas son canónicas: X siempre en [0, ancho del mundo).
 /// </summary>
-public sealed class Entity
+public sealed class Entity : IEventReceiver
 {
     private PropertyOverrides? _overrides;
 
@@ -59,6 +60,19 @@ public sealed class Entity
     /// <summary>Tipo de esta instancia (asignado por EntityStore.Definitions). Compartido por todas las instancias del mismo tipo.</summary>
     public EntityDef? Def { get; internal set; }
     public Prototype? Prototype => Def?.Prototype;
+
+    /// <summary>Nombre para mensajes: "especie nombre" (p. ej. "Aldeano Marta"), o solo la especie, o el nombre del tipo.</summary>
+    public string Label
+    {
+        get
+        {
+            string name = HasProperty("name") ? GetText("name") : "";
+            string species = HasProperty("species") ? GetText("species") : Def?.Name ?? "entidad";
+            return name.Length > 0 ? $"{species} {name}" : species;
+        }
+    }
+
+    public bool HasProperty(string name) => Prototype is { } p && p.TryGetDef(PropertyIds.Of(name), out _);
 
     /// <summary>Cuántas propiedades de esta instancia difieren de su prototipo (y por tanto ocupan memoria).</summary>
     public int OverrideCount => _overrides?.Count ?? 0;

@@ -1,0 +1,41 @@
+PARCHE: SISTEMA DE EVENTOS (emitir y recibir; cada tipo declara los que procesa)
+Requiere los parches anteriores (incluido el de prototipos). Extrae sobre la solucion sobrescribiendo. No hay proyectos nuevos.
+
+IDEA
+  Un evento (GameEvent) tiene un TIPO (EventKind), un emisor opcional, una cantidad y un texto. Se ENTREGA a un receptor (una entidad
+  o un bloque). El receptor lo procesa SOLO si su prototipo tiene un manejador para ese tipo de evento; si no, lo recibe y no hace nada.
+  La lista de eventos aceptados vive en el PROTOTIPO, igual que las propiedades: mil perros comparten una sola lista.
+
+    var hub = new EventHub(store);
+    hub.On<Entity>(aldeano, Conversacion, (e, ev, hub) => hub.Notify($"{e.Label}: Hola!"));   // los aldeanos procesan la conversacion
+    hub.Send(arbol, new GameEvent(Conversacion));        // el arbol la recibe y NO la procesa (no esta en su lista)
+    hub.Send(aldeano, new GameEvent(Conversacion));      // el aldeano si
+    hub.Broadcast(centro, 3, new GameEvent(BolaDeFuego, Amount: 3f));   // a TODAS las entidades en un radio (indice espacial)
+    hub.Emit(entidad, new GameEvent(Alarma), 15);        // una entidad emite: la oyen las demas en 15 bloques (ella no)
+    BlockEvents.Broadcast(hub, world, blocks, celda, 2, ev);            // lo mismo para los bloques en una esfera
+
+JERARQUIA DE EVENTOS Y HERENCIA
+  Los tipos forman un arbol:  dano > fuego > bola_de_fuego.  Quien acepta "dano" procesa tambien "fuego" y "bola_de_fuego";
+  quien solo acepta "fuego" no procesa un dano generico. Si hay manejadores para varios niveles, gana el mas especifico.
+  Los manejadores tambien se heredan por prototipo (los perros heredan los de las criaturas) y el hijo puede sustituirlos.
+
+EN EL JUEGO (MiniCraft)
+  T   emite una CONVERSACION al objetivo.
+        Aldeano / perro: la procesan ("Marta: Buenos dias, forastero!" - cambia segun su vida y su miedo, que son propiedades de instancia).
+        Caravana, tronco, piedra...: la reciben y no la procesan ("log recibe 'conversacion' pero no lo procesa").
+  B   emite una BOLA DE FUEGO (3 de dano) sobre el objetivo. La reciben todas las entidades a 3 bloques y los bloques a 2.
+        Criaturas: sufren dano (hp) o mueren. Tronco y hojas: se chamuscan y se rompen. Piedra, tierra...: la ignoran.
+  Clic izq. sobre una entidad: ahora es un evento de dano "golpe" (1 punto): el mismo camino que la bola de fuego.
+  Al sufrir dano una criatura grita (emite "alarma"): las criaturas a 15 bloques suben su "fear" (otra propiedad de instancia).
+  I   el inspector muestra tambien "Eventos que procesa" del tipo apuntado.
+  Todo esta en GameEvents.cs: aqui se define que tipos de evento existen y quien procesa cual.
+
+PARA ANADIR UN EVENTO
+  1) public static readonly EventKind Hielo = Damage.Derive("hielo");      (GameEvents.cs)
+  2) hub.On<Entity>(EntityTypes.Creature, Hielo, ...);  hub.On<BlockRef>(prototipoDelAgua, Hielo, ...);   (en Register)
+  3) Emitelo con hub.Send / Broadcast / Emit desde donde quieras.
+
+MOTOR      GF.World/Events/Events.cs (EventKind, GameEvent, IEventReceiver, EventHub), Entity y BlockRef implementan IEventReceiver,
+           EntityStore.Contains, GF.World.Voxel/BlockEvents.cs
+MINICRAFT  GameEvents.cs (nuevo), EntityTypes (+fear), Blocks (las hojas con prototipo propio), Inspector, PlayScene, MiniCraftGame
+SEGURIDAD  las cascadas (un evento que provoca otro...) se cortan a profundidad 8; un manejador puede eliminar entidades durante un reparto.

@@ -24,6 +24,10 @@ public sealed class ChunkMesh : IDisposable
     public BillboardInstance[] Billboards { get; }
     public bool HasWater => _wvb != null;
     public bool HasSprites => _svb != null;
+    /// <summary>Instante (segundos de juego) en que apareció este chunk; el fundido de entrada cuenta desde aquí.</summary>
+    public double CreatedAt { get; set; }
+    /// <summary>true cuando el fundido de entrada ha terminado (o no hay fundido): el chunk es del todo opaco.</summary>
+    public bool FadedIn { get; set; }
 
     public ChunkMesh(GraphicsDevice device, MeshData data, CellCoord origin, Vector3 size)
     {
@@ -100,6 +104,11 @@ public sealed class VoxelWorldRenderer : IDisposable
     private readonly BasicEffect _effect;
     private readonly AlphaTestEffect _spriteEffect;
     private readonly BasicEffect _lineEffect;
+    // Efecto propio (ChunkFade.fx). Si es null se usan BasicEffect y AlphaTestEffect, sin desvanecimiento.
+    private readonly Effect? _fade;
+    private readonly EffectParameter? _pWorld, _pViewProjection, _pTexture, _pCutoff, _pChunkFade, _pFogColor, _pFogStart, _pFogEnd,
+        _pFadeStart, _pFadeEnd, _pViewport;
+    private readonly List<ChunkMesh> _fading = new();   // chunks cuyo fundido de entrada aún no ha terminado
 
     private readonly Dictionary<ChunkCoord, ChunkMesh> _meshes = new();
     private readonly HashSet<ChunkCoord> _built = new();      // chunks que ya tienen (o tuvieron) una malla, aunque vacía
@@ -135,6 +144,16 @@ public sealed class VoxelWorldRenderer : IDisposable
     /// <summary>Distancia (bloques) hasta la que se dibujan los sprites Billboard.</summary>
     public float BillboardDistance { get; set; } = 64f;
 
+    /// <summary>Segundos de juego, para el fundido de entrada: asígnalo cada frame (gameTime.TotalGameTime.TotalSeconds).</summary>
+    public double Time { get; set; }
+    /// <summary>Duración del fundido de entrada de un chunk que acaba de aparecer. 0 = sin fundido.</summary>
+    public double FadeInSeconds { get; set; } = 0.6;
+    /// <summary>Distancias (bloques desde la cámara) donde los bloques empiezan y terminan de desvanecerse. Ver FadeBand.</summary>
+    public float FadeStart { get; set; } = 1e8f;
+    public float FadeEnd { get; set; } = 2e8f;
+    public bool FadeActive => _fade != null;
+    public int FadingChunks => _fading.Count;
+
     public int VisibleChunks { get; private set; }
     public int BillboardsDrawn { get; private set; }
     public int MeshedChunks => _meshes.Count;
@@ -145,6 +164,13 @@ public sealed class VoxelWorldRenderer : IDisposable
     public bool HasMesh(ChunkCoord c) => _built.Contains(c);
     /// <summary>Cuántos chunks tienen ya su malla (cambia solo al construirse la primera vez o al descargarse).</summary>
     public int BuiltChunkCount => _built.Count;
+    /// <summary>
+    /// ¿Se ve el chunk del todo? Tiene su malla Y ha terminado de aparecer (o es un chunk vacío). Hasta entonces el terreno lejano
+    /// no se puede quitar de debajo: los píxeles que aún se disuelven dejarían ver el vacío.
+    /// </summary>
+    public bool IsFullyVisible(ChunkCoord c) => _built.Contains(c) && (!_meshes.TryGetValue(c, out var mesh) || mesh.FadedIn);
+    /// <summary>Sube cuando cambia algo que afecta a qué chunks se ven del todo (malla nueva, fundido terminado, descarga).</summary>
+    public int VisibilityVersion { get; private set; }
     /// <summary>Chunks esperando o en proceso de mallado.</summary>
     public int PendingMeshes => _dirty.Count + _inFlight.Count;
     public double AverageMeshMs
@@ -157,7 +183,9 @@ public sealed class VoxelWorldRenderer : IDisposable
     }
 
     /// <param name="sprites">Atlas de sprites 2D (cualquier tamaño). El renderer lo usa pero no lo libera.</param>
-    public VoxelWorldRenderer(GraphicsDevice device, World<ushort> world, BlockRegistry blocks, TextureAtlas atlas, SpriteAtlas sprites)
+    /// <param name="fadeEffect">Efecto ChunkFade (Content/Effects/ChunkFade). null = sin desvanecimiento. El renderer lo usa pero no lo libera.</param>
+    public VoxelWorldRenderer(GraphicsDevice device, World<ushort> world, BlockRegistry blocks, TextureAtlas atlas, SpriteAtlas sprites,
+        Effect? fadeEffect = null)
     {
         _device = device; _world = world; _blocks = blocks; _atlas = atlas; _sprites = sprites;
         _effect = new BasicEffect(device) { TextureEnabled = true, VertexColorEnabled = true, LightingEnabled = false, Texture = atlas.Texture };
@@ -170,6 +198,22 @@ public sealed class VoxelWorldRenderer : IDisposable
         };
         _lineEffect = new BasicEffect(device) { VertexColorEnabled = true };
 
+        if (fadeEffect != null)
+        {
+            _fade = fadeEffect;
+            _pWorld = Param(fadeEffect, "World");
+            _pViewProjection = Param(fadeEffect, "ViewProjection");
+            _pTexture = Param(fadeEffect, "AtlasTexture");
+            _pCutoff = Param(fadeEffect, "AlphaCutoff");
+            _pChunkFade = Param(fadeEffect, "ChunkFade");
+            _pFogColor = Param(fadeEffect, "FogColor");
+            _pFogStart = Param(fadeEffect, "FogStart");
+            _pFogEnd = Param(fadeEffect, "FogEnd");
+            _pFadeStart = Param(fadeEffect, "FadeStart");
+            _pFadeEnd = Param(fadeEffect, "FadeEnd");
+            _pViewport = Param(fadeEffect, "ViewportSize");
+        }
+
         for (int q = 0; q < MaxBillboards; q++)
         {
             int i = q * 6, v = q * 4;
@@ -181,6 +225,9 @@ public sealed class VoxelWorldRenderer : IDisposable
         world.ChunkChanged += c => _urgent.Add(c);
         world.ChunkUnloaded += OnUnloaded;
     }
+
+    private static EffectParameter Param(Effect effect, string name) =>
+        effect.Parameters[name] ?? throw new InvalidOperationException($"El efecto no tiene el parámetro '{name}'.");
 
     private void OnLoaded(ChunkCoord c)
     {
@@ -203,12 +250,26 @@ public sealed class VoxelWorldRenderer : IDisposable
         _urgent.Remove(c);
         _built.Remove(c);
         _versions.Remove(c);   // invalida cualquier resultado en vuelo
-        if (_meshes.Remove(c, out var mesh)) mesh.Dispose();
+        VisibilityVersion++;
+        if (_meshes.Remove(c, out var mesh))
+        {
+            _fading.Remove(mesh);
+            mesh.Dispose();
+        }
     }
 
     public void Update(Vec3d cameraPosition)
     {
         if (_failures.TryDequeue(out var ex)) ExceptionDispatchInfo.Capture(ex).Throw();
+
+        // Los chunks cuyo fundido de entrada ha terminado pasan a verse del todo.
+        for (int i = _fading.Count - 1; i >= 0; i--)
+        {
+            if (Time - _fading[i].CreatedAt < FadeInSeconds) continue;
+            _fading[i].FadedIn = true;
+            _fading.RemoveAt(i);
+            VisibilityVersion++;
+        }
 
         // 1) Ediciones del jugador: síncrono.
         if (_urgent.Count > 0)
@@ -277,11 +338,27 @@ public sealed class VoxelWorldRenderer : IDisposable
     private void Apply(ChunkCoord c, MeshData data)
     {
         _built.Add(c);
-        if (_meshes.Remove(c, out var old)) old.Dispose();
+        VisibilityVersion++;
+
+        double createdAt = Time;
+        bool fadedIn = _fade == null || FadeInSeconds <= 0;
+        if (_meshes.Remove(c, out var old))
+        {
+            createdAt = old.CreatedAt;   // una malla rehecha (edición, vecino nuevo) no vuelve a fundirse desde cero
+            fadedIn = old.FadedIn;
+            _fading.Remove(old);
+            old.Dispose();
+        }
         if (data.IsEmpty) return;
 
         var shape = _world.Shape;
-        _meshes[c] = new ChunkMesh(_device, data, shape.Origin(c), new Vector3(shape.SizeX, shape.SizeY, shape.SizeZ));
+        var mesh = new ChunkMesh(_device, data, shape.Origin(c), new Vector3(shape.SizeX, shape.SizeY, shape.SizeZ))
+        {
+            CreatedAt = createdAt,
+            FadedIn = fadedIn,
+        };
+        _meshes[c] = mesh;
+        if (!fadedIn) _fading.Add(mesh);
     }
 
     /// <summary>
@@ -313,34 +390,25 @@ public sealed class VoxelWorldRenderer : IDisposable
     /// <summary>
     /// Dibuja con ORIGEN FLOTANTE: el origen de render es la posición de la cámara (en double). La vista, el frustum y la
     /// matriz de mundo de cada chunk se calculan RELATIVOS a ese origen.
+    /// Con el efecto ChunkFade, los bloques se disuelven (tramado) hacia FadeEnd y aparecen poco a poco al construirse su malla.
     /// </summary>
-    /// <param name="afterOpaque">Se invoca tras la pasada opaca y antes de los sprites y el agua (aquí se dibujan las entidades opacas).</param>
+    /// <param name="afterOpaque">Se invoca tras la pasada opaca y antes de los sprites y el agua (aquí se dibujan el terreno lejano y las entidades).</param>
     public void Draw(ICamera3D camera, Action? afterOpaque = null)
     {
         var origin = camera.Position;
         var view = camera.ViewRelativeTo(origin);
         var projection = camera.Projection;
-        var frustum = new BoundingFrustum(view * projection);
+        var viewProjection = view * projection;
+        var frustum = new BoundingFrustum(viewProjection);
 
-        _effect.View = view;
-        _effect.Projection = projection;
-        _effect.FogEnabled = true;
-        _effect.FogColor = FogColor.ToVector3();
-        _effect.FogStart = FogStart;
-        _effect.FogEnd = FogEnd;
-
-        _spriteEffect.View = view;
-        _spriteEffect.Projection = projection;
-        _spriteEffect.FogEnabled = true;
-        _spriteEffect.FogColor = FogColor.ToVector3();
-        _spriteEffect.FogStart = FogStart;
-        _spriteEffect.FogEnd = FogEnd;
+        PrepareFallbackEffects(view, projection);
 
         // Pasada 1: opaco.
         _device.BlendState = BlendState.Opaque;
         _device.DepthStencilState = DepthStencilState.Default;
         _device.RasterizerState = RasterizerState.CullCounterClockwise;
         _device.SamplerStates[0] = SamplerState.PointClamp;
+        ConfigureFade(_atlas.Texture, 0f, viewProjection);
 
         VisibleChunks = 0;
         _visible.Clear();
@@ -352,8 +420,7 @@ public sealed class VoxelWorldRenderer : IDisposable
                 (float)(mesh.Origin.Z - origin.Z));
             if (!frustum.Intersects(new BoundingBox(rel + mesh.BoundsMin, rel + mesh.BoundsMax))) continue;
 
-            _effect.World = Matrix.CreateTranslation(rel);
-            _effect.CurrentTechnique.Passes[0].Apply();
+            SetChunk(rel, mesh, _effect);
             mesh.DrawOpaque(_device);
             VisibleChunks++;
             _visible.Add((mesh, rel));
@@ -362,7 +429,7 @@ public sealed class VoxelWorldRenderer : IDisposable
         afterOpaque?.Invoke();
 
         // Pasada 2: sprites (recorte por alfa, sin ordenar, a doble cara).
-        DrawSprites(view);
+        DrawSprites(view, viewProjection);
 
         // Pasada 3: agua, de lejos a cerca, leyendo profundidad sin escribirla y visible desde ambos lados.
         _waterDraw.Clear();
@@ -375,10 +442,10 @@ public sealed class VoxelWorldRenderer : IDisposable
             _device.DepthStencilState = DepthStencilState.DepthRead;
             _device.RasterizerState = RasterizerState.CullNone;
             _device.SamplerStates[0] = SamplerState.PointClamp;
+            ConfigureFade(_atlas.Texture, 0f, viewProjection);
             foreach (var (mesh, rel) in _waterDraw)
             {
-                _effect.World = Matrix.CreateTranslation(rel);
-                _effect.CurrentTechnique.Passes[0].Apply();
+                SetChunk(rel, mesh, _effect);
                 mesh.DrawWater(_device);
             }
         }
@@ -388,19 +455,19 @@ public sealed class VoxelWorldRenderer : IDisposable
         _device.RasterizerState = RasterizerState.CullCounterClockwise;
     }
 
-    private void DrawSprites(Matrix view)
+    private void DrawSprites(Matrix view, Matrix viewProjection)
     {
         _device.BlendState = BlendState.Opaque;
         _device.DepthStencilState = DepthStencilState.Default;
         _device.RasterizerState = RasterizerState.CullNone;
         _device.SamplerStates[0] = SamplerState.PointClamp;
+        ConfigureFade(_sprites.Texture, 0.5f, viewProjection);   // alfa <= 0.5: recortado
 
         // Sprites en cruz: forman parte de la malla de cada chunk.
         foreach (var (mesh, rel) in _visible)
         {
             if (!mesh.HasSprites) continue;
-            _spriteEffect.World = Matrix.CreateTranslation(rel);
-            _spriteEffect.CurrentTechnique.Passes[0].Apply();
+            SetChunk(rel, mesh, _spriteEffect);
             mesh.DrawSprites(_device);
         }
 
@@ -414,6 +481,7 @@ public sealed class VoxelWorldRenderer : IDisposable
         int quads = 0;
         foreach (var (mesh, rel) in _visible)
         {
+            if (_fade != null && !mesh.FadedIn) continue;   // aparecen cuando su chunk termina de aparecer
             var list = mesh.Billboards;
             for (int i = 0; i < list.Length && quads < MaxBillboards; i++)
             {
@@ -426,9 +494,71 @@ public sealed class VoxelWorldRenderer : IDisposable
 
         BillboardsDrawn = quads;
         if (quads == 0) return;
-        _spriteEffect.World = Matrix.Identity;
-        _spriteEffect.CurrentTechnique.Passes[0].Apply();
+        if (_fade != null)
+        {
+            _pWorld!.SetValue(Matrix.Identity);
+            _pChunkFade!.SetValue(1f);
+            _fade.CurrentTechnique.Passes[0].Apply();
+        }
+        else
+        {
+            _spriteEffect.World = Matrix.Identity;
+            _spriteEffect.CurrentTechnique.Passes[0].Apply();
+        }
         _device.DrawUserIndexedPrimitives(PrimitiveType.TriangleList, _bbVerts, 0, quads * 4, _bbIdx, 0, quads * 2);
+    }
+
+    // ------------------------------------------------------------------ efectos
+
+    /// <summary>Respaldo (sin efecto propio): BasicEffect para bloques y agua, AlphaTestEffect para sprites.</summary>
+    private void PrepareFallbackEffects(Matrix view, Matrix projection)
+    {
+        _effect.View = view;
+        _effect.Projection = projection;
+        _effect.FogEnabled = true;
+        _effect.FogColor = FogColor.ToVector3();
+        _effect.FogStart = FogStart;
+        _effect.FogEnd = FogEnd;
+
+        _spriteEffect.View = view;
+        _spriteEffect.Projection = projection;
+        _spriteEffect.FogEnabled = true;
+        _spriteEffect.FogColor = FogColor.ToVector3();
+        _spriteEffect.FogStart = FogStart;
+        _spriteEffect.FogEnd = FogEnd;
+    }
+
+    /// <summary>Parámetros de ChunkFade comunes a toda una pasada (textura, recorte, niebla, franja de desvanecimiento, pantalla).</summary>
+    private void ConfigureFade(Texture2D texture, float cutoff, Matrix viewProjection)
+    {
+        if (_fade == null) return;
+        _pViewProjection!.SetValue(viewProjection);
+        _pTexture!.SetValue(texture);
+        _pCutoff!.SetValue(cutoff);
+        _pFogColor!.SetValue(FogColor.ToVector3());
+        _pFogStart!.SetValue(FogStart);
+        _pFogEnd!.SetValue(FogEnd);
+        _pFadeStart!.SetValue(FadeStart);
+        _pFadeEnd!.SetValue(FadeEnd);
+        _pViewport!.SetValue(new Vector2(_device.Viewport.Width, _device.Viewport.Height));
+    }
+
+    /// <summary>Coloca un chunk: su traslación relativa a la cámara y su fundido de aparición; deja el efecto listo para dibujar.</summary>
+    private void SetChunk(Vector3 rel, ChunkMesh mesh, Effect fallback)
+    {
+        var world = Matrix.CreateTranslation(rel);
+        if (_fade != null)
+        {
+            float appear = mesh.FadedIn ? 1f : FadeCurve.ChunkFade(Time, mesh.CreatedAt, FadeInSeconds);
+            _pWorld!.SetValue(world);
+            _pChunkFade!.SetValue(appear);
+            _fade.CurrentTechnique.Passes[0].Apply();
+        }
+        else
+        {
+            ((IEffectMatrices)fallback).World = world;
+            fallback.CurrentTechnique.Passes[0].Apply();
+        }
     }
 
     private void AddBillboard(int quad, Vector3 bottomCenter, Vector3 right, BillboardInstance b)

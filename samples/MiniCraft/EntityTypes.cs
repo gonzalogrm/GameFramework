@@ -13,6 +13,7 @@ public static class EntityTypes
         .Float("hp", 10f)
         .Float("max_hp", 10f)
         .Float("hunger", 0f)
+        .Float("fear", 0f)           // sube cuando oyen una alarma cerca
         .Int("age", 0)
         .Int("level", 1);
 

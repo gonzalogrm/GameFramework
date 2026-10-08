@@ -55,6 +55,9 @@ public sealed class EntityStore
     public int MaxFarPerUpdate { get; set; } = 500;
 
     public int Count => _all.Count;
+
+    /// <summary>¿Sigue esta entidad en el almacén? (false si se eliminó)</summary>
+    public bool Contains(Entity entity) => _all.TryGetValue(entity.Id, out var found) && ReferenceEquals(found, entity);
     public int ActiveCount => _active.Count;
     public int ApproximateCount => _approx.Count;
     public IReadOnlyCollection<Entity> All => _all.Values;

@@ -19,6 +19,7 @@ public abstract class FrameworkGame : Game
             PreferredBackBufferHeight = 720,
         };
         IsMouseVisible = true;
+        Content.RootDirectory = "Content";   // contenido compilado por el pipeline de MonoGame (MGCB)
         Window.AllowUserResizing = true;
         Input = new InputService(this);
         Scenes = new SceneManager(this);

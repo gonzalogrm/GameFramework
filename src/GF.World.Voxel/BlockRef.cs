@@ -1,4 +1,5 @@
 using GF.Core;
+using GF.World.Events;
 
 namespace GF.World.Voxel;
 
@@ -8,7 +9,7 @@ namespace GF.World.Voxel;
 /// lo necesitan: millones de bloques de piedra comparten un único valor de "durabilidad"; el que se ha golpeado guarda el suyo.
 /// Al reemplazar el bloque (World.SetCell con otro tipo) la celda pierde sus cambios.
 /// </summary>
-public readonly struct BlockRef
+public readonly struct BlockRef : IEventReceiver
 {
     private readonly World<ushort> _world;
     private readonly BlockRegistry _blocks;
@@ -24,6 +25,12 @@ public readonly struct BlockRef
     public ushort Id => _world.GetCell(Cell);
     public BlockDef Def => _blocks.Get(Id);
     public Prototype? Prototype => Def.Props;
+
+    /// <summary>Nombre del tipo de bloque, para mensajes y registros.</summary>
+    public string Label => Def.Name;
+
+    /// <summary>Rompe el bloque (la celda pasa a aire y pierde sus cambios de instancia).</summary>
+    public void Destroy() => _world.SetCell(Cell, BlockRegistry.Air);
 
     /// <summary>Cuántas propiedades de este bloque difieren de su prototipo.</summary>
     public int OverrideCount => _world.GetCellOverrides(Cell)?.Count ?? 0;

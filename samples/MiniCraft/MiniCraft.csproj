@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+	<TargetFramework>net8.0</TargetFramework>
+	<MonoGamePlatform>DesktopGL</MonoGamePlatform>
     <OutputType>Exe</OutputType>
     <ServerGarbageCollector>false</ServerGarbageCollector>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
@@ -11,9 +13,16 @@
     <ProjectReference Include="..\..\src\GF.UI\GF.UI.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <!-- Se copia junto al ejecutable: edita samples/MiniCraft/worldsettings.json y compila/ejecuta -->
+    <!-- Compila el contenido (Content/Content.mgcb) durante el build y lo copia junto al ejecutable, en Content/ -->
+    <PackageReference Include="MonoGame.Content.Builder.Task" Version="$(MonoGameVersion)" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Se edita con el editor de contenido de MonoGame:  dotnet mgcb-editor samples/MiniCraft/Content/Content.mgcb -->
+    <MonoGameContentReference Include="Content\Content.mgcb" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Include="worldsettings.json" CopyToOutputDirectory="PreserveNewest" />
-    <!-- Cada .png de sprites/ es un sprite (más sprites.json opcional con tamaños) -->
-    <Content Include="sprites\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Tamaños de los sprites en bloques (no es contenido compilado: se copia tal cual a Content/sprites/) -->
+    <None Include="Content\sprites\sprites.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

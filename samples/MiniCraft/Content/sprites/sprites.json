@@ -1,0 +1,13 @@
+// Tamanos de los sprites en BLOQUES (opcional). Un sprite que no aparezca aqui mide sus pixeles / pixelsPerBlock:
+//   tall_grass.png  16 x 32 px  ->  1 x 2 bloques
+//   bush_large.png  48 x 36 px  ->  3 x 2,25 bloques
+// Para anadir un sprite: copia su .png a esta carpeta y registralo en Blocks.cs (ver LEEME).
+{
+  "pixelsPerBlock": 16,
+  "sprites": {
+    "grass_tuft":    { "width": 1.0, "height": 0.9 },
+    "flower_red":    { "width": 0.8, "height": 0.8 },
+    "flower_yellow": { "width": 0.8, "height": 0.8 },
+    "rock":          { "width": 0.9, "height": 0.7 }
+  }
+}

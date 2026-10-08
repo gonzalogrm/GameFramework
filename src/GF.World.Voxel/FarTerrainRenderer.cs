@@ -90,7 +90,7 @@ public sealed class FarTerrainRenderer : IDisposable
     public int MaxUploadsPerFrame { get; set; } = 4;
     public double UploadBudgetMs { get; set; } = 2.0;
     /// <summary>Desplazamiento vertical de todo el terreno lejano (negativo: queda bajo los chunks, que lo tapan).</summary>
-    public float VerticalOffset { get; set; } = -0.3f;
+    public float VerticalOffset { get; set; } = -0.5f;
     public Color FogColor { get; set; } = Color.CornflowerBlue;
     public float FogStart { get; set; } = 400f;
     public float FogEnd { get; set; } = 1000f;

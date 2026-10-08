@@ -1,0 +1,42 @@
+PARCHE: CONTENIDO CON EL PIPELINE DE MONOGAME (MGCB)
+Requiere los parches anteriores. Extrae sobre la solucion sobrescribiendo. No hay proyectos nuevos en la solucion.
+
+QUE CAMBIA
+  Hasta ahora todo entraba "a mano": el atlas de bloques se dibujaba por codigo (AtlasFactory) y los sprites se leian como .png con
+  Texture2D.FromStream. Ahora son contenido de MonoGame:
+    samples/MiniCraft/Content/Content.mgcb        el proyecto de contenido (se abre con el editor)
+    samples/MiniCraft/Content/blocks.png          atlas de bloques 64x64 (rejilla 4x4 de tiles de 16 px). Editalo con tu programa de dibujo
+    samples/MiniCraft/Content/sprites/*.png       un sprite por archivo, cualquier tamano
+    samples/MiniCraft/Content/sprites/sprites.json  tamanos en bloques (opcional, no se compila: se copia tal cual)
+  MiniCraft.csproj referencia MonoGame.Content.Builder.Task: al hacer dotnet build se compila el contenido a .xnb y se copia a Content/.
+
+PRIMERA VEZ
+  1) dotnet build            (compila el codigo y el contenido)
+     Si falla pidiendo la herramienta de contenido:   dotnet new tool-manifest   y   dotnet tool install dotnet-mgcb
+  2) Para abrir el EDITOR de contenido (opcional):
+        dotnet tool install dotnet-mgcb-editor        (una vez, en la carpeta de la solucion)
+        dotnet mgcb-editor samples/MiniCraft/Content/Content.mgcb
+     (la primera vez puede pedirte registrarlo:  dotnet mgcb-editor --register)
+
+FLUJO PARA ANADIR UN SPRITE
+  1) Abre Content.mgcb en el editor -> Edit > Add > Existing Item, elige tu .png (cópialo a la carpeta, que es lo que ofrece el
+     diálogo) -> Importer: TextureImporter, Processor: TextureProcessor. Pon PremultiplyAlpha = False y TextureFormat = Color
+     (asi no se difuminan los bordes del pixel art ni se pierde el alfa). Guarda y compila.
+     (Es lo que ya llevan los sprites de ejemplo; mira cualquiera en el editor.)
+  2) No hay que tocar codigo para que se cargue: el cargador recoge todos los .xnb de Content/sprites/.
+  3) Registra el bloque en Blocks.cs, AL FINAL:  BlockDef.Sprite("arbusto", "mi_arbusto", BlockRender.Cross)
+
+SPRITES SUELTOS (sin recompilar): cualquier .png en una carpeta  sprites/  junto al ejecutable sustituye al compilado del mismo
+nombre, o anade uno nuevo (y un sprites.json ahi tiene prioridad). Util para probar arte rapido o para mods.
+  Puedes borrar samples/MiniCraft/sprites/ (los .png del parche anterior): ya no se copian al ejecutable.
+
+SI FALTA EL CONTENIDO
+  blocks: se genera el atlas por codigo como antes y se avisa por consola ([contenido] ...).
+  sprites: se avisa por consola ([sprites] ...) y lo que falte se ve como el tablero magenta.
+
+PARA QUE SIRVE EL PIPELINE (y lo que viene)
+  Ya cargas texturas por el. Pensado para lo siguiente: SpriteFont, efectos/shaders (.fx), sonidos y musica (.wav/.ogg).
+
+ARCHIVOS
+  GF.Engine/FrameworkGame.cs (Content.RootDirectory), SpriteLoader.cs (LoadContent), SpriteAtlas.cs (AddOrReplace)
+  MiniCraft: MiniCraft.csproj, AtlasFactory.cs (Load), PlayScene.cs, Content/*  ,  tests/ContentTests.cs

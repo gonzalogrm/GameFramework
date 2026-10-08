@@ -26,7 +26,7 @@ public static class Blocks
         Sand = Registry.Register("sand", BlockDef.Cube("sand", TileSand) with { Props = BlockProto });
         Water = Registry.Register("water", BlockDef.Cube("water", TileWater, solid: false, opaque: false, translucent: true));
         Log = Registry.Register("log", BlockDef.TopSideBottom("log", TileLogTop, TileLogSide, TileLogTop) with { Props = BlockProto.Derive("tronco").Float("durability", 2f) });
-        Leaves = Registry.Register("leaves", BlockDef.Cube("leaves", TileLeaves) with { Props = BlockProto });
+        Leaves = Registry.Register("leaves", BlockDef.Cube("leaves", TileLeaves) with { Props = BlockProto.Derive("hojas") });
         Snow = Registry.Register("snow", BlockDef.Cube("snow", TileSnow) with { Props = BlockProto });
 
         // Sprites 2D importados de samples/MiniCraft/sprites/*.png. El segundo nombre es el del archivo, sin extensión.

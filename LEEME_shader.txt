@@ -1,0 +1,40 @@
+PARCHE: SHADER DE DESVANECIMIENTO DE CHUNKS (primer efecto propio, compilado con MGCB)
+Requiere los parches anteriores, incluido el de MGCB. Extrae sobre la solucion sobrescribiendo. No hay proyectos nuevos.
+
+LO QUE VERAS
+  - Los bloques de la ultima franja de chunks (FadeChunks, por defecto 2) se DISUELVEN poco a poco con la distancia hasta desaparecer en el
+    borde de los chunks cargados, y detras aparece el terreno lejano (LOD). No hay corte.
+  - Cuando un chunk acaba de construirse, APARECE disolviendose desde nada en FadeInSeconds (0,6 s).
+
+COMO FUNCIONA (Content/Effects/ChunkFade.fx, leelo: esta comentado)
+  Los chunks son opacos: escriben profundidad y no se ordenan, asi que no se puede hacer con mezcla alfa. Se usa TRAMADO (screen-door):
+  cada pixel se descarta o no con  clip(fade - ruido(pixel))  -> con fade 0,3 sobreviven ~30 % de los pixeles. El ruido es un
+  "interleaved gradient noise" aritmetico (sin texturas ni matrices). Los pixeles descartados dejan ver lo que hay detras: el LOD.
+    fade = (1 - smoothstep(FadeStart, FadeEnd, distancia)) * ChunkFade
+    distancia = max(|x|, |z|) respecto a la camara (coincide con el agujero CUADRADO del LOD)
+    ChunkFade = aparicion del chunk, 0 -> 1 (lo fija el codigo por chunk)
+  Las posiciones llegan relativas a la camara (origen flotante). La niebla es la misma que la de BasicEffect.
+  Un solo efecto sirve para bloques, sprites (AlphaCutoff = 0.5 recorta) y agua (el alfa viene del color de vertice).
+
+QUE HACE EL CODIGO
+  - El terreno lejano empieza justo debajo de la franja: close = ViewDistance - FadeChunks (si FarCloseChunks es 0), y la franja de
+    fundido empieza un chunk mas alla (FadeBand), asi que todo pixel descartado tiene LOD detras.
+  - El terreno lejano NO se quita de un chunk hasta que este ha terminado de aparecer (IsFullyVisible), no solo cuando tiene malla:
+    si no, durante el fundido de entrada se veria el vacio a traves del tramado.
+  - Una malla rehecha (editar un bloque, vecino nuevo) no vuelve a fundirse. Los billboards (rocas) aparecen cuando su chunk termina.
+  - Sin efecto (no compilado) o con FadeChunks = 0: todo funciona como antes con BasicEffect/AlphaTestEffect.
+
+COMPILAR EL SHADER
+  Los shaders (.fx) los compila mgfxc. En WINDOWS funciona sin mas con  dotnet build.
+  En Linux/macOS mgfxc necesita Wine; si no lo tienes, el build del contenido falla: quita del Content.mgcb la entrada
+  "#begin Effects/ChunkFade.fx" (hasta su /build:) y el juego seguira funcionando sin fundido.
+  Para editarlo en el editor de contenido:  dotnet mgcb-editor samples/MiniCraft/Content/Content.mgcb
+
+AJUSTES (worldsettings.json)
+  FadeChunks      anchura de la franja (0 = sin fundido). Necesita FarDistanceChunks mayor que ViewDistance.
+  FadeInSeconds   duracion de la aparicion de un chunk nuevo (0 = de golpe).
+  Mas FadeChunks = transicion mas larga y mas suave, pero el LOD se genera y dibuja bajo mas chunks.
+
+ARCHIVOS
+  NUEVOS     Content/Effects/ChunkFade.fx, GF.World.Voxel/FadeCurve.cs (curvas y banda, probadas), tests/FadeTests.cs
+  MODIFICADOS Content/Content.mgcb, GF.World.Voxel/VoxelWorldRenderer.cs, MiniCraft: WorldSettings.cs, worldsettings.json, PlayScene.cs
