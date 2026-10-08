@@ -9,7 +9,7 @@
   "RegionChunksX": 64,        // chunks por region en X (1..256). Anchura del mundo = MapWidth * RegionChunksX * ChunkSize
   "RegionChunksZ": 64,
   "ChunkSize": 32,            // 8, 16 o 32
-  "VerticalChunks": 6,        // CHUNKS EN VERTICAL (2..32). Altura del mundo = VerticalChunks * ChunkSize. 4 -> 64 bloques, 8 -> 128, 16 -> 256
+  "VerticalChunks": 4,        // CHUNKS EN VERTICAL (2..32). Altura del mundo = VerticalChunks * ChunkSize. 4 -> 64 bloques, 8 -> 128, 16 -> 256
 
   // ---------- RELIEVE ----------
   "SeaLevelFraction": 0.5,    // nivel del mar como fraccion de la altura (0.1..0.9)
@@ -18,13 +18,13 @@
   "DetailSize": 100,          // tamano de las colinas (10..2000). Mayor = terreno mas suave
   "ContinentAmplitude": 0.50, // desnivel entre mares y llanuras (fraccion de la altura, 0..1)
   "MountainAmplitude": 1.00,  // altura de las cordilleras (0..1.5)
-  "DetailAmplitude": 0.25,    // altura de las colinas (0..0.5)
+  "DetailAmplitude": 0.35,    // altura de las colinas (0..0.5)
   "LandBias": 0.0,            // -0.5..0.5. Positivo = mas tierra, negativo = mas oceano
   "ContinentOctaves": 3,      // capas de ruido (1..8). Mas capas = bordes mas irregulares, algo mas lento
   "MountainOctaves": 4,
   "DetailOctaves": 4,
   "MinHeightFraction": 0.05,  // fondo marino minimo (fraccion de la altura)
-  "MaxHeightFraction": 0.98,  // cumbre maxima (fraccion de la altura)
+  "MaxHeightFraction": 0.95,  // cumbre maxima (fraccion de la altura)
 
   // ---------- CLIMA Y BIOMAS ----------
   "TemperatureNoiseSize": 8000,  // tamano de las manchas de temperatura

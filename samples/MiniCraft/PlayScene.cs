@@ -20,7 +20,7 @@ namespace MiniCraft;
 public sealed class PlayScene : UiScene
 {
     private const int LowestChunkY = 0;   // la altura (nº de chunks en vertical) sale de WorldSettings.VerticalChunks
-    private const float EyeHeight = 1.62f;
+    private const float EyeHeight = 2.00f;
     private const float Reach = 6f;
     private const float AutosaveSeconds = 60f;
     private static readonly Vector3 BodySize = new(0.6f, 1.8f, 0.6f);
