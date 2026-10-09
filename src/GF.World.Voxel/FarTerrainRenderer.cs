@@ -168,10 +168,11 @@ public sealed class FarTerrainRenderer : IDisposable
                 }
                 covered = true;
             }
-            if (!covered && key.Level > 0 && key.Children.All(c => _tiles.ContainsKey(c)))
+            if (!covered && key.Level > 0 && ChildrenReady(key))
             {
-                foreach (var child in key.Children)
+                for (int ci = 0; ci < 4; ci++)
                 {
+                    var child = key.Child(ci);
                     var ctile = _tiles[child];
                     ctile.LastUsed = _frame;
                     if (_fallbackSeen.Add(child)) _draw.Add(new DrawItem(child, ctile, 0f));
@@ -188,6 +189,12 @@ public sealed class FarTerrainRenderer : IDisposable
         }
 
         Evict();
+    }
+
+    private bool ChildrenReady(FarTileKey key)
+    {
+        for (int i = 0; i < 4; i++) if (!_tiles.ContainsKey(key.Child(i))) return false;
+        return true;
     }
 
     private FarHole ClipFor(FarTileKey key)

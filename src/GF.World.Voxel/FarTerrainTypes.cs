@@ -87,6 +87,9 @@ public readonly record struct FarTileKey(int Level, int X, int Z)
 {
     public FarTileKey Parent => new(Level + 1, X >> 1, Z >> 1);
 
+    /// <summary>Hijo i (0..3; bit 0 = este, bit 1 = sur) sin asignar memoria: Children crea un iterador por llamada.</summary>
+    public FarTileKey Child(int i) => new(Level - 1, X * 2 + (i & 1), Z * 2 + (i >> 1));
+
     public IEnumerable<FarTileKey> Children
     {
         get
@@ -148,8 +151,8 @@ public static class FarTileSelector
 
         if (key.Level > 0 && distance < size * splitFactor)
         {
-            foreach (var child in key.Children)
-                Visit(child, camX, camZ, farDistance, baseTile, splitFactor, zExtent, result, hole);
+            for (int i = 0; i < 4; i++)
+                Visit(key.Child(i), camX, camZ, farDistance, baseTile, splitFactor, zExtent, result, hole);
             return;
         }
         result.Add((key, distance));

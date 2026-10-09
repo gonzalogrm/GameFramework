@@ -30,7 +30,7 @@ public sealed class PlayScene : UiScene
     private readonly WorldSettings _settings;
     private readonly WorldScale _scale;
 	private readonly ushort[] _hotbarBlocks =
-		  { Blocks.Grass, Blocks.Dirt, Blocks.Stone, Blocks.Sand, Blocks.Log, Blocks.Leaves,
+		  { Blocks.Grass, Blocks.Dirt, Blocks.Stone, Blocks.Sand, Blocks.Log, Blocks.LampGreen,
 			Blocks.Lamp, Blocks.LampWarm, Blocks.LampBlue, Blocks.GlassBlue };
 	private readonly FirstPersonCamera _camera = new();
     private readonly FrameProfiler _prof = new();

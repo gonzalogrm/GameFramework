@@ -19,18 +19,30 @@ public sealed class World<TCell> : IWorld<TCell> where TCell : unmanaged
 
     public World(ChunkShape shape) => Shape = shape;
 
-    public Chunk<TCell>? GetChunk(ChunkCoord c) => _chunks.TryGetValue(c, out var chunk) ? chunk : null;
+    // Caché del último chunk consultado: la física, los raycasts y el mallado piden celdas contiguas, casi siempre del mismo chunk.
+    private ChunkCoord _lastCoord;
+    private Chunk<TCell>? _lastChunk;
+
+    public Chunk<TCell>? GetChunk(ChunkCoord c)
+    {
+        if (_lastChunk != null && c == _lastCoord) return _lastChunk;
+        if (!_chunks.TryGetValue(c, out var chunk)) return null;
+        _lastCoord = c; _lastChunk = chunk;
+        return chunk;
+    }
 
     public TCell GetCell(CellCoord c)
     {
         var cc = Shape.ToChunk(c, out int lx, out int ly, out int lz);
-        return _chunks.TryGetValue(cc, out var chunk) ? chunk[lx, ly, lz] : default;
+        var chunk = GetChunk(cc);
+        return chunk != null ? chunk[lx, ly, lz] : default;
     }
 
     public bool SetCell(CellCoord c, TCell value)
     {
         var cc = Shape.ToChunk(c, out int lx, out int ly, out int lz);
-        if (!_chunks.TryGetValue(cc, out var chunk)) return false;
+        var chunk = GetChunk(cc);
+        if (chunk == null) return false;
 
         int index = Shape.Index(lx, ly, lz);
         var previous = chunk.Cells[index];
@@ -66,7 +78,8 @@ public sealed class World<TCell> : IWorld<TCell> where TCell : unmanaged
     public bool SetCellOverrides(CellCoord c, PropertyOverrides? overrides)
     {
         var cc = Shape.ToChunk(c, out int lx, out int ly, out int lz);
-        if (!_chunks.TryGetValue(cc, out var chunk)) return false;
+        var chunk = GetChunk(cc);
+        if (chunk == null) return false;
         int index = Shape.Index(lx, ly, lz);
 
         if (overrides == null || overrides.Count == 0)
@@ -97,12 +110,14 @@ public sealed class World<TCell> : IWorld<TCell> where TCell : unmanaged
     public void AddChunk(Chunk<TCell> chunk)
     {
         _chunks[chunk.Coord] = chunk;
+        _lastChunk = null;
         ChunkLoaded?.Invoke(chunk.Coord);
     }
 
     public bool RemoveChunk(ChunkCoord c)
     {
         if (!_chunks.Remove(c)) return false;
+        _lastChunk = null;
         ChunkUnloaded?.Invoke(c);
         return true;
     }

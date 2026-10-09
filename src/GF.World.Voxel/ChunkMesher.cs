@@ -71,7 +71,8 @@ public static class ChunkMesher
         var shape = snap.Shape;
         var origin = shape.Origin(snap.Coord);
         var table = blocks.GetTable();
-        var light = ChunkLighting.Compute(snap, table, env ?? LightEnvironment.Default);   // luz RGB: cielo, bloques y focos
+        var lightEnv = env ?? LightEnvironment.Default;
+        LightField? light = null;   // se calcula al emitir la primera cara: un chunk sin caras visibles (macizo o enterrado) no paga la luz
         var bld = t_builders ??= new Builders();
         bld.Clear();
         var verts = bld.Verts; var idx = bld.Idx;
@@ -116,14 +117,15 @@ public static class ChunkMesher
                 if (nid == id) continue;
                 if (table.Opaque[nid]) continue;   // el aire no es opaco
 
+                light ??= ChunkLighting.Compute(snap, table, lightEnv);
                 var u = VoxelFaces.TangentU[f];
                 var v = VoxelFaces.TangentV[f];
                 for (int k = 0; k < 4; k++)
                 {
                     int su = (k == 1 || k == 2) ? 1 : -1;
                     int sv = k >= 2 ? 1 : -1;
-                    lt[k] = ChunkLighting.VertexBrightness(light, snap, table, bx, by, bz, u, v, su, sv);
-                    ao[k] = water ? 3 : VertexAo(snap, table, bx, by, bz, u, v, su, sv);
+                    int occlusion = ChunkLighting.VertexAoBrightness(light, snap, table, bx, by, bz, u, v, su, sv, out lt[k]);
+                    ao[k] = water ? 3 : occlusion;
                 }
 
                 int b = vl.Count;
@@ -156,8 +158,10 @@ public static class ChunkMesher
         }
 
         if (verts.Count == 0 && wverts.Count == 0 && sverts.Count == 0 && bills.Count == 0) return MeshData.Empty;
+        // Un chunk solo de sprites no tiene caras pero sí hay que medir su luz (consultas y eventos).
+        if (light == null && (sverts.Count > 0 || bills.Count > 0)) light = ChunkLighting.Compute(snap, table, lightEnv);
         return new MeshData(verts.ToArray(), idx.ToArray(), wverts.ToArray(), widx.ToArray(),
-            sverts.ToArray(), sidx.ToArray(), bills.ToArray(), extentMin, extentMax, light.ExtractCenter());
+            sverts.ToArray(), sidx.ToArray(), bills.ToArray(), extentMin, extentMax, light?.ExtractCenter());
     }
 
     /// <summary>
@@ -212,16 +216,5 @@ public static class ChunkMesher
         verts.Add(new VertexPositionColorTexture(new Vector3(bottomLeft.X, top, bottomLeft.Z), Color.White, sprites.GetUV(region, new Vector2(0, 0))));
         idx.Add(b); idx.Add(b + 1); idx.Add(b + 2);
         idx.Add(b); idx.Add(b + 2); idx.Add(b + 3);
-    }
-
-    private static int VertexAo(ChunkSnapshot<ushort> snap, BlockTable table, int bx, int by, int bz,
-        (int X, int Y, int Z) u, (int X, int Y, int Z) v, int su, int sv)
-    {
-        bool side1 = table.Opaque[snap.Get(bx + su * u.X, by + su * u.Y, bz + su * u.Z)];
-        bool side2 = table.Opaque[snap.Get(bx + sv * v.X, by + sv * v.Y, bz + sv * v.Z)];
-        bool corner = table.Opaque[snap.Get(
-            bx + su * u.X + sv * v.X, by + su * u.Y + sv * v.Y, bz + su * u.Z + sv * v.Z)];
-        if (side1 && side2) return 0;
-        return 3 - ((side1 ? 1 : 0) + (side2 ? 1 : 0) + (corner ? 1 : 0));
     }
 }

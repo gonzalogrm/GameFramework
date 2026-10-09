@@ -12,7 +12,7 @@
   "VerticalChunks": 4,        // CHUNKS EN VERTICAL (2..32). Altura del mundo = VerticalChunks * ChunkSize. 4 -> 64 bloques, 8 -> 128, 16 -> 256
 
   // ---------- RELIEVE ----------
-  "SeaLevelFraction": 0.5,    // nivel del mar como fraccion de la altura (0.1..0.9)
+  "SeaLevelFraction": 0.1,    // nivel del mar como fraccion de la altura (0.1..0.9)
   "ContinentSize": 100000,      // TAMANO DE LOS CONTINENTES (500..100000). Mayor = continentes mas grandes
   "MountainSize": 10000,       // tamano de las cordilleras (200..50000)
   "DetailSize": 100,          // tamano de las colinas (10..2000). Mayor = terreno mas suave
@@ -40,13 +40,13 @@
   "PropDensityMultiplier": 0.5,  // 0..5. Multiplica la hierba, flores y rocas (sprites 2D). 0 = sin sprites
 
   // ---------- JUEGO ----------
-  "ViewDistance": 8,          // distancia de vision en chunks (2..24). Mucho mayor = muchisimo mas coste
+  "ViewDistance": 6,          // distancia de vision en chunks (2..24). Mucho mayor = muchisimo mas coste
   "FadeChunks": 1,            // SHADER DE FUNDIDO: anchura en chunks de la franja donde los bloques se disuelven sobre el terreno lejano (0 = sin fundido; necesita FarDistanceChunks > ViewDistance)
   "FadeInSeconds": 0.5,       // 0..3. Lo que tarda en aparecer, disolviendose, un chunk recien construido (0 = aparece de golpe)
-  "FarCloseChunks": 6,        // DISTANCIA CERCANA del terreno lejano, en chunks: por dentro de ella no hay malla lejana (0 = automatico: ViewDistance)
-  "FarDistanceChunks": 24,   // DISTANCIA LEJANA (LOD): el relieve aproximado se genera solo entre FarCloseChunks y esta distancia (0 = sin terreno lejano). 64 = 1024 bloques
+  "FarCloseChunks": 4,        // DISTANCIA CERCANA del terreno lejano, en chunks: por dentro de ella no hay malla lejana (0 = automatico: ViewDistance)
+  "FarDistanceChunks": 16,   // DISTANCIA LEJANA (LOD): el relieve aproximado se genera solo entre FarCloseChunks y esta distancia (0 = sin terreno lejano). 64 = 1024 bloques
   "FarDetail": 2.0,           // 0.8..4. Mas detalle en la distancia (y mas tiles que generar). Los chunks siguen mandando en su zona
-  "Villagers": 20,             // aldeanos iniciales alrededor del jugador
+  "Villagers": 50,             // aldeanos iniciales alrededor del jugador
   "Caravans": 60,             // caravanas repartidas por el mundo
   "MapSamplesPerAxis": 6,      // precision del mapamundi: muestras por region = n*n (1..16)
   "WorkerThreads": 0          // hilos de fondo para generar y mallar chunks (0 = automatico: nucleos - 2). Sube si te sobran nucleos

@@ -74,6 +74,7 @@ public static class ChunkLighting
     private static readonly float[] Curve = BuildCurve();
 
     [ThreadStatic] private static LightField? t_field;
+    [ThreadStatic] private static Queue<int>? t_skyQ, t_blockQ;   // colas reutilizadas por hilo
 
     private static float[] BuildCurve()
     {
@@ -93,18 +94,19 @@ public static class ChunkLighting
         f.Ambient = env.Ambient;
 
         int nx = f.Nx, ny = f.Ny, nz = f.Nz, ox = f.Ox, oy = f.Oy, oz = f.Oz;
-        var skyQ = new Queue<int>(4096);
-        var blockQ = new Queue<int>(256);
+        var skyQ = t_skyQ ??= new Queue<int>(4096);
+        var blockQ = t_blockQ ??= new Queue<int>(256);
+        skyQ.Clear();
+        blockQ.Clear();
 
-        for (int vy = 0; vy < ny; vy++)
-        for (int vz = 0; vz < nz; vz++)
-        for (int vx = 0; vx < nx; vx++)
+        // Ids del volumen copiados por filas (antes: una llamada a snap.Get por celda, ~240.000 por chunk).
+        snap.CopyVolume(f.Ids, ox, oy, oz);
+        var ids = f.Ids; var solid = f.Solid; var opaque = table.Opaque; var emit = table.EmitRgb;
+        for (int i = 0; i < ids.Length; i++)
         {
-            int i = (vy * nz + vz) * nx + vx;
-            ushort id = snap.Get(vx - ox, vy - oy, vz - oz);
-            f.Ids[i] = id;
-            f.Solid[i] = table.Opaque[id];
-            ushort e = table.EmitRgb[id];
+            ushort id = ids[i];
+            solid[i] = opaque[id];
+            ushort e = emit[id];
             if (e != 0) { f.Block[i] = e; blockQ.Enqueue(i); }
         }
 
@@ -190,6 +192,37 @@ public static class ChunkLighting
         float t = level - i;
         float v = i >= 15 ? Curve[15] : Curve[i] + (Curve[i + 1] - Curve[i]) * t;
         return MathF.Max(ambient, v);
+    }
+
+    /// <summary>
+    /// AO (0..3) y brillo RGB (0..1) de un vértice con las MISMAS muestras (celda de la cara, 2 laterales y esquina): cada celda vecina
+    /// se lee una sola vez. Antes AO y luz repetían las 3 lecturas del snapshot por vértice.
+    /// </summary>
+    public static int VertexAoBrightness(LightField light, ChunkSnapshot<ushort> snap, BlockTable table, int bx, int by, int bz,
+        (int X, int Y, int Z) u, (int X, int Y, int Z) v, int su, int sv, out Vector3 brightness)
+    {
+        var sum = light.Levels(bx, by, bz);
+        int n = 1;
+
+        int ax = bx + su * u.X, ay = by + su * u.Y, az = bz + su * u.Z;
+        bool oa = table.Opaque[snap.Get(ax, ay, az)];
+        int cx = bx + sv * v.X, cy = by + sv * v.Y, cz = bz + sv * v.Z;
+        bool ob = table.Opaque[snap.Get(cx, cy, cz)];
+
+        bool oc = true;   // con las dos laterales opacas la esquina no cuenta ni para el AO ni para la luz
+        if (!oa || !ob)
+        {
+            int ex = ax + sv * v.X, ey = ay + sv * v.Y, ez = az + sv * v.Z;
+            oc = table.Opaque[snap.Get(ex, ey, ez)];
+            if (!oc) { sum += light.Levels(ex, ey, ez); n++; }
+        }
+        if (!oa) { sum += light.Levels(ax, ay, az); n++; }
+        if (!ob) { sum += light.Levels(cx, cy, cz); n++; }
+
+        sum /= n;
+        var amb = light.Ambient;
+        brightness = new Vector3(Shade(sum.X, amb.X), Shade(sum.Y, amb.Y), Shade(sum.Z, amb.Z));
+        return oa && ob ? 0 : 3 - ((oa ? 1 : 0) + (ob ? 1 : 0) + (oc ? 1 : 0));
     }
 
     /// <summary>

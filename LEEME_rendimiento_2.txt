@@ -1,0 +1,22 @@
+PARCHE: REVISION DE RENDIMIENTO (mallado, luz, mundo y terreno lejano)
+Requiere el codigo actual del repositorio. Extrae sobre la solucion sobrescribiendo. No hay proyectos nuevos.
+
+CAMBIOS
+  1) Luz perezosa (ChunkMesher): la luz se calcula al emitir la PRIMERA cara visible. Los chunks macizos o enterrados (sin caras) ya no
+     pagan el flood-fill. Un chunk solo de sprites si la calcula (consultas y eventos de luz).
+  2) AO y luz fusionados (ChunkLighting.VertexAoBrightness): cada celda vecina de un vertice se lee UNA vez (antes AO y luz repetian
+     las lecturas del snapshot). La esquina no se lee si las dos laterales son opacas.
+  3) Copia de volumen por filas (ChunkSnapshot.CopyVolume): el volumen de luz (~240.000 celdas) se copia con Span.CopyTo por filas en
+     vez de una llamada a snap.Get por celda. Colas del flood-fill reutilizadas por hilo.
+  4) World: cache del ultimo chunk consultado (GetChunk / GetCell / SetCell). La fisica, los raycasts y los NPC piden celdas contiguas,
+     casi siempre del mismo chunk: se salta el diccionario y la division por chunk en la mayoria de las lecturas.
+  5) Terreno lejano: FarTileKey.Child(i) en lugar de Children (un iterador por tile y por frame) y sin lambda en la comprobacion de hijos.
+     Menos basura por frame -> menos pausas del recolector.
+
+ARCHIVOS
+  src/GF.World/World.cs, ChunkSnapshot.cs
+  src/GF.World.Voxel/ChunkLighting.cs, ChunkMesher.cs, FarTerrainTypes.cs, FarTerrainRenderer.cs
+
+SIN CAMBIOS DE COMPORTAMIENTO: mismas mallas y mismos colores (las sumas de luz pueden diferir en el ultimo decimal).
+
+COMO MEDIRLO: dotnet run -c Release y F3: "Mallado X ms/chunk" (antes vs despues) y "Tiempos del hilo principal".
