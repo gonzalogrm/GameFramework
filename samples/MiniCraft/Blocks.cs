@@ -14,7 +14,7 @@ public static class Blocks
     // Prototipo base de los bloques sólidos: valores por defecto COMPARTIDOS. Una celda solo guarda lo que cambia
     // (p. ej. la durabilidad de un bloque golpeado); los demás millones de bloques no ocupan nada por esto.
     public static readonly Prototype BlockProto = new Prototype("bloque").Float("durability", 1f);
-    public static readonly ushort Grass, Dirt, Stone, Sand, Water, Log, Leaves, Snow, GrassTuft, FlowerRed, FlowerYellow, Rock, TallGrass, Bush;
+    public static readonly ushort Grass, Dirt, Stone, Sand, Water, Log, Leaves, Snow, GrassTuft, FlowerRed, FlowerYellow, Rock, TallGrass, Bush, Lamp;
     public const ushort Air = BlockRegistry.Air;
 
     // IMPORTANTE: el orden de registro define los ids guardados en disco. Añade bloques nuevos al final.
@@ -38,5 +38,8 @@ public static class Blocks
         Rock = Registry.Register("rock", BlockDef.Sprite("rock", "rock", BlockRender.Billboard));
         TallGrass = Registry.Register("tall_grass", BlockDef.Sprite("tall_grass", "tall_grass", BlockRender.Cross));       // 1 x 2 bloques
         Bush = Registry.Register("bush", BlockDef.Sprite("bush", "bush_large", BlockRender.Cross));                          // 3 x 2,25 bloques
+
+        // Lámpara: bloque emisor de luz (nivel 15) para probar la iluminación por voxel.
+        Lamp = Registry.Register("lamp", BlockDef.Cube("lamp", TileSnow) with { Props = BlockProto, Emission = 20 });
     }
 }

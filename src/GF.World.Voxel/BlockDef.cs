@@ -29,6 +29,9 @@ public sealed record BlockDef(string Name, bool Solid, bool Opaque, int[] FaceTi
     /// </summary>
     public Prototype? Props { get; init; }
 
+    /// <summary>Luz que emite el bloque, 0..15 (0 = no emite). Se asigna con 'with': BlockDef.Cube("lamp", t) with { Emission = 15 }.</summary>
+    public byte Emission { get; init; }
+
     /// <summary>Se puede apuntar con el cursor y romper: los bloques sólidos y los sprites (aunque no tengan colisión).</summary>
     public bool Selectable => Solid || Render != BlockRender.Cube;
 
@@ -55,12 +58,18 @@ public sealed class BlockTable
 {
     public BlockDef[] Defs { get; }
     public bool[] Opaque { get; }
+    public byte[] Emission { get; }
 
     internal BlockTable(BlockDef[] defs)
     {
         Defs = defs;
         Opaque = new bool[defs.Length];
-        for (int i = 0; i < defs.Length; i++) Opaque[i] = defs[i].Opaque;
+        Emission = new byte[defs.Length];
+        for (int i = 0; i < defs.Length; i++)
+        {
+            Opaque[i] = defs[i].Opaque;
+            Emission[i] = defs[i].Emission;
+        }
     }
 }
 

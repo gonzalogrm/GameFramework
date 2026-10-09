@@ -20,7 +20,7 @@ namespace MiniCraft;
 public sealed class PlayScene : UiScene
 {
     private const int LowestChunkY = 0;   // la altura (nº de chunks en vertical) sale de WorldSettings.VerticalChunks
-    private const float EyeHeight = 2.00f;
+    private const float EyeHeight = 1.60f;
     private const float Reach = 6f;
     private const float AutosaveSeconds = 60f;
     private static readonly Vector3 BodySize = new(0.6f, 1.8f, 0.6f);
@@ -31,7 +31,7 @@ public sealed class PlayScene : UiScene
     private readonly WorldScale _scale;
     private readonly ushort[] _hotbarBlocks =
         { Blocks.Grass, Blocks.Dirt, Blocks.Stone, Blocks.Sand, Blocks.Log, Blocks.Leaves, Blocks.Water,
-          Blocks.Bush, Blocks.Rock };
+          Blocks.Bush, Blocks.Rock, Blocks.Lamp };
     private readonly FirstPersonCamera _camera = new();
     private readonly FrameProfiler _prof = new();
 

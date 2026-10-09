@@ -57,7 +57,7 @@ public static class ChunkMesher
 
     /// <summary>
     /// Apto para hilos de fondo: solo lee el snapshot, las tablas del registro de bloques (inmutables) y el cálculo de UVs del
-    /// atlas. No toca GraphicsDevice. Emite solo caras visibles, con ambient occlusion por vértice en los bloques opacos.
+    /// atlas. No toca GraphicsDevice. Emite solo caras visibles, con ambient occlusion y luz por voxel en cada vértice.
     /// Optimizado: salida inmediata en chunks de aire, tablas en arrays, vecinos de las celdas interiores leídos directamente
     /// del array y listas reutilizadas.
     /// </summary>
@@ -69,6 +69,7 @@ public static class ChunkMesher
         var shape = snap.Shape;
         var origin = shape.Origin(snap.Coord);
         var table = blocks.GetTable();
+        var light = ChunkLighting.Compute(snap, table);   // luz de cielo y de bloques emisores
         var bld = t_builders ??= new Builders();
         bld.Clear();
         var verts = bld.Verts; var idx = bld.Idx;
@@ -83,6 +84,7 @@ public static class ChunkMesher
         // Desplazamiento en el array para cada cara: +X, -X, +Y, -Y, +Z, -Z (índice = (y * sz + z) * sx + x).
         Span<int> faceOffset = stackalloc int[] { 1, -1, strideY, -strideY, sx, -sx };
         Span<int> ao = stackalloc int[4];
+        Span<float> lt = stackalloc float[4];
 
         for (int y = 0; y < sy; y++)
         for (int z = 0; z < sz; z++)
@@ -116,10 +118,10 @@ public static class ChunkMesher
                 var v = VoxelFaces.TangentV[f];
                 for (int k = 0; k < 4; k++)
                 {
-                    if (water) { ao[k] = 3; continue; }
                     int su = (k == 1 || k == 2) ? 1 : -1;
                     int sv = k >= 2 ? 1 : -1;
-                    ao[k] = VertexAo(snap, table, bx, by, bz, u, v, su, sv);
+                    lt[k] = ChunkLighting.VertexBrightness(light, snap, table, bx, by, bz, u, v, su, sv);
+                    ao[k] = water ? 3 : VertexAo(snap, table, bx, by, bz, u, v, su, sv);
                 }
 
                 int b = vl.Count;
@@ -128,10 +130,8 @@ public static class ChunkMesher
                 int tile = def.FaceTiles[f];
                 for (int k = 0; k < 4; k++)
                 {
-                    float a = AoLevels[ao[k]];
-                    var color = water
-                        ? new Color((int)shade.R, shade.G, shade.B, WaterAlpha)
-                        : new Color((int)(shade.R * a), (int)(shade.G * a), (int)(shade.B * a), 255);
+                    float a = AoLevels[ao[k]] * lt[k];
+                    var color = new Color((int)(shade.R * a), (int)(shade.G * a), (int)(shade.B * a), water ? WaterAlpha : 255);
                     vl.Add(new VertexPositionColorTexture(
                         basePos + VoxelFaces.Corners[f][k], color,
                         atlas.GetUV(tile, VoxelFaces.UVs[f][k])));

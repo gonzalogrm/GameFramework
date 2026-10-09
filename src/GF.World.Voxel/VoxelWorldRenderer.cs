@@ -84,7 +84,8 @@ public sealed class ChunkMesh : IDisposable
 /// Mantiene una malla por chunk.
 /// - Chunks que se cargan (y los vecinos ya mallados): se mallan en el ThreadPool sobre un ChunkSnapshot,
 ///   del más cercano al más lejano; la subida a GPU se hace en el hilo principal con presupuesto por frame.
-/// - Chunks editados por el jugador (ChunkChanged): se mallan de forma síncrona en el mismo frame.
+/// - Chunks editados por el jugador (ChunkChanged): se mallan de forma síncrona en el mismo frame; sus 26 vecinos, en segundo plano
+///   (la luz de una edición llega hasta 15 bloques).
 /// - Cada petición lleva un número de versión: un resultado obsoleto se descarta.
 /// - ORIGEN FLOTANTE: los vértices son locales al chunk y la cámara es de doble precisión; cada chunk se coloca con una
 ///   matriz de traslación relativa a la cámara.
@@ -222,7 +223,7 @@ public sealed class VoxelWorldRenderer : IDisposable
         }
 
         world.ChunkLoaded += OnLoaded;
-        world.ChunkChanged += c => _urgent.Add(c);
+        world.ChunkChanged += OnChanged;
         world.ChunkUnloaded += OnUnloaded;
     }
 
@@ -232,8 +233,20 @@ public sealed class VoxelWorldRenderer : IDisposable
     private void OnLoaded(ChunkCoord c)
     {
         _dirty.Add(c);
-        // Un chunk nuevo cambia las caras visibles y el AO de sus 26 vecinos. Solo hace falta avisar a los que
+        // Un chunk nuevo cambia las caras visibles, el AO y la luz de sus 26 vecinos. Solo hace falta avisar a los que
         // ya tienen malla (o la están calculando): los demás tomarán los datos nuevos cuando les toque.
+        MarkNeighborsDirty(c);
+    }
+
+    /// <summary>Edición: el chunk se malla ya; los vecinos en segundo plano, porque la luz de un cambio llega hasta 15 bloques.</summary>
+    private void OnChanged(ChunkCoord c)
+    {
+        _urgent.Add(c);
+        MarkNeighborsDirty(c);
+    }
+
+    private void MarkNeighborsDirty(ChunkCoord c)
+    {
         for (int dz = -1; dz <= 1; dz++)
         for (int dy = -1; dy <= 1; dy++)
         for (int dx = -1; dx <= 1; dx++)

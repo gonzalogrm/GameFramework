@@ -1,0 +1,20 @@
+PARCHE: ILUMINACION POR VOXEL (luz de cielo + luz de bloques emisores)
+Extrae sobre la solucion sobrescribiendo. No hay proyectos nuevos: no hace falta tocar ningun .csproj ni el .sln.
+
+NUEVO
+  src/GF.World.Voxel/ChunkLighting.cs   flood-fill BFS sobre el ChunkSnapshot (3x3x3 chunks), LightField, brillo por vertice
+MODIFICADOS
+  src/GF.World.Voxel/BlockDef.cs            BlockDef.Emission (0..15) y BlockTable.Emission
+  src/GF.World.Voxel/ChunkMesher.cs         el color de cada vertice = sombreado de cara x AO x luz
+  src/GF.World.Voxel/VoxelWorldRenderer.cs  al editar un chunk, sus 26 vecinos se remallan en segundo plano (la luz llega a 15 bloques)
+  samples/MiniCraft/Blocks.cs               + bloque "lamp" (emision 15) AL FINAL del registro (ids guardados validos)
+
+UN CAMBIO MANUAL (para poder colocar la lampara): samples/MiniCraft/PlayScene.cs, en _hotbarBlocks anade Blocks.Lamp:
+    { Blocks.Grass, Blocks.Dirt, Blocks.Stone, Blocks.Sand, Blocks.Log, Blocks.Leaves, Blocks.Water,
+      Blocks.Bush, Blocks.Rock, Blocks.Lamp };
+  (tecla 0 no esta enlazada: usa la rueda del raton para llegar al slot 10)
+
+LIMITACIONES
+  - La luz de cielo se siembra desde lo alto del volumen de 3 chunks: un techo a mas de 1 chunk por encima no se ve.
+  - La luz va "horneada" en el color del vertice (sin ciclo dia/noche). Los sprites no se iluminan.
+  - Los mundos guardados siguen valiendo: la luz no se guarda, se recalcula al mallar.

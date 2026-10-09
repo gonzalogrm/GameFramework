@@ -41,7 +41,7 @@
 
   // ---------- JUEGO ----------
   "ViewDistance": 8,          // distancia de vision en chunks (2..24). Mucho mayor = muchisimo mas coste
-  "FadeChunks": 2,            // SHADER DE FUNDIDO: anchura en chunks de la franja donde los bloques se disuelven sobre el terreno lejano (0 = sin fundido; necesita FarDistanceChunks > ViewDistance)
+  "FadeChunks": 1,            // SHADER DE FUNDIDO: anchura en chunks de la franja donde los bloques se disuelven sobre el terreno lejano (0 = sin fundido; necesita FarDistanceChunks > ViewDistance)
   "FadeInSeconds": 0.5,       // 0..3. Lo que tarda en aparecer, disolviendose, un chunk recien construido (0 = aparece de golpe)
   "FarCloseChunks": 6,        // DISTANCIA CERCANA del terreno lejano, en chunks: por dentro de ella no hay malla lejana (0 = automatico: ViewDistance)
   "FarDistanceChunks": 24,   // DISTANCIA LEJANA (LOD): el relieve aproximado se genera solo entre FarCloseChunks y esta distancia (0 = sin terreno lejano). 64 = 1024 bloques
