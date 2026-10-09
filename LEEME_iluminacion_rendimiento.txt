@@ -1,0 +1,19 @@
+PARCHE: RENDIMIENTO DE LA ILUMINACION (freeze al poner o quitar bloques)
+Requiere el parche de iluminacion en color. Extrae sobre la solucion sobrescribiendo. No hay proyectos nuevos.
+
+CAUSA
+  Al editar un bloque, el chunk se malla de forma SINCRONA en el hilo principal, y ahora ese mallado incluia calcular la luz de un volumen de
+  3x3x3 chunks (con chunks de 32: ~884.000 celdas) encolando todo el aire abierto como semilla del cielo. Ademas, cada edicion remallaba en
+  segundo plano los 26 vecinos (con su propio calculo de luz), saturando los hilos y el recolector de basura.
+
+ARREGLO
+  1) Volumen = el chunk + 15 bloques de margen (el alcance maximo de la luz), no 3 chunks: 62^3 = ~238.000 celdas con chunks de 32.
+  2) El cielo solo se propaga desde las celdas con un vecino horizontal mas oscuro, no desde todo el aire abierto.
+  3) Nuevo evento World.CellChanged (celda, valor anterior, nuevo): el renderer solo remalla vecinos si el cambio altera la luz
+     (opacidad, emision o filtro) y solo los chunks a menos de 15 bloques de la celda. Antes: siempre los 26.
+
+ARCHIVOS
+  src/GF.World/World.cs                         + evento CellChanged
+  src/GF.World.Voxel/ChunkLighting.cs           volumen reducido, semillas de cielo reducidas
+  src/GF.World.Voxel/VoxelWorldRenderer.cs      OnCellChanged en lugar de remallar siempre los 26 vecinos
+LIMITE NUEVO: la luz de cielo se siembra desde 15 bloques por encima del chunk (antes 1 chunk): un techo mas alto no se ve.

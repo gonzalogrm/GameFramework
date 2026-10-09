@@ -1,5 +1,6 @@
 using GF.Core;
 using GF.World.Voxel;
+using Microsoft.Xna.Framework;
 
 namespace MiniCraft;
 
@@ -14,7 +15,7 @@ public static class Blocks
     // Prototipo base de los bloques sólidos: valores por defecto COMPARTIDOS. Una celda solo guarda lo que cambia
     // (p. ej. la durabilidad de un bloque golpeado); los demás millones de bloques no ocupan nada por esto.
     public static readonly Prototype BlockProto = new Prototype("bloque").Float("durability", 1f);
-    public static readonly ushort Grass, Dirt, Stone, Sand, Water, Log, Leaves, Snow, GrassTuft, FlowerRed, FlowerYellow, Rock, TallGrass, Bush, Lamp;
+    public static readonly ushort Grass, Dirt, Stone, Sand, Water, Log, Leaves, Snow, GrassTuft, FlowerRed, FlowerYellow, Rock, TallGrass, Bush, Lamp, LampWarm, LampBlue, LampGreen, GlassBlue;
     public const ushort Air = BlockRegistry.Air;
 
     // IMPORTANTE: el orden de registro define los ids guardados en disco. Añade bloques nuevos al final.
@@ -40,6 +41,11 @@ public static class Blocks
         Bush = Registry.Register("bush", BlockDef.Sprite("bush", "bush_large", BlockRender.Cross));                          // 3 x 2,25 bloques
 
         // Lámpara: bloque emisor de luz (nivel 15) para probar la iluminación por voxel.
-        Lamp = Registry.Register("lamp", BlockDef.Cube("lamp", TileSnow) with { Props = BlockProto, Emission = 20 });
+        Lamp = Registry.Register("lamp", BlockDef.Cube("lamp", TileSnow) with { Props = BlockProto, Emission = 15 });
+        LampWarm = Registry.Register("lamp_warm", BlockDef.Cube("lamp_warm", TileSand) with { Props = BlockProto, Emission = 15, LightColor = new Color(255, 190, 90) });
+        LampBlue = Registry.Register("lamp_blue", BlockDef.Cube("lamp_blue", TileWater) with { Props = BlockProto, Emission = 15, LightColor = new Color(90, 140, 255) });
+        LampGreen = Registry.Register("lamp_green", BlockDef.Cube("lamp_green", TileGrassTop) with { Props = BlockProto, Emission = 15, LightColor = new Color(110, 255, 110) });
+        // Cristal azul: translúcido y filtra la luz (deja pasar el azul y apaga el rojo y el verde). Usa el tile del agua: cambia el tile por el tuyo.
+        GlassBlue = Registry.Register("glass_blue", BlockDef.Cube("glass_blue", TileWater, solid: true, opaque: false, translucent: true) with { LightFilter = new Color(40, 90, 255) });
     }
 }

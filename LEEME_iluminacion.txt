@@ -1,20 +1,66 @@
-PARCHE: ILUMINACION POR VOXEL (luz de cielo + luz de bloques emisores)
-Extrae sobre la solucion sobrescribiendo. No hay proyectos nuevos: no hace falta tocar ningun .csproj ni el .sln.
+PARCHE: ILUMINACION POR VOXEL EN COLOR (cielo, bloques, focos con sombras, vidrio tintado, medicion y eventos)
+INCLUYE y SUSTITUYE al parche de iluminacion anterior. Extrae sobre la solucion sobrescribiendo. No hay proyectos nuevos.
 
-NUEVO
-  src/GF.World.Voxel/ChunkLighting.cs   flood-fill BFS sobre el ChunkSnapshot (3x3x3 chunks), LightField, brillo por vertice
-MODIFICADOS
-  src/GF.World.Voxel/BlockDef.cs            BlockDef.Emission (0..15) y BlockTable.Emission
-  src/GF.World.Voxel/ChunkMesher.cs         el color de cada vertice = sombreado de cara x AO x luz
-  src/GF.World.Voxel/VoxelWorldRenderer.cs  al editar un chunk, sus 26 vecinos se remallan en segundo plano (la luz llega a 15 bloques)
-  samples/MiniCraft/Blocks.cs               + bloque "lamp" (emision 15) AL FINAL del registro (ids guardados validos)
+QUE HACE
+  CAPAS (LightWorld, por celda y canal RGB, niveles 0..15):
+    Ambiente   luz minima global (LightWorld.Ambient, color 0..1).
+    Estatica   cielo (LightWorld.SkyColor) + bloques emisores de color (BlockDef.Emission + LightColor). Flood-fill por canal.
+    Dinamica   focos (AddLight / MoveLight / RemoveLight): un rayo por celda hasta la luz => SOMBRAS. Un arbol corta el haz y
+               solo se ilumina por el lado del foco; el color del foco tine lo que toca.
+  COLOR A TRAVES DE CRISTAL: BlockDef.LightFilter (p. ej. azul = new Color(40, 90, 255)) multiplica cada canal de la luz que lo
+    atraviesa, tanto la del cielo como la de los bloques y la de los focos: el interior bajo un cristal azul se ve azulado.
+  MEDIBLE (presencia fisica): renderer.Light.Sample(celda) -> LightLevels (Ambient, Sky, Block, Dynamic, Total, Level 0..15, Known).
+    renderer.Light.Level(posicion) -> luz de una entidad o del jugador.
+  EVENTOS: LightWatcher mide cada 0,5 s las entidades activas y les envia "entra_oscuridad" (nivel < 3,5) o "entra_luz" (> 6),
+    con el nivel en Amount. En GameEvents.cs las criaturas se asustan en la oscuridad (sube su "fear") y se calman al volver a la luz.
 
-UN CAMBIO MANUAL (para poder colocar la lampara): samples/MiniCraft/PlayScene.cs, en _hotbarBlocks anade Blocks.Lamp:
-    { Blocks.Grass, Blocks.Dirt, Blocks.Stone, Blocks.Sand, Blocks.Log, Blocks.Leaves, Blocks.Water,
-      Blocks.Bush, Blocks.Rock, Blocks.Lamp };
-  (tecla 0 no esta enlazada: usa la rueda del raton para llegar al slot 10)
+ARCHIVOS
+  NUEVOS     GF.World.Voxel/LightTypes.cs, LightWorld.cs, LightEvents.cs
+  REESCRITO  GF.World.Voxel/ChunkLighting.cs
+  MODIFICADOS GF.World.Voxel/BlockDef.cs, ChunkMesher.cs, VoxelWorldRenderer.cs (renderer.Light)
+              samples/MiniCraft/Blocks.cs (lamp, lamp_warm, lamp_blue, lamp_green, glass_blue; al final del registro),
+              GameEvents.cs, MiniCraftGame.cs (tecla L)
+
+CAMBIOS MANUALES EN samples/MiniCraft/PlayScene.cs
+ 1) Hotbar (usa la rueda para el slot 10):
+      private readonly ushort[] _hotbarBlocks =
+          { Blocks.Grass, Blocks.Dirt, Blocks.Stone, Blocks.Sand, Blocks.Log, Blocks.Leaves,
+            Blocks.Lamp, Blocks.LampWarm, Blocks.LampBlue, Blocks.GlassBlue };
+ 2) Campos (junto a los demas):
+      private LightWatcher _lightWatcher = null!;
+      private int _spotId;
+ 3) En Load(), justo despues de  _npcs = new NpcSystem(...);
+      _lightWatcher = new LightWatcher(_events, _renderer.Light, _scale, GameEvents.DarkEnter, GameEvents.LightEnter);
+ 4) En Update(), dentro de  using (_prof.Measure("entidades")) { ... }  anade tras _npcs.Update(dt, _pos);
+      _lightWatcher.Update(dt, _pos);
+    y junto a  if (input.Pressed("Talk")) Talk();
+      if (input.Pressed("Spot")) ToggleSpot();
+ 5) Metodos nuevos:
+      private void ToggleSpot()
+      {
+          var light = _renderer.Light;
+          if (_spotId != 0) { light.RemoveLight(_spotId); _spotId = 0; ShowMessage("Foco apagado"); return; }
+          _spotId = light.AddLight(_camera.Position, new Vector3(1f, 0.85f, 0.55f), 15f, _camera.Forward, 0.85f);
+          ShowMessage("Foco encendido (queda fijo donde lo pones)");
+      }
+
+      private string LightText()
+      {
+          var l = _renderer.Light.Sample(new CellCoord(IntMath.FloorToInt(_pos.X), IntMath.FloorToInt(_pos.Y + 0.5), IntMath.FloorToInt(_pos.Z)));
+          return l.Known ? $"nivel {l.Level:0.0} | cielo {l.Sky.Y:0} | bloque RGB {l.Block.X:0},{l.Block.Y:0},{l.Block.Z:0} | foco {l.Dynamic.Length():0.0}"
+                         : "desconocida";
+      }
+ 6) En UpdateDebug(), anade a la cadena  $"Luz aqui: {LightText()} | focos {_renderer.Light.LightCount}\n" +
+
+PRUEBAS
+  - Lampara azul y verde juntas: el suelo mezcla ambos colores. Cristal azul sobre un hueco abierto al cielo: el interior sale azulado.
+  - L junto a un arbol: sombra del arbol en el suelo, hojas iluminadas solo por el lado del foco. F3 muestra el nivel de luz.
+  - Cueva sin luz: los aldeanos que entran se asustan (mensaje y "fear" en el inspector, tecla I).
 
 LIMITACIONES
+  - Las luces dinamicas estan "horneadas" en la malla de los chunks que alcanzan: mover un foco remalla esos chunks (en segundo plano).
+    Usalas para unos pocos focos; no para una por entidad.
+  - Los focos con radio > ChunkSize no iluminan desde fuera del volumen de 3 chunks. Radio maximo 15.
   - La luz de cielo se siembra desde lo alto del volumen de 3 chunks: un techo a mas de 1 chunk por encima no se ve.
-  - La luz va "horneada" en el color del vertice (sin ciclo dia/noche). Los sprites no se iluminan.
-  - Los mundos guardados siguen valiendo: la luz no se guarda, se recalcula al mallar.
+  - Sin ciclo dia/noche automatico: cambia LightWorld.SkyColor / Ambient (remalla todo). Los sprites no se iluminan.
+  - El cristal usa el tile del agua: pon el tuyo en Blocks.cs.

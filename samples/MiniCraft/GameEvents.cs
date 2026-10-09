@@ -19,12 +19,19 @@ public static class GameEvents
     public static readonly EventKind Fireball = Fire.Derive("bola_de_fuego");
     public static readonly EventKind Alarm = new("alarma");
 
+    // Los emite LightWatcher al medir la luz de las entidades: el nivel (0..15) viaja en Amount.
+    public static readonly EventKind DarkEnter = new("entra_oscuridad");
+    public static readonly EventKind LightEnter = new("entra_luz");
+
     public static void Register(EventHub hub)
     {
         // ---- Entidades ----
         // Toda criatura (aldeano, perro, caravana...) sufre daño de cualquier tipo y oye las alarmas. Se hereda por prototipo.
         hub.On<Entity>(EntityTypes.Creature, Damage, TakeDamage);
         hub.On<Entity>(EntityTypes.Creature, Alarm, HearAlarm);
+        // La luz tiene consecuencias: en la oscuridad las criaturas se asustan; al volver a la luz se calman.
+        hub.On<Entity>(EntityTypes.Creature, DarkEnter, GetsScared);
+        hub.On<Entity>(EntityTypes.Creature, LightEnter, CalmsDown);
         // La conversación solo la procesan quienes tienen manejador: los aldeanos y los perros (cada uno a su manera).
         // Las caravanas, por ejemplo, la reciben y la ignoran.
         hub.On<Entity>(EntityTypes.VillagerProto, Conversation, VillagerTalks);
@@ -53,6 +60,15 @@ public static class GameEvents
 
     private static void HearAlarm(Entity e, GameEvent ev, EventHub hub) =>
         e.Set("fear", e.GetFloat("fear") + 1f);
+
+    private static void GetsScared(Entity e, GameEvent ev, EventHub hub)
+    {
+        e.Set("fear", e.GetFloat("fear") + 1f);
+        hub.Notify($"{e.Label} se asusta en la oscuridad (luz {ev.Amount:0.0})");
+    }
+
+    private static void CalmsDown(Entity e, GameEvent ev, EventHub hub) =>
+        e.Set("fear", MathF.Max(0f, e.GetFloat("fear") - 1f));
 
     private static void VillagerTalks(Entity e, GameEvent ev, EventHub hub)
     {

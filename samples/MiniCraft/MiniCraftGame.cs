@@ -22,10 +22,10 @@ public sealed class MiniCraftGame : FrameworkGame
         Input.Bind("Map", Keys.M);
         Input.Bind("Fly", Keys.F);                          // activar / desactivar el vuelo
         Input.Bind("AutoStep", Keys.G);                     // activar / desactivar el escalón automático
-        Input.Bind("Descend", Keys.LeftControl, Keys.C);
+        Input.Bind("Descend", Keys.LeftControl, Keys.C);    // bajar mientras vuelas
         Input.Bind("Talk", Keys.T);                         // emitir un evento de conversación al objetivo
         Input.Bind("Fireball", Keys.B);                     // emitir una bola de fuego sobre el objetivo
-        Input.Bind("Inspect", Keys.I);                      // panel de propiedades del bloque o la entidad apuntados    // bajar mientras vuelas
+        Input.Bind("Inspect", Keys.I);                      // panel de propiedades del bloque o la entidad apuntados
 
         base.Initialize();
         Scenes.Push(new MainMenuScene());

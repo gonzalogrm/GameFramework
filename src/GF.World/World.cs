@@ -14,6 +14,8 @@ public sealed class World<TCell> : IWorld<TCell> where TCell : unmanaged
     public event Action<ChunkCoord>? ChunkLoaded;
     public event Action<ChunkCoord>? ChunkUnloaded;
     public event Action<ChunkCoord>? ChunkChanged;
+    /// <summary>Una celda cambió (SetCell): celda, valor anterior y valor nuevo. Permite saber QUÉ cambió, no solo en qué chunk.</summary>
+    public event Action<CellCoord, TCell, TCell>? CellChanged;
 
     public World(ChunkShape shape) => Shape = shape;
 
@@ -48,6 +50,7 @@ public sealed class World<TCell> : IWorld<TCell> where TCell : unmanaged
         if (ly == Shape.SizeY - 1) ChunkChanged?.Invoke(cc with { Y = cc.Y + 1 });
         if (lz == 0) ChunkChanged?.Invoke(cc with { Z = cc.Z - 1 });
         if (lz == Shape.SizeZ - 1) ChunkChanged?.Invoke(cc with { Z = cc.Z + 1 });
+        CellChanged?.Invoke(c, previous, value);
         return true;
     }
 

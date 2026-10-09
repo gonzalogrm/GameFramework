@@ -128,6 +128,9 @@ public sealed class VoxelWorldRenderer : IDisposable
     private int _versionCounter;
     private long _meshTicks, _meshCount;
 
+    /// <summary>Mapa de luz del mundo: focos, ambiente, color del cielo y medición del nivel de luz en cualquier celda.</summary>
+    public LightWorld Light { get; }
+
     public int MaxMeshingJobs { get; set; } = Math.Max(1, Environment.ProcessorCount / 2);
     /// <summary>Tope de seguridad de mallas subidas a la GPU por frame (el límite real es UploadBudgetMs).</summary>
     public int MaxUploadsPerFrame { get; set; } = 16;
@@ -222,8 +225,12 @@ public sealed class VoxelWorldRenderer : IDisposable
             _bbIdx[i + 3] = (short)v; _bbIdx[i + 4] = (short)(v + 2); _bbIdx[i + 5] = (short)(v + 3);
         }
 
+        Light = new LightWorld(world);
+        Light.EnvironmentChanged += OnLightEnvironment;
+
         world.ChunkLoaded += OnLoaded;
         world.ChunkChanged += OnChanged;
+        world.CellChanged += OnCellChanged;
         world.ChunkUnloaded += OnUnloaded;
     }
 
@@ -238,11 +245,32 @@ public sealed class VoxelWorldRenderer : IDisposable
         MarkNeighborsDirty(c);
     }
 
-    /// <summary>Edición: el chunk se malla ya; los vecinos en segundo plano, porque la luz de un cambio llega hasta 15 bloques.</summary>
-    private void OnChanged(ChunkCoord c)
+    private void OnChanged(ChunkCoord c) => _urgent.Add(c);
+
+    /// <summary>
+    /// Una celda cambió. Si altera la luz (opacidad, emisión o filtro de color), los chunks vecinos que la luz alcanza (15 bloques) se
+    /// remallan en segundo plano. Solo esos: antes se remallaban siempre los 26 vecinos, y eso saturaba los hilos y el recolector.
+    /// </summary>
+    private void OnCellChanged(CellCoord cell, ushort previous, ushort value)
     {
-        _urgent.Add(c);
-        MarkNeighborsDirty(c);
+        var t = _blocks.GetTable();
+        if (t.Opaque[previous] == t.Opaque[value] && t.EmitRgb[previous] == t.EmitRgb[value] &&
+            t.FilterR[previous] == t.FilterR[value] && t.FilterG[previous] == t.FilterG[value] && t.FilterB[previous] == t.FilterB[value]) return;
+
+        const int Reach = 15;
+        var s = _world.Shape;
+        var own = s.ToChunk(cell);
+        int x0 = IntMath.FloorDiv(cell.X - Reach, s.SizeX), x1 = IntMath.FloorDiv(cell.X + Reach, s.SizeX);
+        int y0 = IntMath.FloorDiv(cell.Y - Reach, s.SizeY), y1 = IntMath.FloorDiv(cell.Y + Reach, s.SizeY);
+        int z0 = IntMath.FloorDiv(cell.Z - Reach, s.SizeZ), z1 = IntMath.FloorDiv(cell.Z + Reach, s.SizeZ);
+        for (int z = z0; z <= z1; z++)
+        for (int y = y0; y <= y1; y++)
+        for (int x = x0; x <= x1; x++)
+        {
+            var c = new ChunkCoord(x, y, z);
+            if (c == own) continue;   // el propio chunk ya va por _urgent
+            if (_world.GetChunk(c) != null && (_built.Contains(c) || _inFlight.Contains(c))) _dirty.Add(c);
+        }
     }
 
     private void MarkNeighborsDirty(ChunkCoord c)
@@ -263,6 +291,7 @@ public sealed class VoxelWorldRenderer : IDisposable
         _urgent.Remove(c);
         _built.Remove(c);
         _versions.Remove(c);   // invalida cualquier resultado en vuelo
+        Light.Forget(c);
         VisibilityVersion++;
         if (_meshes.Remove(c, out var mesh))
         {
@@ -321,13 +350,13 @@ public sealed class VoxelWorldRenderer : IDisposable
             _versions[next] = version;
             _inFlight.Add(next);
 
-            var blocks = _blocks; var atlas = _atlas; var sprites = _sprites;
+            var blocks = _blocks; var atlas = _atlas; var sprites = _sprites; var env = Light.Environment;
             Task.Run(() =>
             {
                 try
                 {
                     long t0 = Stopwatch.GetTimestamp();
-                    var data = ChunkMesher.Build(snapshot, blocks, atlas, sprites);
+                    var data = ChunkMesher.Build(snapshot, blocks, atlas, sprites, env);
                     Interlocked.Add(ref _meshTicks, Stopwatch.GetTimestamp() - t0);
                     Interlocked.Increment(ref _meshCount);
                     _results.Enqueue(new MeshResult(next, version, data));
@@ -341,7 +370,7 @@ public sealed class VoxelWorldRenderer : IDisposable
     {
         var chunk = _world.GetChunk(c);
         if (chunk == null) return;
-        var data = ChunkMesher.Build(ChunkSnapshot<ushort>.Capture(_world, chunk), _blocks, _atlas, _sprites);
+        var data = ChunkMesher.Build(ChunkSnapshot<ushort>.Capture(_world, chunk), _blocks, _atlas, _sprites, Light.Environment);
         chunk.IsDirty = false;
         _versions[c] = ++_versionCounter;   // descarta cualquier trabajo en vuelo anterior
         _dirty.Remove(c);
@@ -351,6 +380,7 @@ public sealed class VoxelWorldRenderer : IDisposable
     private void Apply(ChunkCoord c, MeshData data)
     {
         _built.Add(c);
+        Light.Publish(c, data.Light);   // la luz medible del chunk
         VisibilityVersion++;
 
         double createdAt = Time;
@@ -610,6 +640,12 @@ public sealed class VoxelWorldRenderer : IDisposable
         _lineEffect.Projection = camera.Projection;
         _lineEffect.CurrentTechnique.Passes[0].Apply();
         _device.DrawUserPrimitives(PrimitiveType.LineList, v, 0, 12);
+    }
+
+    /// <summary>Cambió el ambiente o el color del cielo: se remalla todo lo construido.</summary>
+    private void OnLightEnvironment()
+    {
+        foreach (var c in _built) if (_world.GetChunk(c) != null) _dirty.Add(c);
     }
 
     private Vec3d ChunkCenter(ChunkCoord c)

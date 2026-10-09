@@ -1,4 +1,5 @@
 using GF.Core;
+using Microsoft.Xna.Framework;
 
 namespace GF.World.Voxel;
 
@@ -32,6 +33,15 @@ public sealed record BlockDef(string Name, bool Solid, bool Opaque, int[] FaceTi
     /// <summary>Luz que emite el bloque, 0..15 (0 = no emite). Se asigna con 'with': BlockDef.Cube("lamp", t) with { Emission = 15 }.</summary>
     public byte Emission { get; init; }
 
+    /// <summary>Color de la luz que emite (null = blanco). Intensidad = Emission. Ej.: with { Emission = 14, LightColor = new Color(255, 120, 40) }.</summary>
+    public Color? LightColor { get; init; }
+
+    /// <summary>
+    /// Filtro de la luz que lo atraviesa, por canal (null = transparente a toda la luz). Un cristal azul: new Color(40, 90, 255) deja pasar el azul y
+    /// apaga el rojo; la luz que sale al otro lado (cielo o bloques) sale teñida. Solo tiene sentido en bloques no opacos.
+    /// </summary>
+    public Color? LightFilter { get; init; }
+
     /// <summary>Se puede apuntar con el cursor y romper: los bloques sólidos y los sprites (aunque no tengan colisión).</summary>
     public bool Selectable => Solid || Render != BlockRender.Cube;
 
@@ -59,18 +69,33 @@ public sealed class BlockTable
     public BlockDef[] Defs { get; }
     public bool[] Opaque { get; }
     public byte[] Emission { get; }
+    /// <summary>Luz emitida por canal, empaquetada (Rgb4).</summary>
+    public ushort[] EmitRgb { get; }
+    /// <summary>Filtro de luz por canal, 0..255 (255 = transparente).</summary>
+    public byte[] FilterR { get; }
+    public byte[] FilterG { get; }
+    public byte[] FilterB { get; }
 
     internal BlockTable(BlockDef[] defs)
     {
         Defs = defs;
         Opaque = new bool[defs.Length];
         Emission = new byte[defs.Length];
+        EmitRgb = new ushort[defs.Length];
+        FilterR = new byte[defs.Length]; FilterG = new byte[defs.Length]; FilterB = new byte[defs.Length];
         for (int i = 0; i < defs.Length; i++)
         {
-            Opaque[i] = defs[i].Opaque;
-            Emission[i] = defs[i].Emission;
+            var d = defs[i];
+            Opaque[i] = d.Opaque;
+            Emission[i] = d.Emission;
+            var c = d.LightColor ?? Color.White;
+            EmitRgb[i] = Rgb4.Pack(Level(d.Emission, c.R), Level(d.Emission, c.G), Level(d.Emission, c.B));
+            var f = d.LightFilter ?? Color.White;
+            FilterR[i] = f.R; FilterG[i] = f.G; FilterB[i] = f.B;
         }
     }
+
+    private static int Level(int emission, int channel) => Math.Min(15, (emission * channel + 127) / 255);
 }
 
 public sealed class BlockRegistry : Registry<BlockDef>

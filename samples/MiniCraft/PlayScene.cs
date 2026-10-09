@@ -29,10 +29,10 @@ public sealed class PlayScene : UiScene
     private readonly SaveData? _save;
     private readonly WorldSettings _settings;
     private readonly WorldScale _scale;
-    private readonly ushort[] _hotbarBlocks =
-        { Blocks.Grass, Blocks.Dirt, Blocks.Stone, Blocks.Sand, Blocks.Log, Blocks.Leaves, Blocks.Water,
-          Blocks.Bush, Blocks.Rock, Blocks.Lamp };
-    private readonly FirstPersonCamera _camera = new();
+	private readonly ushort[] _hotbarBlocks =
+		  { Blocks.Grass, Blocks.Dirt, Blocks.Stone, Blocks.Sand, Blocks.Log, Blocks.Leaves,
+			Blocks.Lamp, Blocks.LampWarm, Blocks.LampBlue, Blocks.GlassBlue };
+	private readonly FirstPersonCamera _camera = new();
     private readonly FrameProfiler _prof = new();
 
     private World<ushort> _world = null!;
@@ -63,8 +63,9 @@ public sealed class PlayScene : UiScene
     private int _selected, _frames;
     private float _fpsTimer, _fps, _autosave;
     private VoxelHit? _target;
+	private LightWatcher _lightWatcher = null!;
 
-    public PlayScene(int seed, WorldSettings settings, SaveData? save = null)
+	public PlayScene(int seed, WorldSettings settings, SaveData? save = null)
     {
         _seed = seed;
         _settings = settings;
@@ -198,7 +199,8 @@ public sealed class PlayScene : UiScene
         _events.Message += ShowMessage;
         _events.Delivered += OnDelivered;
         _npcs = new NpcSystem(_entities, _world, _climate, _scale, () => _map, _seed);
-        _boxes = new BoxRenderer(Game.GraphicsDevice, _scale)
+		_lightWatcher = new LightWatcher(_events, _renderer.Light, _scale, GameEvents.DarkEnter, GameEvents.LightEnter);
+		_boxes = new BoxRenderer(Game.GraphicsDevice, _scale)
         {
             FogColor = MiniCraftGame.SkyColor, FogStart = fogStart, FogEnd = fogEnd,
         };
@@ -422,7 +424,8 @@ public sealed class PlayScene : UiScene
         {
             _entities.Update(dt, _pos);
             _npcs.Update(dt, _pos);
-        }
+			_lightWatcher.Update(dt, _pos);
+		}
 
         _target = VoxelRaycaster.Raycast(_world, Blocks.Registry, _camera.Position, _camera.Forward, Reach, out var hit) ? hit : null;
 
@@ -446,7 +449,13 @@ public sealed class PlayScene : UiScene
         }
 
         if (input.Pressed("Talk")) Talk();
-        if (input.Pressed("Fireball")) CastFireball();
+		if (input.Pressed("Night"))
+		{
+			var l = _renderer.Light;
+			l.SkyColor = l.SkyColor.X > 0.5f ? new Vector3(0.08f, 0.10f, 0.22f) : Vector3.One;
+			ShowMessage("Cambio de dia/noche (remalla todo)");
+		}
+		if (input.Pressed("Fireball")) CastFireball();
         if (_target is { } t)
         {
             if (input.RightClicked)
@@ -460,7 +469,14 @@ public sealed class PlayScene : UiScene
         }
     }
 
-    public override void Draw(GameTime gameTime)
+	private string LightText()
+	{
+		var l = _renderer.Light.Sample(new CellCoord(IntMath.FloorToInt(_pos.X), IntMath.FloorToInt(_pos.Y + 0.5), IntMath.FloorToInt(_pos.Z)));
+		return l.Known ? $"nivel {l.Level:0.0} | cielo {l.Sky.Y:0} | bloque RGB {l.Block.X:0},{l.Block.Y:0},{l.Block.Z:0}" : "desconocida";
+	}
+
+
+	public override void Draw(GameTime gameTime)
     {
         using (_prof.Measure("dibujo"))
             _renderer.Draw(_camera, () =>
@@ -609,8 +625,9 @@ public sealed class PlayScene : UiScene
                       $"Generacion {_chunks.AverageGenerationMs:0.0} ms/chunk ({_chunks.RunningJobs} en curso, {_chunks.PendingCount} pedidos) | " +
                       $"Mallado {_renderer.AverageMeshMs:0.0} ms/chunk\n" +
                       $"Terreno lejano: {FarInfo()}\n" +
-                      $"Tiempos del hilo principal (ms): {_prof.Report()}";
-    }
+                      $"Tiempos del hilo principal (ms): {_prof.Report()}\n" +
+                      $"Luz aqui: {LightText()}\n";
+	}
 
     /// <summary>Muestra un aviso breve en pantalla (se reutiliza la etiqueta de estado del centro).</summary>
     private void ShowMessage(string text)

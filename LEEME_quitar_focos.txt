@@ -1,0 +1,24 @@
+PARCHE: QUITAR LOS FOCOS CON SOMBRAS (la tecla L) Y DEJAR LAMPARAS DE COLOR + VIDRIO TINTADO
+Requiere el parche de iluminacion en color y el de rendimiento. Extrae sobre la solucion sobrescribiendo.
+
+SE QUEDA   lamparas de colores (lamp, lamp_warm, lamp_blue, lamp_green), vidrio que tine la luz (glass_blue), luz de cielo en color,
+           ambiente, medicion del nivel de luz (renderer.Light.Sample / Level) y los eventos entra_oscuridad / entra_luz (LightWatcher).
+SE QUITA   focos (PointLight, AddLight / MoveLight / RemoveLight), sombras por rayos, conos direccionales y la capa dinamica.
+           Ya no hay LightWorld.RegionChanged ni LightLevels.Dynamic. El calculo de luz es mas barato (sin rayos ni capa extra).
+
+ARCHIVOS (sobrescriben)
+  src/GF.World.Voxel/LightTypes.cs, LightWorld.cs, ChunkLighting.cs, VoxelWorldRenderer.cs
+  samples/MiniCraft/MiniCraftGame.cs        (sin el atajo "Spot")
+
+CAMBIOS MANUALES EN samples/MiniCraft/PlayScene.cs
+ 1) Borra el campo   private int _spotId;
+ 2) Borra la linea   if (input.Pressed("Spot")) ToggleSpot();
+ 3) Borra el metodo  ToggleSpot()
+ 4) Sustituye LightText() por:
+      private string LightText()
+      {
+          var l = _renderer.Light.Sample(new CellCoord(IntMath.FloorToInt(_pos.X), IntMath.FloorToInt(_pos.Y + 0.5), IntMath.FloorToInt(_pos.Z)));
+          return l.Known ? $"nivel {l.Level:0.0} | cielo {l.Sky.Y:0} | bloque RGB {l.Block.X:0},{l.Block.Y:0},{l.Block.Z:0}" : "desconocida";
+      }
+ 5) En UpdateDebug() la linea de luz queda:   $"Luz aqui: {LightText()}\n" +      (ya no existe LightCount)
+ 6) Si anadiste el atajo "Night" (cambia SkyColor), puedes dejarlo: sigue funcionando.
