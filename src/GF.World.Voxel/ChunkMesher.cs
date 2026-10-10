@@ -6,23 +6,23 @@ using Microsoft.Xna.Framework.Graphics;
 namespace GF.World.Voxel;
 
 /// <summary>Un sprite Billboard: posición (base, centro) LOCAL al chunk, región UV en el SpriteAtlas y tamaño en bloques.</summary>
-public readonly record struct BillboardInstance(Vector3 Position, Vector2 UvMin, Vector2 UvMax, float Width, float Height);
+public readonly record struct BillboardInstance(Vector3 Position, Vector2 UvMin, Vector2 UvMax, float Width, float Height, Color Sky, Color Block);
 
 /// <summary>
 /// Geometría de un chunk en listas separadas: opaca, translúcida (agua), sprites en cruz (con recorte por alfa)
 /// y las instancias de sprites Billboard (que el renderer orienta a la cámara en cada frame).
 /// </summary>
 public sealed record MeshData(
-    VertexPositionColorTexture[] Vertices, int[] Indices,
-    VertexPositionColorTexture[] WaterVertices, int[] WaterIndices,
-    VertexPositionColorTexture[] SpriteVertices, int[] SpriteIndices,
+    VoxelVertex[] Vertices, int[] Indices,
+    VoxelVertex[] WaterVertices, int[] WaterIndices,
+    VoxelVertex[] SpriteVertices, int[] SpriteIndices,
     BillboardInstance[] Billboards,
     Vector3 ExtentMin, Vector3 ExtentMax, LightChunk? Light = null)   // caja (local al chunk) que cubre los sprites, que pueden sobresalir del chunk
 {
     public static readonly MeshData Empty = new(
-        Array.Empty<VertexPositionColorTexture>(), Array.Empty<int>(),
-        Array.Empty<VertexPositionColorTexture>(), Array.Empty<int>(),
-        Array.Empty<VertexPositionColorTexture>(), Array.Empty<int>(),
+        Array.Empty<VoxelVertex>(), Array.Empty<int>(),
+        Array.Empty<VoxelVertex>(), Array.Empty<int>(),
+        Array.Empty<VoxelVertex>(), Array.Empty<int>(),
         Array.Empty<BillboardInstance>(), Vector3.Zero, Vector3.Zero);
 
     public bool IsEmpty => Indices.Length == 0 && WaterIndices.Length == 0 && SpriteIndices.Length == 0 && Billboards.Length == 0;
@@ -37,7 +37,7 @@ public static class ChunkMesher
     /// <summary>Listas reutilizables por hilo (los hilos del ThreadPool se reciclan): evita reservar y crecer listas en cada chunk.</summary>
     private sealed class Builders
     {
-        public readonly List<VertexPositionColorTexture> Verts = new(8192), WVerts = new(), SVerts = new();
+        public readonly List<VoxelVertex> Verts = new(8192), WVerts = new(), SVerts = new();
         public readonly List<int> Idx = new(16384), WIdx = new(), SIdx = new();
         public readonly List<BillboardInstance> Bills = new();
 
@@ -87,7 +87,8 @@ public static class ChunkMesher
         // Desplazamiento en el array para cada cara: +X, -X, +Y, -Y, +Z, -Z (índice = (y * sz + z) * sx + x).
         Span<int> faceOffset = stackalloc int[] { 1, -1, strideY, -strideY, sx, -sx };
         Span<int> ao = stackalloc int[4];
-        Span<Vector3> lt = stackalloc Vector3[4];
+        Span<Vector3> lt = stackalloc Vector3[4];   // brillo de cielo por vértice
+        Span<Vector3> lb = stackalloc Vector3[4];   // brillo de bloques por vértice
 
         for (int y = 0; y < sy; y++)
         for (int z = 0; z < sz; z++)
@@ -100,11 +101,19 @@ public static class ChunkMesher
 
             if (def.Render != BlockRender.Cube)
             {
-                AddSprite(def, sprites, origin, x, y, z, sverts, sidx, bills, ref extentMin, ref extentMax);
+                // Los sprites se iluminan con la luz de su celda (cielo y bloques por separado, como el resto).
+                light ??= ChunkLighting.Compute(snap, table, lightEnv);
+                ChunkLighting.CellLight(light, x, y, z, out var cs, out var cb);
+                AddSprite(def, sprites, origin, x, y, z, sverts, sidx, bills, ref extentMin, ref extentMax,
+                    new Color(cs.X, cs.Y, cs.Z, 1f), new Color(cb.X, cb.Y, cb.Z, 1f));
                 continue;
             }
 
             bool water = def.Translucent;
+            // Un bloque emisor brilla por sí mismo, según SU emisión y color (la textura se tiñe con él): no toma la luz del cielo ni se oscurece
+            // por oclusión. Con emisión baja, brilla poco.
+            bool emits = table.EmitRgb[id] != 0;
+            var self = emits ? ChunkLighting.EmitBrightness(table.EmitRgb[id]) : Vector3.Zero;
             var vl = water ? wverts : verts;
             var il = water ? widx : idx;
             bool interior = x > 0 && x < sx - 1 && y > 0 && y < sy - 1 && z > 0 && z < sz - 1;
@@ -124,7 +133,7 @@ public static class ChunkMesher
                 {
                     int su = (k == 1 || k == 2) ? 1 : -1;
                     int sv = k >= 2 ? 1 : -1;
-                    int occlusion = ChunkLighting.VertexAoBrightness(light, snap, table, bx, by, bz, u, v, su, sv, out lt[k]);
+                    int occlusion = ChunkLighting.VertexAoBrightness(light, snap, table, bx, by, bz, u, v, su, sv, out lt[k], out lb[k]);
                     ao[k] = water ? 3 : occlusion;
                 }
 
@@ -134,12 +143,14 @@ public static class ChunkMesher
                 int tile = def.FaceTiles[f];
                 for (int k = 0; k < 4; k++)
                 {
-                    float a = AoLevels[ao[k]];
-                    var color = new Color((int)(shade.R * a * lt[k].X), (int)(shade.G * a * lt[k].Y), (int)(shade.B * a * lt[k].Z),
-                        water ? WaterAlpha : 255);
-                    vl.Add(new VertexPositionColorTexture(
-                        basePos + VoxelFaces.Corners[f][k], color,
-                        atlas.GetUV(tile, VoxelFaces.UVs[f][k])));
+                    float sa = (emits ? 1f : AoLevels[ao[k]]) * shade.R / 255f;   // sombreado de cara x oclusión (las caras son grises)
+                    var skyV = emits ? Vector3.Zero : lt[k];
+                    var blockV = emits ? Vector3.Max(lb[k], self) : lb[k];
+                    vl.Add(new VoxelVertex(
+                        basePos + VoxelFaces.Corners[f][k],
+                        new Color(skyV.X, skyV.Y, skyV.Z, water ? WaterAlpha / 255f : 1f),
+                        atlas.GetUV(tile, VoxelFaces.UVs[f][k]),
+                        new Color(blockV.X, blockV.Y, blockV.Z, sa)));
                 }
 
                 // Triángulos en sentido horario (frontal en MonoGame). Se elige la diagonal según el AO
@@ -158,8 +169,6 @@ public static class ChunkMesher
         }
 
         if (verts.Count == 0 && wverts.Count == 0 && sverts.Count == 0 && bills.Count == 0) return MeshData.Empty;
-        // Un chunk solo de sprites no tiene caras pero sí hay que medir su luz (consultas y eventos).
-        if (light == null && (sverts.Count > 0 || bills.Count > 0)) light = ChunkLighting.Compute(snap, table, lightEnv);
         return new MeshData(verts.ToArray(), idx.ToArray(), wverts.ToArray(), widx.ToArray(),
             sverts.ToArray(), sidx.ToArray(), bills.ToArray(), extentMin, extentMax, light?.ExtractCenter());
     }
@@ -171,8 +180,8 @@ public static class ChunkMesher
     /// Billboard: solo se anota la instancia. Un pequeño desplazamiento determinista evita el aspecto de rejilla.
     /// </summary>
     private static void AddSprite(BlockDef def, SpriteAtlas sprites, CellCoord origin, int x, int y, int z,
-        List<VertexPositionColorTexture> verts, List<int> idx, List<BillboardInstance> billboards,
-        ref Vector3 min, ref Vector3 max)
+        List<VoxelVertex> verts, List<int> idx, List<BillboardInstance> billboards,
+        ref Vector3 min, ref Vector3 max, Color sky, Color block)
     {
         var region = sprites.Get(def.SpriteName);
         float w = def.SpriteWidth > 0 ? def.SpriteWidth : region.Size.X;
@@ -185,7 +194,7 @@ public static class ChunkMesher
 
         if (def.Render == BlockRender.Billboard)
         {
-            billboards.Add(new BillboardInstance(new Vector3(cx, y, cz), region.UvMin, region.UvMax, w, h));
+            billboards.Add(new BillboardInstance(new Vector3(cx, y, cz), region.UvMin, region.UvMax, w, h, sky, block));
             float r = w * 0.5f;   // gira alrededor del eje vertical: ocupa un círculo de ese radio
             Include(ref min, ref max, new Vector3(cx - r, y, cz - r));
             Include(ref min, ref max, new Vector3(cx + r, y + h, cz + r));
@@ -193,8 +202,8 @@ public static class ChunkMesher
         }
 
         float a = 0.5f * w, top = y + h;
-        AddQuad(verts, idx, sprites, region, new Vector3(cx - a, y, cz - a), new Vector3(cx + a, y, cz + a), top);
-        AddQuad(verts, idx, sprites, region, new Vector3(cx + a, y, cz - a), new Vector3(cx - a, y, cz + a), top);
+        AddQuad(verts, idx, sprites, region, new Vector3(cx - a, y, cz - a), new Vector3(cx + a, y, cz + a), top, sky, block);
+        AddQuad(verts, idx, sprites, region, new Vector3(cx + a, y, cz - a), new Vector3(cx - a, y, cz + a), top, sky, block);
         Include(ref min, ref max, new Vector3(cx - a, y, cz - a));
         Include(ref min, ref max, new Vector3(cx + a, top, cz + a));
     }
@@ -206,14 +215,14 @@ public static class ChunkMesher
     }
 
     /// <summary>Plano vertical entre dos puntos de la base; se dibuja sin culling, así que el sentido de giro da igual.</summary>
-    private static void AddQuad(List<VertexPositionColorTexture> verts, List<int> idx, SpriteAtlas sprites, SpriteRegion region,
-        Vector3 bottomLeft, Vector3 bottomRight, float top)
+    private static void AddQuad(List<VoxelVertex> verts, List<int> idx, SpriteAtlas sprites, SpriteRegion region,
+        Vector3 bottomLeft, Vector3 bottomRight, float top, Color sky, Color block)
     {
         int b = verts.Count;
-        verts.Add(new VertexPositionColorTexture(bottomLeft, Color.White, sprites.GetUV(region, new Vector2(0, 1))));
-        verts.Add(new VertexPositionColorTexture(bottomRight, Color.White, sprites.GetUV(region, new Vector2(1, 1))));
-        verts.Add(new VertexPositionColorTexture(new Vector3(bottomRight.X, top, bottomRight.Z), Color.White, sprites.GetUV(region, new Vector2(1, 0))));
-        verts.Add(new VertexPositionColorTexture(new Vector3(bottomLeft.X, top, bottomLeft.Z), Color.White, sprites.GetUV(region, new Vector2(0, 0))));
+        verts.Add(new VoxelVertex(bottomLeft, sky, sprites.GetUV(region, new Vector2(0, 1)), block));
+        verts.Add(new VoxelVertex(bottomRight, sky, sprites.GetUV(region, new Vector2(1, 1)), block));
+        verts.Add(new VoxelVertex(new Vector3(bottomRight.X, top, bottomRight.Z), sky, sprites.GetUV(region, new Vector2(1, 0)), block));
+        verts.Add(new VoxelVertex(new Vector3(bottomLeft.X, top, bottomLeft.Z), sky, sprites.GetUV(region, new Vector2(0, 0)), block));
         idx.Add(b); idx.Add(b + 1); idx.Add(b + 2);
         idx.Add(b); idx.Add(b + 2); idx.Add(b + 3);
     }

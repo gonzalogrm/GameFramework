@@ -92,6 +92,8 @@ public sealed class FarTerrainRenderer : IDisposable
     /// <summary>Desplazamiento vertical de todo el terreno lejano (negativo: queda bajo los chunks, que lo tapan).</summary>
     public float VerticalOffset { get; set; } = -0.5f;
     public Color FogColor { get; set; } = Color.CornflowerBlue;
+    /// <summary>Multiplicador de color de todo el terreno lejano (luz del día): sus colores van horneados a pleno día.</summary>
+    public Vector3 Lighting { get; set; } = Vector3.One;
     public float FogStart { get; set; } = 400f;
     public float FogEnd { get; set; } = 1000f;
 
@@ -258,6 +260,7 @@ public sealed class FarTerrainRenderer : IDisposable
         _effect.FogColor = FogColor.ToVector3();
         _effect.FogStart = FogStart;
         _effect.FogEnd = FogEnd;
+        _effect.DiffuseColor = Lighting;
 
         _device.BlendState = BlendState.Opaque;
         _device.DepthStencilState = DepthStencilState.Default;

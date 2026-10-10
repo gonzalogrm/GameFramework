@@ -30,7 +30,7 @@ public sealed class PlayScene : UiScene
     private readonly WorldSettings _settings;
     private readonly WorldScale _scale;
 	private readonly ushort[] _hotbarBlocks =
-		  { Blocks.Grass, Blocks.Dirt, Blocks.Stone, Blocks.Sand, Blocks.Log, Blocks.LampGreen,
+		  { Blocks.Grass, Blocks.Dirt, Blocks.Stone, Blocks.Sand, Blocks.Log, Blocks.Leaves,
 			Blocks.Lamp, Blocks.LampWarm, Blocks.LampBlue, Blocks.GlassBlue };
 	private readonly FirstPersonCamera _camera = new();
     private readonly FrameProfiler _prof = new();
@@ -64,6 +64,8 @@ public sealed class PlayScene : UiScene
     private float _fpsTimer, _fps, _autosave;
     private VoxelHit? _target;
 	private LightWatcher _lightWatcher = null!;
+    private readonly DayNightCycle _day = new();
+    private int _daySpeed;   // 0 normal, 1 rápido, 2 parado
 
 	public PlayScene(int seed, WorldSettings settings, SaveData? save = null)
     {
@@ -101,6 +103,7 @@ public sealed class PlayScene : UiScene
             _camera.Yaw = _save.Yaw;
             _camera.Pitch = _save.Pitch;
             _selected = Math.Clamp(_save.Selected, 0, _hotbarBlocks.Length - 1);
+            _day.Time = _save.TimeOfDay;
         }
 
         // El mismo modelo climático alimenta el terreno de los chunks y el mapamundi.
@@ -153,23 +156,20 @@ public sealed class PlayScene : UiScene
                 Path.Combine(AppContext.BaseDirectory, "sprites"), out spriteMessages);
         foreach (var message in spriteMessages) Console.Error.WriteLine("[sprites] " + message);
 
-        // Shader de desvanecimiento de los chunks (Content/Effects/ChunkFade.fx, compilado por MGCB). Es opcional: sin él se usan
-        // BasicEffect y AlphaTestEffect como antes.
+        // Shader de los chunks (Content/Effects/ChunkFade.fx, compilado por MGCB): aplica la luz de cielo y de bloques (ciclo día/noche) y
+        // el desvanecimiento. Ahora se carga SIEMPRE; sin él el juego arranca, pero sin ciclo día/noche ni luz de bloques/color en los vértices.
         Effect? chunkFade = null;
-        if (fadeBand.Enabled)
+        try { chunkFade = Game.Content.Load<Effect>("Effects/ChunkFade"); }
+        catch (ContentLoadException e)
         {
-            try { chunkFade = Game.Content.Load<Effect>("Effects/ChunkFade"); }
-            catch (ContentLoadException e)
-            {
-                Console.Error.WriteLine("[contenido] sin el efecto 'Effects/ChunkFade' (" + e.Message + "): los bloques no se desvanecen");
-                fadeBand = FadeBand.Disabled;
-                _farCloseChunks = _settings.FarCloseChunks > 0 ? _settings.FarCloseChunks : view;   // sin fundido, sin solape
-            }
+            Console.Error.WriteLine("[contenido] sin el efecto 'Effects/ChunkFade' (" + e.Message + "): sin ciclo dia/noche ni fundido");
+            fadeBand = FadeBand.Disabled;
+            _farCloseChunks = _settings.FarCloseChunks > 0 ? _settings.FarCloseChunks : view;   // sin fundido, sin solape
         }
         _renderer = new VoxelWorldRenderer(Game.GraphicsDevice, _world, Blocks.Registry, AtlasFactory.Load(Game.Content, Game.GraphicsDevice), _sprites, chunkFade)
         {
             MaxMeshingJobs = meshThreads,
-            FadeStart = fadeBand.Start, FadeEnd = fadeBand.End, FadeInSeconds = _settings.FadeInSeconds,
+            FadeStart = fadeBand.Start, FadeEnd = fadeBand.End, FadeInSeconds = fadeBand.Enabled ? _settings.FadeInSeconds : 0,
             CanMesh = _chunks.AreNeighborsSettled,   // no mallar hasta que los vecinos estén cargados: cada chunk se malla una vez, no diez
             FogColor = MiniCraftGame.SkyColor, FogStart = fogStart, FogEnd = fogEnd,
         };
@@ -211,6 +211,9 @@ public sealed class PlayScene : UiScene
         var scale = _scale; var climate = _climate; int samples = _settings.MapSamplesPerAxis;
         _mapTask = Task.Run(() => WorldMapBuilder.Build(scale, climate, s => climate.Classify(s), Biomes.Registry.Count, samples));
 
+        _day.Update(0);
+        ApplyDayNight();
+
         base.Load();   // construye la UI
         _loaded = true;
         Game.Input.SetMouseCaptured(true);
@@ -239,7 +242,7 @@ public sealed class PlayScene : UiScene
         SaveSystem.Write(new SaveData
         {
             Seed = _seed, Settings = _settings, X = _pos.X, Y = _pos.Y, Z = _pos.Z,
-            Yaw = _camera.Yaw, Pitch = _camera.Pitch, Selected = _selected,
+            Yaw = _camera.Yaw, Pitch = _camera.Pitch, Selected = _selected, TimeOfDay = _day.Time,
         });
         SaveSystem.WriteEntities(new EntitySave { Time = _entities.Time, Entities = _entities.Export(EntityTypes.Registry) });
     }
@@ -410,6 +413,8 @@ public sealed class PlayScene : UiScene
         using (_prof.Measure("chunks"))
             _chunks.Update(new CellCoord(IntMath.FloorToInt(_pos.X), IntMath.FloorToInt(_pos.Y), IntMath.FloorToInt(_pos.Z)));
         _renderer.Time = gameTime.TotalGameTime.TotalSeconds;   // fundido de entrada de los chunks nuevos
+        _day.Update(dt);
+        ApplyDayNight();
         using (_prof.Measure("malla"))
             _renderer.Update(_camera.Position);
         using (_prof.Measure("lejano"))
@@ -449,12 +454,13 @@ public sealed class PlayScene : UiScene
         }
 
         if (input.Pressed("Talk")) Talk();
-		if (input.Pressed("Night"))
-		{
-			var l = _renderer.Light;
-			l.SkyColor = l.SkyColor.X > 0.5f ? new Vector3(0.08f, 0.10f, 0.22f) : Vector3.One;
-			ShowMessage("Cambio de dia/noche (remalla todo)");
-		}
+        if (input.Pressed("Night"))
+        {
+            _daySpeed = (_daySpeed + 1) % 3;
+            _day.Running = _daySpeed != 2;
+            _day.DayLengthSeconds = _daySpeed == 1 ? 30 : 600;
+            ShowMessage($"Ciclo dia/noche: {(new[] { "normal", "rapido", "parado" })[_daySpeed]} ({_day.Clock})");
+        }
 		if (input.Pressed("Fireball")) CastFireball();
         if (_target is { } t)
         {
@@ -583,12 +589,37 @@ public sealed class PlayScene : UiScene
         _world.SetCell(cell, Blocks.Air);   // sustituir el bloque borra también sus cambios de instancia
     }
 
+    /// <summary>Pasa la hora del día al renderer, al terreno lejano, a la niebla y al fondo. No remalla nada.</summary>
+    private void ApplyDayNight()
+    {
+        var sky = _day.Horizon;
+        MiniCraftGame.SkyColor = sky;   // fondo de la pantalla
+        _renderer.FogColor = sky;
+        _renderer.SkyLight = _day.SkyLight;
+        _renderer.AmbientLight = _day.Ambient;
+        _renderer.Light.SkyColor = _day.SkyLight;     // lo que MIDE la luz (y los eventos de oscuridad) también sigue a la hora
+        _renderer.Light.Ambient = _day.Ambient;
+        if (_far != null) { _far.FogColor = sky; _far.Lighting = Vector3.Max(_day.SkyLight, _day.Ambient); }
+        _boxes.FogColor = sky;
+    }
+
+    private static float Brightness(float level) => MathF.Max(0.08f, MathF.Pow(0.82f, 15f - level));
+
     private IEnumerable<EntityBox> ActiveBoxes()
     {
         foreach (var e in _entities.Active)
         {
             var def = EntityTypes.Registry.Get(e.TypeId);
-            yield return new EntityBox(e.Position, new Vector3(def.Width, def.Height, def.Width), new Color(def.R, def.G, def.B));
+            var color = new Color(def.R, def.G, def.B);
+            // La luz de su celda (las entidades son canónicas: X relativa al jugador): de noche y en cuevas se oscurecen.
+            double x = _pos.X + _scale.DeltaX(_pos.X, e.Position.X);
+            var lv = _renderer.Light.Sample(new CellCoord(IntMath.FloorToInt(x), IntMath.FloorToInt(e.Position.Y + 0.5), IntMath.FloorToInt(e.Position.Z)));
+            if (lv.Known)
+            {
+                var t = lv.Total;
+                color = new Color(color.ToVector3() * new Vector3(Brightness(t.X), Brightness(t.Y), Brightness(t.Z)));
+            }
+            yield return new EntityBox(e.Position, new Vector3(def.Width, def.Height, def.Width), color);
         }
     }
 

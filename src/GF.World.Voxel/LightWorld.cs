@@ -27,14 +27,15 @@ public sealed class LightWorld
     public LightEnvironment Environment => _env;
     public int MeasuredChunks => _chunks.Count;
 
-    /// <summary>Brillo mínimo por canal (0..1). Remalla todo al cambiar.</summary>
+    /// <summary>Brillo mínimo por canal (0..1). Es un parámetro del shader: cambiarlo no remalla.</summary>
     public Vector3 Ambient
     {
         get => _ambient;
         set { if (_ambient == value) return; _ambient = value; Rebuild(); }
     }
 
-    /// <summary>Color de la luz del cielo (0..1 por canal): blanco = día, azul tenue = noche. Remalla todo al cambiar.</summary>
+    /// <summary>Color de la luz del cielo (0..1 por canal): blanco = día, azul tenue = noche. No remalla: el shader lo aplica cada frame.
+    /// Aquí solo cambia lo que MIDE Sample / Level (y por tanto los eventos de luz).</summary>
     public Vector3 SkyColor
     {
         get => _sky;
@@ -44,7 +45,6 @@ public sealed class LightWorld
     private void Rebuild()
     {
         _env = new LightEnvironment(_ambient, _sky);
-        EnvironmentChanged?.Invoke();
     }
 
     // ------------------------------------------------------------------ datos del mallador

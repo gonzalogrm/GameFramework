@@ -53,9 +53,9 @@ public sealed class ChunkMesh : IDisposable
         }
     }
 
-    private static (VertexBuffer, IndexBuffer) Create(GraphicsDevice device, VertexPositionColorTexture[] v, int[] i)
+    private static (VertexBuffer, IndexBuffer) Create(GraphicsDevice device, VoxelVertex[] v, int[] i)
     {
-        var vb = new VertexBuffer(device, VertexPositionColorTexture.VertexDeclaration, v.Length, BufferUsage.WriteOnly);
+        var vb = new VertexBuffer(device, VoxelVertex.VertexDeclaration, v.Length, BufferUsage.WriteOnly);
         vb.SetData(v);
         var ib = new IndexBuffer(device, IndexElementSize.ThirtyTwoBits, i.Length, BufferUsage.WriteOnly);
         ib.SetData(i);
@@ -108,7 +108,7 @@ public sealed class VoxelWorldRenderer : IDisposable
     // Efecto propio (ChunkFade.fx). Si es null se usan BasicEffect y AlphaTestEffect, sin desvanecimiento.
     private readonly Effect? _fade;
     private readonly EffectParameter? _pWorld, _pViewProjection, _pTexture, _pCutoff, _pChunkFade, _pFogColor, _pFogStart, _pFogEnd,
-        _pFadeStart, _pFadeEnd, _pViewport;
+        _pFadeStart, _pFadeEnd, _pViewport, _pSkyLight, _pAmbient;
     private readonly List<ChunkMesh> _fading = new();   // chunks cuyo fundido de entrada aún no ha terminado
 
     private readonly Dictionary<ChunkCoord, ChunkMesh> _meshes = new();
@@ -121,7 +121,7 @@ public sealed class VoxelWorldRenderer : IDisposable
     private readonly List<(double Dist, ChunkCoord Coord)> _picked = new();
     private readonly List<(ChunkMesh Mesh, Vector3 Rel)> _visible = new();
     private readonly List<(ChunkMesh Mesh, Vector3 Rel)> _waterDraw = new();
-    private readonly VertexPositionColorTexture[] _bbVerts = new VertexPositionColorTexture[MaxBillboards * 4];
+    private readonly VoxelVertex[] _bbVerts = new VoxelVertex[MaxBillboards * 4];
     private readonly short[] _bbIdx = new short[MaxBillboards * 6];
     private readonly ConcurrentQueue<MeshResult> _results = new();
     private readonly ConcurrentQueue<Exception> _failures = new();
@@ -143,6 +143,10 @@ public sealed class VoxelWorldRenderer : IDisposable
     /// </summary>
     public Func<ChunkCoord, bool>? CanMesh { get; set; }
     public Color FogColor { get; set; } = Color.CornflowerBlue;
+    /// <summary>Color de la luz de cielo ahora (DayNightCycle.SkyLight): (1,1,1) de día. Se aplica en el shader: cambiarlo NO remalla.</summary>
+    public Vector3 SkyLight { get; set; } = Vector3.One;
+    /// <summary>Brillo mínimo por canal (0..1), en el shader.</summary>
+    public Vector3 AmbientLight { get; set; } = new(0.12f);
     public float FogStart { get; set; } = 60f;
     public float FogEnd { get; set; } = 100f;
     /// <summary>Distancia (bloques) hasta la que se dibujan los sprites Billboard.</summary>
@@ -216,6 +220,8 @@ public sealed class VoxelWorldRenderer : IDisposable
             _pFadeStart = Param(fadeEffect, "FadeStart");
             _pFadeEnd = Param(fadeEffect, "FadeEnd");
             _pViewport = Param(fadeEffect, "ViewportSize");
+            _pSkyLight = Param(fadeEffect, "SkyLight");
+            _pAmbient = Param(fadeEffect, "AmbientLight");
         }
 
         for (int q = 0; q < MaxBillboards; q++)
@@ -584,6 +590,8 @@ public sealed class VoxelWorldRenderer : IDisposable
         _pFadeStart!.SetValue(FadeStart);
         _pFadeEnd!.SetValue(FadeEnd);
         _pViewport!.SetValue(new Vector2(_device.Viewport.Width, _device.Viewport.Height));
+        _pSkyLight!.SetValue(SkyLight);
+        _pAmbient!.SetValue(AmbientLight);
     }
 
     /// <summary>Coloca un chunk: su traslación relativa a la cámara y su fundido de aparición; deja el efecto listo para dibujar.</summary>
@@ -611,10 +619,10 @@ public sealed class VoxelWorldRenderer : IDisposable
         var bl = bottomCenter - half;
         var br = bottomCenter + half;
         int v = quad * 4;
-        _bbVerts[v] = new VertexPositionColorTexture(bl, Color.White, new Vector2(b.UvMin.X, b.UvMax.Y));
-        _bbVerts[v + 1] = new VertexPositionColorTexture(br, Color.White, new Vector2(b.UvMax.X, b.UvMax.Y));
-        _bbVerts[v + 2] = new VertexPositionColorTexture(br + up, Color.White, new Vector2(b.UvMax.X, b.UvMin.Y));
-        _bbVerts[v + 3] = new VertexPositionColorTexture(bl + up, Color.White, new Vector2(b.UvMin.X, b.UvMin.Y));
+        _bbVerts[v] = new VoxelVertex(bl, b.Sky, new Vector2(b.UvMin.X, b.UvMax.Y), b.Block);
+        _bbVerts[v + 1] = new VoxelVertex(br, b.Sky, new Vector2(b.UvMax.X, b.UvMax.Y), b.Block);
+        _bbVerts[v + 2] = new VoxelVertex(br + up, b.Sky, new Vector2(b.UvMax.X, b.UvMin.Y), b.Block);
+        _bbVerts[v + 3] = new VoxelVertex(bl + up, b.Sky, new Vector2(b.UvMin.X, b.UvMin.Y), b.Block);
     }
 
     /// <summary>Dibuja el contorno de una celda (resaltado del bloque apuntado), relativo al origen de render.</summary>

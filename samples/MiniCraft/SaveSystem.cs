@@ -15,6 +15,8 @@ public sealed class SaveData
     public float Yaw { get; set; }
     public float Pitch { get; set; }
     public int Selected { get; set; }
+    /// <summary>Hora del día (0..1) del ciclo día/noche.</summary>
+    public double TimeOfDay { get; set; } = 0.38;
     /// <summary>Configuración con la que se generó este mundo (no cambia aunque edites worldsettings.json).</summary>
     public WorldSettings Settings { get; set; } = new();
     /// <summary>Bloques en orden de id. El guardado es válido si es un prefijo del registro actual.</summary>

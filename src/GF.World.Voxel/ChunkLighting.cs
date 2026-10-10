@@ -16,7 +16,6 @@ public sealed class LightField
     internal readonly int Sx, Sy, Sz, Ox, Oy, Oz, Nx, Ny, Nz;   // Size, margen (= desplazamiento del chunk en el volumen), tamaño del volumen
     internal readonly ushort[] Sky, Block, Ids;
     internal readonly bool[] Solid;
-    internal Vector3 SkyColor, Ambient;
 
     internal LightField(int sx, int sy, int sz)
     {
@@ -32,17 +31,15 @@ public sealed class LightField
     internal void Clear() { Array.Clear(Sky); Array.Clear(Block); }
     internal int Index(int vx, int vy, int vz) => (vy * Nz + vz) * Nx + vx;
 
-    /// <summary>Nivel (0..15 por canal) en una celda: el mayor entre cielo (con su color), bloques y focos.</summary>
-    public Vector3 Levels(int x, int y, int z)
+    /// <summary>Niveles (0..15 por canal) de cielo y de bloques en una celda, por separado: el cielo se escala luego por la hora del día.</summary>
+    public void Levels(int x, int y, int z, out Vector3 sky, out Vector3 block)
     {
         int vx = x + Ox, vy = y + Oy, vz = z + Oz;
-        if ((uint)vx >= (uint)Nx || (uint)vy >= (uint)Ny || (uint)vz >= (uint)Nz) return Vector3.Zero;
+        if ((uint)vx >= (uint)Nx || (uint)vy >= (uint)Ny || (uint)vz >= (uint)Nz) { sky = block = Vector3.Zero; return; }
         int i = Index(vx, vy, vz);
         ushort s = Sky[i], b = Block[i];
-        return new Vector3(
-            Math.Max(Rgb4.R(s) * SkyColor.X, Rgb4.R(b)),
-            Math.Max(Rgb4.G(s) * SkyColor.Y, Rgb4.G(b)),
-            Math.Max(Rgb4.B(s) * SkyColor.Z, Rgb4.B(b)));
+        sky = new Vector3(Rgb4.R(s), Rgb4.G(s), Rgb4.B(s));
+        block = new Vector3(Rgb4.R(b), Rgb4.G(b), Rgb4.B(b));
     }
 
     /// <summary>Copia las capas del chunk central (lo que se publica para consultas físicas).</summary>
@@ -71,6 +68,8 @@ public static class ChunkLighting
     private static readonly int[] Dx = { 1, -1, 0, 0, 0, 0 };
     private static readonly int[] Dy = { 0, 0, 1, -1, 0, 0 };
     private static readonly int[] Dz = { 0, 0, 0, 0, 1, -1 };
+    /// <summary>Curva nivel de luz (0..15) -> brillo (0..1): (nivel/15)^Gamma. Más suave que la exponencial anterior: los escalones entre bloques son menores y los bordes de la luz no se notan tan duros.</summary>
+    private const float Gamma = 2.0f;
     private static readonly float[] Curve = BuildCurve();
 
     [ThreadStatic] private static LightField? t_field;
@@ -79,7 +78,7 @@ public static class ChunkLighting
     private static float[] BuildCurve()
     {
         var c = new float[16];
-        for (int i = 0; i < 16; i++) c[i] = MathF.Pow(0.82f, 15 - i);   // cada nivel atenúa un 18 %
+        for (int i = 0; i < 16; i++) c[i] = MathF.Pow(i / 15f, Gamma);   // el nivel 0 es negro (el suelo lo pone el ambiente)
         return c;
     }
 
@@ -90,8 +89,6 @@ public static class ChunkLighting
         var f = t_field;
         if (f == null || !f.Matches(sx, sy, sz)) t_field = f = new LightField(sx, sy, sz);
         else f.Clear();
-        f.SkyColor = env.SkyColor;
-        f.Ambient = env.Ambient;
 
         int nx = f.Nx, ny = f.Ny, nz = f.Nz, ox = f.Ox, oy = f.Oy, oz = f.Oz;
         var skyQ = t_skyQ ??= new Queue<int>(4096);
@@ -161,7 +158,8 @@ public static class ChunkLighting
             int i = q.Dequeue();
             ushort v = light[i];
             int r = Rgb4.R(v), g = Rgb4.G(v), b = Rgb4.B(v);
-            if (r <= 1 && g <= 1 && b <= 1) continue;
+            int m = Math.Max(r, Math.Max(g, b));   // canal más fuerte
+            if (m <= 1) continue;
             int x = i % nx, z = (i / nx) % nz, y = i / strideY;
 
             for (int d = 0; d < 6; d++)
@@ -173,9 +171,12 @@ public static class ChunkLighting
 
                 ushort id = f.Ids[n];
                 bool down = sky && d == 3;   // la luz de cielo a pleno brillo baja sin perder nivel
-                int nr = Math.Max(0, down && r == 15 ? r : r - 1) * table.FilterR[id] / 255;
-                int ng = Math.Max(0, down && g == 15 ? g : g - 1) * table.FilterG[id] / 255;
-                int nb = Math.Max(0, down && b == 15 ? b : b - 1) * table.FilterB[id] / 255;
+                // El canal más fuerte pierde un nivel y los demás en la misma PROPORCIÓN: restar 1 a cada canal por separado desplazaba el
+                // tono hacia el canal dominante (la luz cálida acababa roja y saturada). Así el color de la lámpara se conserva con la distancia.
+                int nr, ng, nb;
+                if (down && m == LightField.Max) { nr = r; ng = g; nb = b; }
+                else { nr = (r * (m - 1) + m / 2) / m; ng = (g * (m - 1) + m / 2) / m; nb = (b * (m - 1) + m / 2) / m; }
+                nr = nr * table.FilterR[id] / 255; ng = ng * table.FilterG[id] / 255; nb = nb * table.FilterB[id] / 255;
 
                 ushort cur = light[n];
                 int cr = Rgb4.R(cur), cg = Rgb4.G(cur), cb = Rgb4.B(cur);
@@ -186,22 +187,35 @@ public static class ChunkLighting
         }
     }
 
-    private static float Shade(float level, float ambient)
+    /// <summary>Brillo 0..1 de un nivel de luz (0..15, con decimales).</summary>
+    private static float Shade(float level)
     {
         int i = (int)level;
         float t = level - i;
-        float v = i >= 15 ? Curve[15] : Curve[i] + (Curve[i + 1] - Curve[i]) * t;
-        return MathF.Max(ambient, v);
+        return i >= 15 ? Curve[15] : Curve[i] + (Curve[i + 1] - Curve[i]) * t;
     }
 
     /// <summary>
-    /// AO (0..3) y brillo RGB (0..1) de un vértice con las MISMAS muestras (celda de la cara, 2 laterales y esquina): cada celda vecina
-    /// se lee una sola vez. Antes AO y luz repetían las 3 lecturas del snapshot por vértice.
+    /// Brillo RGB de unos niveles por canal. El brillo sale del canal MÁS FUERTE y los demás conservan su proporción: así el color de la luz
+    /// no se satura (aplicar la curva a cada canal por separado exageraba el tono: una luz cálida (13,10,5) acababa casi roja).
+    /// </summary>
+    private static Vector3 Shade(Vector3 level)
+    {
+        float m = MathF.Max(level.X, MathF.Max(level.Y, level.Z));
+        return m <= 0f ? Vector3.Zero : level * (Shade(m) / m);
+    }
+
+    /// <summary>Brillo con el que se ve un bloque emisor por sí mismo (su luz y su color, sin depender del cielo ni del entorno).</summary>
+    public static Vector3 EmitBrightness(ushort packedRgb) => Shade(new Vector3(Rgb4.R(packedRgb), Rgb4.G(packedRgb), Rgb4.B(packedRgb)));
+
+    /// <summary>
+    /// AO (0..3) y brillo de un vértice con las MISMAS muestras (celda de la cara, 2 laterales y esquina): cada celda vecina se lee una vez.
+    /// El brillo sale en dos capas, cielo y bloques (0..1 por canal): el ciclo día/noche escala la de cielo en el shader, sin remallar.
     /// </summary>
     public static int VertexAoBrightness(LightField light, ChunkSnapshot<ushort> snap, BlockTable table, int bx, int by, int bz,
-        (int X, int Y, int Z) u, (int X, int Y, int Z) v, int su, int sv, out Vector3 brightness)
+        (int X, int Y, int Z) u, (int X, int Y, int Z) v, int su, int sv, out Vector3 sky, out Vector3 block)
     {
-        var sum = light.Levels(bx, by, bz);
+        light.Levels(bx, by, bz, out var skySum, out var blockSum);
         int n = 1;
 
         int ax = bx + su * u.X, ay = by + su * u.Y, az = bz + su * u.Z;
@@ -214,42 +228,21 @@ public static class ChunkLighting
         {
             int ex = ax + sv * v.X, ey = ay + sv * v.Y, ez = az + sv * v.Z;
             oc = table.Opaque[snap.Get(ex, ey, ez)];
-            if (!oc) { sum += light.Levels(ex, ey, ez); n++; }
+            if (!oc) { light.Levels(ex, ey, ez, out var s2, out var b2); skySum += s2; blockSum += b2; n++; }
         }
-        if (!oa) { sum += light.Levels(ax, ay, az); n++; }
-        if (!ob) { sum += light.Levels(cx, cy, cz); n++; }
+        if (!oa) { light.Levels(ax, ay, az, out var s2, out var b2); skySum += s2; blockSum += b2; n++; }
+        if (!ob) { light.Levels(cx, cy, cz, out var s2, out var b2); skySum += s2; blockSum += b2; n++; }
 
-        sum /= n;
-        var amb = light.Ambient;
-        brightness = new Vector3(Shade(sum.X, amb.X), Shade(sum.Y, amb.Y), Shade(sum.Z, amb.Z));
+        sky = Shade(skySum / n);
+        block = Shade(blockSum / n);
         return oa && ob ? 0 : 3 - ((oa ? 1 : 0) + (ob ? 1 : 0) + (oc ? 1 : 0));
     }
 
-    /// <summary>
-    /// Brillo RGB (0..1) de un vértice: media de la luz de la celda que mira la cara y de las 2 laterales y la esquina que no sean opacas
-    /// (las mismas muestras que el AO), con el brillo mínimo ambiental como suelo.
-    /// </summary>
-    public static Vector3 VertexBrightness(LightField light, ChunkSnapshot<ushort> snap, BlockTable table, int bx, int by, int bz,
-        (int X, int Y, int Z) u, (int X, int Y, int Z) v, int su, int sv)
+    /// <summary>Brillo (cielo y bloques) de una celda: lo usan los sprites, que se iluminan con la luz de su celda.</summary>
+    public static void CellLight(LightField light, int x, int y, int z, out Vector3 sky, out Vector3 block)
     {
-        var sum = light.Levels(bx, by, bz);
-        int n = 1;
-
-        int ax = bx + su * u.X, ay = by + su * u.Y, az = bz + su * u.Z;
-        bool a = !table.Opaque[snap.Get(ax, ay, az)];
-        int cx = bx + sv * v.X, cy = by + sv * v.Y, cz = bz + sv * v.Z;
-        bool b = !table.Opaque[snap.Get(cx, cy, cz)];
-
-        if (a) { sum += light.Levels(ax, ay, az); n++; }
-        if (b) { sum += light.Levels(cx, cy, cz); n++; }
-        if (a || b)
-        {
-            int ex = ax + sv * v.X, ey = ay + sv * v.Y, ez = az + sv * v.Z;
-            if (!table.Opaque[snap.Get(ex, ey, ez)]) { sum += light.Levels(ex, ey, ez); n++; }
-        }
-
-        sum /= n;
-        var amb = light.Ambient;
-        return new Vector3(Shade(sum.X, amb.X), Shade(sum.Y, amb.Y), Shade(sum.Z, amb.Z));
+        light.Levels(x, y, z, out var s, out var b);
+        sky = Shade(s);
+        block = Shade(b);
     }
 }

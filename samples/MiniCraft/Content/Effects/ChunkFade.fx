@@ -40,13 +40,15 @@ float FadeEnd;            // distancia donde han desaparecido del todo
 float3 FogColor;
 float FogStart;
 float FogEnd;
+float3 SkyLight;          // color de la luz de cielo ahora (día = 1,1,1; noche = azul tenue): lo fija el código cada frame
+float3 AmbientLight;      // brillo mínimo por canal
 float2 ViewportSize;      // tamaño de la pantalla en píxeles (para el patrón de tramado)
 
 struct VSInput
 {
 	float4 Position : POSITION0;
 	float4 Color : COLOR0;
-	float2 TexCoord : TEXCOORD0;
+	float4 TexCoord : TEXCOORD0;   // xy = textura, z = R*256+G y w = B*256+sombreado (luz de bloques y sombreado de cara x oclusión, 16 bits cada uno)
 };
 
 struct VSOutput
@@ -56,6 +58,7 @@ struct VSOutput
 	float2 TexCoord : TEXCOORD0;
 	float4 Clip : TEXCOORD1;       // posición en espacio de recorte (para obtener el píxel y la profundidad en el PS)
 	float Distance : TEXCOORD2;    // distancia horizontal de cuadrado a la cámara
+	float4 Light : TEXCOORD3;
 };
 
 VSOutput MainVS(in VSInput input)
@@ -64,7 +67,16 @@ VSOutput MainVS(in VSInput input)
 	float4 worldPos = mul(input.Position, World);            // relativa a la cámara
 	output.Position = mul(worldPos, ViewProjection);
 	output.Color = input.Color;
-	output.TexCoord = input.TexCoord;
+	output.TexCoord = input.TexCoord.xy;
+	// Desempaquetar la luz de bloques aquí (por vértice) para que se interpole bien en el píxel. Cada float lleva 2 bytes (16 bits:
+	// exacto) y se suma 0.5 antes de truncar, así una pequeña imprecisión de la GPU no cambia el byte.
+	float pa = input.TexCoord.z + 0.5;
+	float lr = floor(pa / 256.0);
+	float lg = floor(pa - lr * 256.0);
+	float pb = input.TexCoord.w + 0.5;
+	float lb = floor(pb / 256.0);
+	float la = floor(pb - lb * 256.0);
+	output.Light = float4(lr, lg, lb, la) / 255.0;
 	output.Clip = output.Position;
 	output.Distance = max(abs(worldPos.x), abs(worldPos.z));
 	return output;
@@ -88,7 +100,9 @@ float4 MainPS(VSOutput input) : COLOR0
 	float2 pixel = floor((ndc * float2(0.5, -0.5) + 0.5) * ViewportSize);
 	clip(fade > 0.999 ? 1.0 : fade - Dither(pixel) - 0.0001);   // fade = 1: nunca se descarta nada
 
-	float4 color = tex * input.Color;                            // el alfa del agua viene del color de vértice
+	// Color.rgb = luz de cielo (0..1, teñida por el vidrio), Light.rgb = luz de bloques. Día/noche = SkyLight, sin remallar.
+	float3 lit = max(max(input.Color.rgb * SkyLight, input.Light.rgb), AmbientLight);
+	float4 color = float4(tex.rgb * lit * input.Light.a, tex.a * input.Color.a);   // el alfa del agua viene del color de vértice
 	float fog = saturate((input.Clip.w - FogStart) / (FogEnd - FogStart));
 	color.rgb = lerp(color.rgb, FogColor, fog);
 	return color;

@@ -27,7 +27,7 @@ public static class Blocks
         Sand = Registry.Register("sand", BlockDef.Cube("sand", TileSand) with { Props = BlockProto });
         Water = Registry.Register("water", BlockDef.Cube("water", TileWater, solid: false, opaque: false, translucent: true));
         Log = Registry.Register("log", BlockDef.TopSideBottom("log", TileLogTop, TileLogSide, TileLogTop) with { Props = BlockProto.Derive("tronco").Float("durability", 2f) });
-        Leaves = Registry.Register("leaves", BlockDef.Cube("leaves", TileLeaves) with { Props = BlockProto.Derive("hojas") });
+        Leaves = Registry.Register("leaves", BlockDef.Cube("leaves", TileLeaves) with { Props = BlockProto.Derive("hojas")});
         Snow = Registry.Register("snow", BlockDef.Cube("snow", TileSnow) with { Props = BlockProto });
 
         // Sprites 2D importados de samples/MiniCraft/sprites/*.png. El segundo nombre es el del archivo, sin extensión.
@@ -41,10 +41,14 @@ public static class Blocks
         Bush = Registry.Register("bush", BlockDef.Sprite("bush", "bush_large", BlockRender.Cross));                          // 3 x 2,25 bloques
 
         // Lámpara: bloque emisor de luz (nivel 15) para probar la iluminación por voxel.
+        // Lámparas: bloques emisores (nivel 10). Todas usan el tile BLANCO (nieve): la textura se tiñe con el color de su propia luz, así
+        // cada lámpara se ve de ese color (antes usaban los tiles de hierba, arena y agua y se veían como bloques normales brillando).
+        // Colores PASTEL a propósito: la luz multiplica la textura, y un color muy saturado (p. ej. 110,255,110) deja los bloques
+        // vecinos en un único tono muy fuerte.
         Lamp = Registry.Register("lamp", BlockDef.Cube("lamp", TileSnow) with { Props = BlockProto, Emission = 15 });
-        LampWarm = Registry.Register("lamp_warm", BlockDef.Cube("lamp_warm", TileSand) with { Props = BlockProto, Emission = 15, LightColor = new Color(255, 190, 90) });
-        LampBlue = Registry.Register("lamp_blue", BlockDef.Cube("lamp_blue", TileWater) with { Props = BlockProto, Emission = 15, LightColor = new Color(90, 140, 255) });
-        LampGreen = Registry.Register("lamp_green", BlockDef.Cube("lamp_green", TileGrassTop) with { Props = BlockProto, Emission = 15, LightColor = new Color(110, 255, 110) });
+        LampWarm = Registry.Register("lamp_warm", BlockDef.Cube("lamp_warm", TileSnow) with { Props = BlockProto, Emission = 15, LightColor = new Color(255, 205, 140) });
+        LampBlue = Registry.Register("lamp_blue", BlockDef.Cube("lamp_blue", TileSnow) with { Props = BlockProto, Emission = 15, LightColor = new Color(150, 185, 255) });
+        LampGreen = Registry.Register("lamp_green", BlockDef.Cube("lamp_green", TileSnow) with { Props = BlockProto, Emission = 15, LightColor = new Color(160, 255, 170) });
         // Cristal azul: translúcido y filtra la luz (deja pasar el azul y apaga el rojo y el verde). Usa el tile del agua: cambia el tile por el tuyo.
         GlassBlue = Registry.Register("glass_blue", BlockDef.Cube("glass_blue", TileWater, solid: true, opaque: false, translucent: true) with { LightFilter = new Color(40, 90, 255) });
     }
