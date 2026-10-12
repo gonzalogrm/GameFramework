@@ -34,6 +34,7 @@ public sealed class PlayScene : UiScene
 			Blocks.Lamp, Blocks.LampWarm, Blocks.LampBlue, Blocks.GlassBlue };
 	private readonly FirstPersonCamera _camera = new();
     private readonly FrameProfiler _prof = new();
+    private readonly List<Entity> _collisionScratch = new();
 
     private World<ushort> _world = null!;
     private ChunkManager<ushort> _chunks = null!;
@@ -402,6 +403,14 @@ public sealed class PlayScene : UiScene
                 new Vec3d(_vel.X * dt, _vel.Y * dt, _vel.Z * dt), out var flags, stepHeight);
             _onGround = (flags & CollisionFlags.Ground) != 0;
             if ((flags & CollisionFlags.Y) != 0) _vel.Y = 0;
+
+            // Las entidades son sólidas: no se pueden atravesar. Se te saca de su caja; si caes sobre una, te quedas encima.
+            var pushed = EntityCollision.PushOut(_entities, _scale, _pos, BodySize.X, BodySize.Y, null, _collisionScratch, out bool onEntity);
+            if (pushed != _pos)
+            {
+                _pos = VoxelPhysics.MoveAndCollide(_world, Blocks.Registry, _pos, BodySize, pushed - _pos, out _);   // sin meterte en una pared
+                if (onEntity) { _onGround = true; if (_vel.Y < 0) _vel.Y = 0; }
+            }
         }
 
         // Mundo cilíndrico: X se envuelve; Z termina en los polos.

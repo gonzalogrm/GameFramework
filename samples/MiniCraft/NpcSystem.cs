@@ -35,6 +35,7 @@ public sealed class NpcSystem
     private readonly Func<World<MapCell>?> _map;
     private readonly Random _rng;
     private readonly List<Entity> _scratch = new();
+    private readonly List<Entity> _collisionScratch = new();
 
     public NpcSystem(EntityStore store, World<ushort> world, MiniCraftClimate climate, WorldScale scale,
         Func<World<MapCell>?> map, int seed)
@@ -199,6 +200,14 @@ public sealed class NpcSystem
             state.OnGround = (flags & CollisionFlags.Ground) != 0;
             if ((flags & CollisionFlags.Y) != 0) state.Vel.Y = 0;
             if ((flags & (CollisionFlags.X | CollisionFlags.Z)) != 0 && state.OnGround) state.Vel.Y = 8f;   // saltar obstáculos
+
+            // Solidez: ni se atraviesan entre sí ni atraviesan al jugador (que es el 'obstáculo' extra, en el mismo marco local).
+            var pushed = EntityCollision.PushOut(_store, _scale, local, def.Width, def.Height, e, _collisionScratch, out bool onEntity, player);
+            if (pushed != local)
+            {
+                local = VoxelPhysics.MoveAndCollide(_world, Blocks.Registry, local, size, pushed - local, out _);
+                if (onEntity) { state.OnGround = true; if (state.Vel.Y < 0) state.Vel.Y = 0; }
+            }
 
             _store.Move(e, local);   // vuelve a coordenadas canónicas
         }
