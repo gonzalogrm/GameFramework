@@ -28,6 +28,8 @@ public static class GameEvents
         // ---- Entidades ----
         // Toda criatura (aldeano, perro, caravana...) sufre daño de cualquier tipo y oye las alarmas. Se hereda por prototipo.
         hub.On<Entity>(EntityTypes.Creature, Damage, TakeDamage);
+        // El jugador también procesa el daño (de los enemigos).
+        hub.On<PlayerState>(EntityTypes.PlayerProto, Damage, PlayerTakesDamage);
         hub.On<Entity>(EntityTypes.Creature, Alarm, HearAlarm);
         // La luz tiene consecuencias: en la oscuridad las criaturas se asustan; al volver a la luz se calman.
         hub.On<Entity>(EntityTypes.Creature, DarkEnter, GetsScared);
@@ -47,15 +49,29 @@ public static class GameEvents
 
     private static void TakeDamage(Entity e, GameEvent ev, EventHub hub)
     {
-        float hp = e.GetFloat("hp") - ev.Amount;
+        // La armadura que lleve puesta resta daño (mínimo 0,5).
+        float amount = MathF.Max(0.5f, ev.Amount - Combat.Defense(e));
+        float hp = e.GetFloat("hp") - amount;
         if (hp > 0f)
         {
             e.Set("hp", hp);                                    // solo esta instancia guarda su vida nueva
             hub.Emit(e, new GameEvent(Alarm), 15);              // grita: las criaturas cercanas lo oyen
             return;
         }
-        hub.Notify($"{e.Label} muere ({ev.Kind.Name})");
+        // Si lo mata el jugador, todo lo que llevaba (inventario y equipo) pasa a su inventario.
+        string loot = ev.Source is PlayerState killer ? Combat.Loot(e, killer) : "";
+        hub.Notify($"{e.Label} muere ({ev.Kind.Name}){loot}");
         hub.Entities.Remove(e);
+    }
+
+    /// <summary>El jugador recibe daño (de los enemigos): la armadura que lleva puesta lo reduce. Tras reaparecer es invulnerable unos segundos.</summary>
+    private static void PlayerTakesDamage(PlayerState player, GameEvent ev, EventHub hub)
+    {
+        if (player.GraceSeconds > 0f || player.Hp <= 0f) return;
+        float amount = MathF.Max(0.5f, ev.Amount - Combat.Defense(player));
+        player.Hp = MathF.Max(0f, player.Hp - amount);
+        player.SecondsSinceHurt = 0f;
+        hub.Notify($"{(ev.Source as IEventReceiver)?.Label ?? "Algo"} te golpea: -{amount:0.#} HP");
     }
 
     private static void HearAlarm(Entity e, GameEvent ev, EventHub hub) =>
@@ -63,8 +79,7 @@ public static class GameEvents
 
     private static void GetsScared(Entity e, GameEvent ev, EventHub hub)
     {
-        e.Set("fear", e.GetFloat("fear") + 1f);
-        hub.Notify($"{e.Label} se asusta en la oscuridad (luz {ev.Amount:0.0})");
+        e.Set("fear", e.GetFloat("fear") + 1f);   // (sin mensaje: de noche lo dispararían todos los enemigos a la vez)
     }
 
     private static void CalmsDown(Entity e, GameEvent ev, EventHub hub) =>

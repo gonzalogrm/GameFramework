@@ -35,6 +35,11 @@ public sealed class PlayScene : UiScene
 	private readonly FirstPersonCamera _camera = new();
     private readonly FrameProfiler _prof = new();
     private readonly List<Entity> _collisionScratch = new();
+    private readonly PlayerState _player = new();   // vida, inventario y equipamiento del jugador
+    private EnemySpawner _spawner = null!;
+    private Label _hpLabel = null!;
+    private string _hudText = "";
+    private Vec3d _respawn;
 
     private World<ushort> _world = null!;
     private ChunkManager<ushort> _chunks = null!;
@@ -93,6 +98,8 @@ public sealed class PlayScene : UiScene
         root.Widgets.Add(_inspector);
         _status = new Label { Text = "Generando mundo...", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 60, 0, 0) };
         root.Widgets.Add(_status);
+        _hpLabel = new Label { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(12, 0, 0, 12) };
+        root.Widgets.Add(_hpLabel);
         return root;
     }
 
@@ -200,13 +207,22 @@ public sealed class PlayScene : UiScene
         _events.Message += ShowMessage;
         _events.Delivered += OnDelivered;
         _npcs = new NpcSystem(_entities, _world, _climate, _scale, () => _map, _seed);
+        _entities.Items = ItemTypes.Registry;   // guardar el inventario y el equipo de las entidades (por nombre de objeto)
+        _npcs.Player = _player;                 // los enemigos persiguen y golpean al jugador
+        _npcs.Events = _events;
+        _spawner = new EnemySpawner(_entities, _world, _climate, _scale, _npcs, _seed, _settings, () => _spawned ? (Vec3d?)_pos : null);
+        if (_save?.Player != null) _player.Restore(_save.Player); else _player.GiveStarterKit();
 		_lightWatcher = new LightWatcher(_events, _renderer.Light, _scale, GameEvents.DarkEnter, GameEvents.LightEnter);
 		_boxes = new BoxRenderer(Game.GraphicsDevice, _scale)
         {
             FogColor = MiniCraftGame.SkyColor, FogStart = fogStart, FogEnd = fogEnd,
         };
         if (_save != null && SaveSystem.TryLoadEntities() is { } savedEntities)
+        {
             _entities.Import(savedEntities.Entities, EntityTypes.Registry, savedEntities.Time);
+            _spawner.ImportPopulated(savedEntities.Populated);
+            _spawner.CountExisting();
+        }
 
         // El mapamundi se calcula en segundo plano (promedia unas 360.000 columnas).
         var scale = _scale; var climate = _climate; int samples = _settings.MapSamplesPerAxis;
@@ -244,8 +260,9 @@ public sealed class PlayScene : UiScene
         {
             Seed = _seed, Settings = _settings, X = _pos.X, Y = _pos.Y, Z = _pos.Z,
             Yaw = _camera.Yaw, Pitch = _camera.Pitch, Selected = _selected, TimeOfDay = _day.Time,
+            Player = _player.Export(),
         });
-        SaveSystem.WriteEntities(new EntitySave { Time = _entities.Time, Entities = _entities.Export(EntityTypes.Registry) });
+        SaveSystem.WriteEntities(new EntitySave { Time = _entities.Time, Entities = _entities.Export(EntityTypes.Registry), Populated = _spawner.ExportPopulated() });
     }
 
     // ------------------------------------------------------------------ viaje
@@ -280,6 +297,7 @@ public sealed class PlayScene : UiScene
     private void FinishSpawn()
     {
         _spawned = true;
+        _respawn = _pos;   // donde se reaparece al morir
         _status.Visible = false;
     }
 
@@ -346,6 +364,12 @@ public sealed class PlayScene : UiScene
             _entitiesInit = true;
         }
 
+        if (input.Pressed("Inventory"))
+        {
+            Game.Scenes.Push(new InventoryScene(_player));
+            return;
+        }
+
         if (input.Pressed("Map") && _map != null)
         {
             Game.Scenes.Push(new MapScene(_map, _scale, () => new Vector2((float)_pos.X, (float)_pos.Z), TeleportTo, EntityMarkers, _settings.WorldHeight));
@@ -362,6 +386,7 @@ public sealed class PlayScene : UiScene
         if (input.ScrollDelta != 0)
             _selected = (_selected - Math.Sign(input.ScrollDelta) + _hotbarBlocks.Length) % _hotbarBlocks.Length;
         _hotbar.Selected = _selected;
+        UpdatePlayerState(dt);
 
         var fwd = new Vector3(MathF.Sin(_camera.Yaw), 0, -MathF.Cos(_camera.Yaw));
         var right = new Vector3(MathF.Cos(_camera.Yaw), 0, MathF.Sin(_camera.Yaw));
@@ -581,7 +606,28 @@ public sealed class PlayScene : UiScene
     /// Un golpe es un EVENTO de daño de 1 punto enviado a la entidad: lo procesa quien acepte "dano" (toda criatura) y baja su "hp";
     /// al llegar a 0 muere. Cualquier otra cosa que lo reciba lo ignora.
     /// </summary>
-    private void Attack(Entity entity) => _events.Send(entity, new GameEvent(GameEvents.Melee, Amount: 1f));
+    private void Attack(Entity entity) => _events.Send(entity, new GameEvent(GameEvents.Melee, _player, _player.AttackPower));
+
+    /// <summary>Regeneración de vida, muerte y reaparición, y el texto de vida de la pantalla.</summary>
+    private void UpdatePlayerState(float dt)
+    {
+        _player.SecondsSinceHurt += dt;
+        if (_player.GraceSeconds > 0f) _player.GraceSeconds -= dt;
+        if (_player.Hp > 0f && _player.Hp < _player.MaxHp && _player.SecondsSinceHurt > 6f)
+            _player.Hp = MathF.Min(_player.MaxHp, _player.Hp + 0.4f * dt);
+        if (_player.Hp <= 0f) Respawn();
+
+        string text = $"HP {MathF.Ceiling(_player.Hp):0}/{_player.MaxHp:0}   Ataque {_player.AttackPower:0.#}   Defensa {Combat.Defense(_player):0.#}   [E] inventario";
+        if (text != _hudText) { _hudText = text; _hpLabel.Text = text; }
+    }
+
+    private void Respawn()
+    {
+        _player.Hp = _player.MaxHp;
+        _player.GraceSeconds = 4f;
+        TeleportTo((int)Math.Floor(_respawn.X), (int)Math.Floor(_respawn.Z));
+        ShowMessage("Has muerto: reapareces en el punto de inicio");
+    }
 
     /// <summary>
     /// Cada golpe resta 1 a la durabilidad del bloque (stone 3, log 2, el resto 1). Solo el bloque golpeado guarda su valor nuevo;

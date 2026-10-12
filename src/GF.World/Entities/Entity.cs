@@ -1,5 +1,6 @@
 using GF.Core;
 using GF.World.Events;
+using GF.World.Items;
 
 namespace GF.World.Entities;
 
@@ -14,14 +15,15 @@ public enum SimulationTier { Dormant, Approximate, Active }
 /// Prototype (opcional) define las propiedades del tipo y sus valores por defecto: las instancias solo guardan lo que cambian.
 /// </summary>
 public sealed record EntityDef(string Name, double DefaultSpeed, byte R, byte G, byte B,
-    float Width = 0.6f, float Height = 1.8f, Prototype? Prototype = null);
+    float Width = 0.6f, float Height = 1.8f, Prototype? Prototype = null, int InventorySize = 8);
 
 /// <summary>Un cambio de propiedad de una entidad, para guardar. El tipo (entero, decimal...) lo da el prototipo al cargar.</summary>
 public sealed record PropertyRecord(string Name, double Number, string? Text);
 
 /// <summary>Entidad serializable (el estado de ejecución, Entity.Data, no se guarda).</summary>
 public sealed record EntityRecord(long Id, string Type, double X, double Y, double Z,
-    double? DestX, double? DestY, double? DestZ, double Speed, string? Tag, List<PropertyRecord>? Props = null);
+    double? DestX, double? DestY, double? DestZ, double Speed, string? Tag, List<PropertyRecord>? Props = null,
+    List<StackRecord>? Items = null, List<EquipRecord>? Gear = null);
 
 /// <summary>
 /// Una INSTANCIA de entidad. Remite a su tipo (EntityDef y su Prototype) y solo guarda lo que ha cambiado:
@@ -29,9 +31,11 @@ public sealed record EntityRecord(long Id, string Type, double X, double Y, doub
 /// La posición solo cambia a través de EntityStore.Move (para mantener los índices espaciales coherentes);
 /// las coordenadas son canónicas: X siempre en [0, ancho del mundo).
 /// </summary>
-public sealed class Entity : IEventReceiver
+public sealed class Entity : IEventReceiver, IInventoryHolder
 {
     private PropertyOverrides? _overrides;
+    private Inventory? _inventory;
+    private Equipment? _equipment;
 
     internal Entity(long id, ushort typeId)
     {
@@ -96,6 +100,23 @@ public sealed class Entity : IEventReceiver
     /// <summary>Todas las propiedades con su valor actual, el del prototipo y si esta instancia lo ha cambiado.</summary>
     public IEnumerable<PropertyView> Properties =>
         Prototype is { } p ? PropertyOps.Enumerate(p, _overrides) : Enumerable.Empty<PropertyView>();
+
+    // ------------------------------------------------------------------ inventario y equipamiento
+
+    /// <summary>Inventario de esta entidad (todas tienen uno; se crea al usarlo, así que las que no llevan nada no gastan memoria).</summary>
+    public Inventory Inventory => _inventory ??= new Inventory(Def?.InventorySize ?? 8);
+    /// <summary>Lo que lleva puesto o en la mano.</summary>
+    public Equipment Equipment => _equipment ??= new Equipment();
+
+    internal List<StackRecord>? ExportItems(Registry<ItemDef>? items) => items == null ? null : _inventory?.Export(items);
+    internal List<EquipRecord>? ExportGear(Registry<ItemDef>? items) => items == null ? null : _equipment?.Export(items);
+
+    internal void ImportItems(List<StackRecord>? stacks, List<EquipRecord>? gear, Registry<ItemDef>? items)
+    {
+        if (items == null) return;
+        if (stacks != null) Inventory.Import(stacks, items);
+        if (gear != null) Equipment.Import(gear, items);
+    }
 
     internal IEnumerable<(PropertyId Id, PropValue Value)> RawOverrides =>
         _overrides?.Entries ?? Enumerable.Empty<(PropertyId, PropValue)>();

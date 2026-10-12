@@ -1,4 +1,5 @@
 using GF.Core;
+using GF.World.Items;
 using GF.World.Map;
 
 namespace GF.World.Entities;
@@ -45,6 +46,9 @@ public sealed class EntityStore
     /// </summary>
     public Registry<EntityDef>? Definitions { get; set; }
 
+    /// <summary>Tipos de objeto: hace falta para guardar y cargar el inventario y el equipamiento (por nombre). Asígnalo antes de importar.</summary>
+    public Registry<ItemDef>? Items { get; set; }
+
     /// <summary>Reloj de simulación en segundos.</summary>
     public double Time { get; private set; }
 
@@ -65,6 +69,8 @@ public sealed class EntityStore
 
     public event Action<Entity>? Activated;
     public event Action<Entity>? Deactivated;
+    /// <summary>Se lanza al eliminar una entidad del almacén (muerte, limpieza).</summary>
+    public event Action<Entity>? Removed;
     /// <summary>Se lanza al llegar al destino (aproximadas) o al llamar a NotifyArrived (activas). El manejador puede fijar otro destino.</summary>
     public event Action<Entity>? Arrived;
 
@@ -83,6 +89,7 @@ public sealed class EntityStore
         _approx.Remove(e);
         e.Tier = SimulationTier.Dormant;
         if (old == SimulationTier.Active) Deactivated?.Invoke(e);
+        Removed?.Invoke(e);
     }
 
     public void Clear()
@@ -401,7 +408,7 @@ public sealed class EntityStore
                 (props ??= new List<PropertyRecord>()).Add(new PropertyRecord(PropertyIds.NameOf(id), value.Number, value.Text));
 
             list.Add(new EntityRecord(e.Id, defs.Get(e.TypeId).Name, e.Position.X, e.Position.Y, e.Position.Z,
-                d?.X, d?.Y, d?.Z, e.Speed, e.Tag, props));
+                d?.X, d?.Y, d?.Z, e.Speed, e.Tag, props, e.ExportItems(Items), e.ExportGear(Items)));
         }
         return list;
     }
@@ -420,6 +427,7 @@ public sealed class EntityStore
                 : null;
             var entity = Create(r.Id, type, new Vec3d(r.X, r.Y, r.Z), r.Speed, r.Tag, dest);
             if (r.Props != null) foreach (var p in r.Props) entity.ImportProperty(p);
+            entity.ImportItems(r.Items, r.Gear, Items);
             _nextId = Math.Max(_nextId, r.Id + 1);
         }
     }

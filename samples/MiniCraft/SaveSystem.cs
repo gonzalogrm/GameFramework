@@ -1,5 +1,6 @@
 using System.Text.Json;
 using GF.World.Entities;
+using GF.World.Items;
 
 namespace MiniCraft;
 
@@ -17,6 +18,8 @@ public sealed class SaveData
     public int Selected { get; set; }
     /// <summary>Hora del día (0..1) del ciclo día/noche.</summary>
     public double TimeOfDay { get; set; } = 0.38;
+    /// <summary>Vida, inventario y equipamiento del jugador (null en guardados antiguos).</summary>
+    public PlayerSave? Player { get; set; }
     /// <summary>Configuración con la que se generó este mundo (no cambia aunque edites worldsettings.json).</summary>
     public WorldSettings Settings { get; set; } = new();
     /// <summary>Bloques en orden de id. El guardado es válido si es un prefijo del registro actual.</summary>
@@ -94,4 +97,13 @@ public sealed class EntitySave
 {
     public double Time { get; set; }
     public List<EntityRecord> Entities { get; set; } = new();
+    /// <summary>Columnas de chunks que ya han generado sus enemigos (para no repetirlos al volver).</summary>
+    public List<long> Populated { get; set; } = new();
+}
+
+public sealed class PlayerSave
+{
+    public float Hp { get; set; }
+    public List<StackRecord>? Inventory { get; set; }
+    public List<EquipRecord>? Gear { get; set; }
 }

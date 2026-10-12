@@ -27,6 +27,7 @@ public sealed class MiniCraftGame : FrameworkGame
         Input.Bind("Talk", Keys.T);                         // emitir un evento de conversación al objetivo
         Input.Bind("Fireball", Keys.B);                     // emitir una bola de fuego sobre el objetivo
         Input.Bind("Night", Keys.N);                        // velocidad del ciclo día/noche: normal, rápido, parado
+        Input.Bind("Inventory", Keys.E);                   // inventario y equipamiento
         Input.Bind("Inspect", Keys.I);                      // panel de propiedades del bloque o la entidad apuntados
 
         base.Initialize();

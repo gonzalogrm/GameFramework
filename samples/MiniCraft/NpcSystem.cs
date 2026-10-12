@@ -2,6 +2,7 @@ using GF.Core;
 using GF.Engine;
 using GF.World;
 using GF.World.Entities;
+using GF.World.Events;
 using GF.World.Map;
 using GF.World.Voxel;
 using Microsoft.Xna.Framework;
@@ -15,11 +16,16 @@ namespace MiniCraft;
 /// </summary>
 public sealed class NpcSystem
 {
-    private sealed class NpcState
+    internal sealed class NpcState
     {
         public Vector3 Vel;
         public bool OnGround;
         public bool NeedsUnstuck = true;
+        // IA de los enemigos (EnemyAi): camino planificado, replanificación y enfriamiento del ataque.
+        public List<CellCoord>? Path;
+        public int PathIndex;
+        public float RepathTimer;
+        public float AttackCooldown;
     }
 
     private const double MaxActiveSpeed = 10.0;   // por encima, la física por pasos atravesaría bloques
@@ -35,6 +41,11 @@ public sealed class NpcSystem
     private readonly Func<World<MapCell>?> _map;
     private readonly Random _rng;
     private readonly List<Entity> _scratch = new();
+    private EnemyAi? _ai;
+
+    /// <summary>El jugador, objetivo de los enemigos. Asígnalo junto con Events para activar la IA de combate.</summary>
+    public PlayerState? Player { get; set; }
+    public EventHub? Events { get; set; }
     private readonly List<Entity> _collisionScratch = new();
 
     public NpcSystem(EntityStore store, World<ushort> world, MiniCraftClimate climate, WorldScale scale,
@@ -152,8 +163,13 @@ public sealed class NpcSystem
 
     // ------------------------------------------------------------------ física de las activas
 
+    /// <summary>Da un destino de paseo a una entidad (la IA de los enemigos lejanos es solo vagar).</summary>
+    public void BeginWander(Entity e) => _store.SetDestination(e, WanderTarget(e.Position));
+
     public void Update(float dt, Vec3d player)
     {
+        _ai ??= new EnemyAi(_world);
+        _ai.BeginFrame();
         _scratch.Clear();
         _scratch.AddRange(_store.Active);   // copia: Move/NotifyArrived pueden cambiar el conjunto
 
@@ -178,7 +194,10 @@ public sealed class NpcSystem
             }
 
             float wishX = 0, wishZ = 0;
-            if (e.Destination is { } d)
+            // Enemigos: si el jugador está cerca los gobierna EnemyAi (A* y ataque); si no, vagan como el resto.
+            bool engaged = Player != null && Events != null && _ai!.Think(e, state, local, player, Player, Events, dt, out wishX, out wishZ);
+            if (!engaged && e.Destination == null && e.TypeId == EntityTypes.Zombie) _store.SetDestination(e, WanderTarget(e.Position));
+            if (!engaged && e.Destination is { } d)
             {
                 double dx = _scale.DeltaX(local.X, d.X), dz = d.Z - local.Z;
                 double dist = Math.Sqrt(dx * dx + dz * dz);

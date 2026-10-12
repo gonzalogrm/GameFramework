@@ -57,6 +57,8 @@ public sealed class WorldSettings
     public int ViewDistance { get; set; } = 6;                // en chunks
     public int Villagers { get; set; } = 8;
     public int Caravans { get; set; } = 60;
+    public float EnemiesPerChunk { get; set; } = 0.4f;        // zombis esperados por columna de chunks al cargarse (0 = sin enemigos)
+    public int EnemyLimit { get; set; } = 200;                // máximo de zombis en el mundo (para no acumular al explorar)
     public int WorkerThreads { get; set; } = 0;               // hilos de fondo para generar y mallar (0 = automático: núcleos - 2)
     public int MapSamplesPerAxis { get; set; } = 6;           // precisión del mapamundi (muestras por región = n*n)
 
@@ -77,6 +79,8 @@ public sealed class WorldSettings
         FarDistanceChunks = other.FarDistanceChunks;
         FarDetail = other.FarDetail;
         WorkerThreads = other.WorkerThreads;
+        EnemiesPerChunk = other.EnemiesPerChunk;
+        EnemyLimit = other.EnemyLimit;
     }
 
     public WorldScale CreateScale() => new(MapWidth, MapHeight, RegionChunksX, RegionChunksZ, ChunkSize, ChunkSize);
@@ -184,6 +188,8 @@ public sealed class WorldSettings
         FarDetail = F(nameof(FarDetail), FarDetail, 0.8f, 4f);
         Villagers = I(nameof(Villagers), Villagers, 0, 100);
         Caravans = I(nameof(Caravans), Caravans, 0, 2000);
+        EnemiesPerChunk = F(nameof(EnemiesPerChunk), EnemiesPerChunk, 0f, 4f);
+        EnemyLimit = I(nameof(EnemyLimit), EnemyLimit, 0, 5000);
         MapSamplesPerAxis = I(nameof(MapSamplesPerAxis), MapSamplesPerAxis, 1, 16);
         WorkerThreads = I(nameof(WorkerThreads), WorkerThreads, 0, 64);
         return warnings;
