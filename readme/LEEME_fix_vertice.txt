@@ -1,6 +1,0 @@
-FIX: VOXELS BLANCOS SIN TEXTURA
-Requiere el parche de dia/noche. Extrae sobre la solucion sobrescribiendo.
-El vertice usaba una segunda semantica TEXCOORD1 con formato Color; algunas plataformas (OpenGL de DesktopGL) la enlazan mal y la
-textura se perdia. Ahora el vertice usa SOLO POSITION0, COLOR0 y TEXCOORD0 (como VertexPositionColorTexture): la luz de bloques va empaquetada
-en TEXCOORD0.z y el vertex shader la desempaqueta. Mismo resultado visual, 32 bytes por vertice.
-Si ves el mismo fallo: borra samples/MiniCraft/Content/bin y obj (para forzar a recompilar el shader) y haz dotnet build.
