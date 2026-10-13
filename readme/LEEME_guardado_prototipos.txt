@@ -1,0 +1,37 @@
+PARCHE: PROTOTIPOS DESDE JSON, VARIANTES Y GUARDADO MINIMO
+Requiere el parche de combate. Extrae sobre la solucion sobrescribiendo. No hay proyectos nuevos; MiniCraft.csproj copia entitytypes.json
+junto al ejecutable (va incluido el .csproj con esa linea; si tienes cambios propios en el, anade a mano:
+    <Content Include="entitytypes.json" CopyToOutputDirectory="PreserveNewest" />   ).
+
+1) LOS TIPOS SE DEFINEN EN UN JSON  (samples/MiniCraft/entitytypes.json)
+   Prototipos que heredan de otros ("parent"), propiedades por defecto, inventario y equipamiento, y VARIANTES. El juego lo carga al arrancar
+   (EntityTypes.Load en MiniCraftGame.Initialize) con EntityDefinitionLoader (motor, GF.World/Entities/EntityDefinitions.cs) y crea los prototipos.
+   Añadir un tipo o variante = editar el JSON, sin tocar codigo. El archivo explica su formato en la cabecera. Los objetos se nombran
+   (bone, leather_cap...) y siguen definidos en ItemTypes.cs.
+   Ejemplo incluido: el zombi tiene 4 variantes con pesos (basic 50, scavenger 25, guard 15, warrior 10), cada una con su inventario,
+   equipamiento y propiedades (vida, dano).
+   Una variante ES un prototipo hijo del tipo ("zombi/guard > zombi > enemigo > criatura"): hereda propiedades, eventos y manejadores.
+
+2) SE GUARDA SOLO LO QUE CAMBIA
+   Una instancia sin cambios guarda: id, tipo, posicion, destino y, SI NO es la variante por defecto, el NOMBRE de su variante. Nada mas:
+   su inventario, equipamiento y propiedades estan en el prototipo de su variante.
+     - inventario / equipamiento: solo si DIFIEREN de la plantilla de su variante (se compara el contenido, no la referencia: consultarlo
+       o dejarlo como estaba no cuenta). Si cambian se guardan enteros; una lista vacia significa "se vacio".
+     - propiedades: solo las que se salen del prototipo de su variante (ya era asi).
+     - velocidad: solo si no es la del tipo.     - tag y campos nulos: no se escriben (JSON sin nulos).
+     - posiciones con 2 decimales.
+   En memoria igual: una instancia no reserva inventario hasta que se usa, y entonces es una copia de la plantilla compartida.
+   Las columnas de chunks ya pobladas de enemigos se guardan como TRAMOS [z, x0, x1] en vez de un numero por columna.
+   (Los guardados anteriores se siguen leyendo; las columnas ya pobladas se recalculan una vez: pueden aparecer enemigos de nuevo.)
+
+   world.json guarda la configuracion COMPLETA del mundo a proposito: si guardase solo lo distinto de los valores por defecto, cambiar un valor
+   por defecto en el codigo cambiaria el terreno de los mundos ya generados.
+
+ARCHIVOS
+  NUEVOS     GF.World/Entities/EntityDefinitions.cs (LoadoutTemplate, EntityVariant, EntityDefinitionLoader)
+             MiniCraft/entitytypes.json, tests/EntityDefinitionTests.cs
+  MODIFICADOS GF.World/Entities/Entity.cs (variantes, plantilla de inventario/equipo, exportacion minima), EntityStore.cs (Spawn con variante,
+             Export/Import compactos)
+             MiniCraft: EntityTypes.cs (ahora carga del JSON), EnemySpawner.cs (variantes por peso, tramos), SaveSystem.cs (sin nulos, Columns),
+             PlayScene.cs, MiniCraftGame.cs, MiniCraft.csproj
+             tests/CombatTests.cs (arreglo: campos readonly inicializados en constructor estatico)

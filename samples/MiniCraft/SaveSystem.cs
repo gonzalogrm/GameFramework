@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using GF.World.Entities;
 using GF.World.Items;
 
@@ -88,7 +89,8 @@ public static class SaveSystem
     {
         Directory.CreateDirectory(Root);
         var tmp = EntitiesPath + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(data));
+        // Sin campos nulos: una entidad sin cambios ocupa solo su tipo, posición e id.
+        File.WriteAllText(tmp, JsonSerializer.Serialize(data, new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull }));
         File.Move(tmp, EntitiesPath, overwrite: true);
     }
 }
@@ -97,8 +99,8 @@ public sealed class EntitySave
 {
     public double Time { get; set; }
     public List<EntityRecord> Entities { get; set; } = new();
-    /// <summary>Columnas de chunks que ya han generado sus enemigos (para no repetirlos al volver).</summary>
-    public List<long> Populated { get; set; } = new();
+    /// <summary>Columnas de chunks que ya han generado sus enemigos, como tramos [z, x0, x1] (para no repetirlos al volver).</summary>
+    public List<int[]> Columns { get; set; } = new();
 }
 
 public sealed class PlayerSave

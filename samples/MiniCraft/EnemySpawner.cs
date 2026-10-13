@@ -1,7 +1,6 @@
 using GF.Core;
 using GF.World;
 using GF.World.Entities;
-using GF.World.Items;
 using GF.World.Map;
 
 namespace MiniCraft;
@@ -9,7 +8,8 @@ namespace MiniCraft;
 /// <summary>
 /// Enemigos en cada chunk: al cargarse la columna de chunks (una sola vez por columna, y se recuerda) aparecen 0, 1 o más zombis en tierra
 /// firme, lejos del jugador. Es determinista: qué columna tiene cuántos y dónde sale de (semilla, columna), no del orden de carga.
-/// Cada zombi lleva su botín en su INVENTARIO y su EQUIPO (lo que lleve puesto le protege), y al morir a manos del jugador pasa a él.
+/// Cada zombi es de una VARIANTE (elegida al azar con los pesos de entitytypes.json); su inventario y equipamiento vienen de esa variante y
+/// al guardar solo se anota cuál es. Lo que lleve puesto le protege y, al morir a manos del jugador, todo pasa a él.
 /// Hay un tope global (EnemyLimit) para no acumular enemigos al explorar.
 /// </summary>
 public sealed class EnemySpawner
@@ -23,7 +23,7 @@ public sealed class EnemySpawner
     private readonly int _seed;
     private readonly WorldSettings _settings;
     private readonly Func<Vec3d?> _player;
-    private readonly HashSet<long> _populated = new();
+    private readonly HashSet<(int X, int Z)> _populated = new();
     private int _count;
 
     /// <param name="player">Posición del jugador (en coordenadas de los chunks cargados), o null si aún no se puede aparecer (cargando).</param>
@@ -37,12 +37,35 @@ public sealed class EnemySpawner
 
     public int EnemyCount => _count;
 
-    public List<long> ExportPopulated() => _populated.ToList();
+    /// <summary>
+    /// Las columnas ya pobladas como TRAMOS [z, x0, x1] (las columnas visitadas son contiguas: un tramo sustituye a decenas de números).
+    /// </summary>
+    public List<int[]> ExportPopulated()
+    {
+        var runs = new List<int[]>();
+        foreach (var row in _populated.GroupBy(c => c.Z).OrderBy(g => g.Key))
+        {
+            int start = 0, previous = 0;
+            bool open = false;
+            foreach (int x in row.Select(c => c.X).OrderBy(x => x))
+            {
+                if (open && x == previous + 1) { previous = x; continue; }
+                if (open) runs.Add(new[] { row.Key, start, previous });
+                start = previous = x;
+                open = true;
+            }
+            if (open) runs.Add(new[] { row.Key, start, previous });
+        }
+        return runs;
+    }
 
-    public void ImportPopulated(IEnumerable<long>? keys)
+    public void ImportPopulated(IEnumerable<int[]>? runs)
     {
         _populated.Clear();
-        if (keys != null) foreach (var k in keys) _populated.Add(k);
+        if (runs == null) return;
+        foreach (var r in runs)
+            if (r is { Length: 3 })
+                for (int x = r[1]; x <= r[2]; x++) _populated.Add((x, r[0]));
     }
 
     /// <summary>Recuenta los zombis que hay en el almacén (tras importar una partida).</summary>
@@ -54,8 +77,7 @@ public sealed class EnemySpawner
         if (_player() is not { } player) return;
 
         int cx = _scale.WrapChunkX(c.X);
-        long key = ((long)cx << 32) | (uint)c.Z;
-        if (!_populated.Add(key)) return;
+        if (!_populated.Add((cx, c.Z))) return;
 
         var rng = new SplitMixRandom(Hashing.Combine(_seed, cx, 0xE4E3, c.Z));
         float expected = _settings.EnemiesPerChunk;
@@ -72,22 +94,26 @@ public sealed class EnemySpawner
             double dx = _scale.DeltaX(player.X, wx + 0.5), dz = wz + 0.5 - player.Z;
             if (dx * dx + dz * dz < SafeDistance * SafeDistance) continue;
 
-            var zombie = _store.Spawn(EntityTypes.Zombie, new Vec3d(wx + 0.5, ground + 2.0, wz + 0.5), def.DefaultSpeed);
-            GiveLoot(zombie, rng);
+            var zombie = _store.Spawn(EntityTypes.Zombie, new Vec3d(wx + 0.5, ground + 2.0, wz + 0.5), def.DefaultSpeed, null, PickVariant(def, rng));
             _npcs.BeginWander(zombie);
             _count++;
         }
     }
 
-    /// <summary>Lo que lleva cada zombi: en el inventario lo que soltará, y en el equipo lo que lleva puesto (y le protege).</summary>
-    private static void GiveLoot(Entity zombie, SplitMixRandom rng)
+    /// <summary>Variante al azar según los pesos de entitytypes.json (la primera si el tipo no tiene variantes).</summary>
+    private static int PickVariant(EntityDef def, SplitMixRandom rng)
     {
-        var items = ItemTypes.Registry;
-        if (rng.Chance(0.6f)) zombie.Inventory.Add(items, ItemTypes.Bone, rng.Next(1, 3));
-        if (rng.Chance(0.3f)) zombie.Inventory.Add(items, ItemTypes.RottenFlesh, 1);
-        if (rng.Chance(0.08f)) zombie.Inventory.Add(items, ItemTypes.IronSword, 1);
-        if (rng.Chance(0.15f)) zombie.Equipment.Set(EquipSlot.Head, ItemTypes.LeatherCap);
-        if (rng.Chance(0.10f)) zombie.Equipment.Set(EquipSlot.Chest, ItemTypes.LeatherVest);
-        if (rng.Chance(0.05f)) zombie.Equipment.Set(EquipSlot.Head, ItemTypes.IronHelmet);
+        var variants = def.Variants;
+        if (variants == null || variants.Count <= 1) return 0;
+        int total = 0;
+        foreach (var v in variants) total += Math.Max(0, v.Weight);
+        if (total <= 0) return 0;
+        int roll = rng.Next(total);
+        for (int i = 0; i < variants.Count; i++)
+        {
+            roll -= Math.Max(0, variants[i].Weight);
+            if (roll < 0) return i;
+        }
+        return 0;
     }
 }

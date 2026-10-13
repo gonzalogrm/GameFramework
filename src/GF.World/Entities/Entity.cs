@@ -15,15 +15,16 @@ public enum SimulationTier { Dormant, Approximate, Active }
 /// Prototype (opcional) define las propiedades del tipo y sus valores por defecto: las instancias solo guardan lo que cambian.
 /// </summary>
 public sealed record EntityDef(string Name, double DefaultSpeed, byte R, byte G, byte B,
-    float Width = 0.6f, float Height = 1.8f, Prototype? Prototype = null, int InventorySize = 8);
+    float Width = 0.6f, float Height = 1.8f, Prototype? Prototype = null, int InventorySize = 8,
+    IReadOnlyList<EntityVariant>? Variants = null);
 
 /// <summary>Un cambio de propiedad de una entidad, para guardar. El tipo (entero, decimal...) lo da el prototipo al cargar.</summary>
 public sealed record PropertyRecord(string Name, double Number, string? Text);
 
 /// <summary>Entidad serializable (el estado de ejecución, Entity.Data, no se guarda).</summary>
 public sealed record EntityRecord(long Id, string Type, double X, double Y, double Z,
-    double? DestX, double? DestY, double? DestZ, double Speed, string? Tag, List<PropertyRecord>? Props = null,
-    List<StackRecord>? Items = null, List<EquipRecord>? Gear = null);
+    double? DestX, double? DestY, double? DestZ, double? Speed, string? Tag, List<PropertyRecord>? Props = null,
+    List<StackRecord>? Items = null, List<EquipRecord>? Gear = null, string? Variant = null);
 
 /// <summary>
 /// Una INSTANCIA de entidad. Remite a su tipo (EntityDef y su Prototype) y solo guarda lo que ha cambiado:
@@ -63,7 +64,20 @@ public sealed class Entity : IEventReceiver, IInventoryHolder
 
     /// <summary>Tipo de esta instancia (asignado por EntityStore.Definitions). Compartido por todas las instancias del mismo tipo.</summary>
     public EntityDef? Def { get; internal set; }
-    public Prototype? Prototype => Def?.Prototype;
+    /// <summary>
+    /// Variante (índice en EntityDef.Variants; 0 = la primera/por defecto). El prototipo efectivo es el de la variante, hijo del del tipo, así que
+    /// una instancia solo guarda QUÉ variante es y sus cambios respecto a ella.
+    /// </summary>
+    public int Variant { get; internal set; }
+
+    public Prototype? Prototype
+    {
+        get
+        {
+            var variants = Def?.Variants;
+            return variants != null && (uint)Variant < (uint)variants.Count ? variants[Variant].Prototype : Def?.Prototype;
+        }
+    }
 
     /// <summary>Nombre para mensajes: "especie nombre" (p. ej. "Aldeano Marta"), o solo la especie, o el nombre del tipo.</summary>
     public string Label
@@ -104,12 +118,47 @@ public sealed class Entity : IEventReceiver, IInventoryHolder
     // ------------------------------------------------------------------ inventario y equipamiento
 
     /// <summary>Inventario de esta entidad (todas tienen uno; se crea al usarlo, así que las que no llevan nada no gastan memoria).</summary>
-    public Inventory Inventory => _inventory ??= new Inventory(Def?.InventorySize ?? 8);
+    public Inventory Inventory => _inventory ??= NewInventory();
     /// <summary>Lo que lleva puesto o en la mano.</summary>
-    public Equipment Equipment => _equipment ??= new Equipment();
+    public Equipment Equipment => _equipment ??= NewEquipment();
 
-    internal List<StackRecord>? ExportItems(Registry<ItemDef>? items) => items == null ? null : _inventory?.Export(items);
-    internal List<EquipRecord>? ExportGear(Registry<ItemDef>? items) => items == null ? null : _equipment?.Export(items);
+    private LoadoutTemplate? Loadout =>
+        Def?.Variants is { } v && (uint)Variant < (uint)v.Count ? v[Variant].Loadout : null;
+
+    // Al usarlos por primera vez se rellenan con lo que define su variante (la plantilla es compartida; esto es una copia propia).
+    private Inventory NewInventory()
+    {
+        var inventory = new Inventory(Def?.InventorySize ?? 8);
+        Loadout?.FillInventory(inventory);
+        return inventory;
+    }
+
+    private Equipment NewEquipment()
+    {
+        var equipment = new Equipment();
+        Loadout?.FillEquipment(equipment);
+        return equipment;
+    }
+
+    /// <summary>
+    /// Solo si el inventario DIFIERE de la plantilla de su variante (si no, ya está en el prototipo y no se guarda nada). Si difiere se guarda
+    /// entero, y una lista vacía significa "se vació". null = sin cambios.
+    /// </summary>
+    internal List<StackRecord>? ExportItems(Registry<ItemDef>? items)
+    {
+        if (items == null || _inventory == null) return null;
+        var template = Loadout;
+        if (template != null ? template.SameItems(_inventory) : _inventory.IsEmpty) return null;
+        return _inventory.Export(items) ?? new List<StackRecord>();
+    }
+
+    internal List<EquipRecord>? ExportGear(Registry<ItemDef>? items)
+    {
+        if (items == null || _equipment == null) return null;
+        var template = Loadout;
+        if (template != null ? template.SameGear(_equipment) : _equipment.IsEmpty) return null;
+        return _equipment.Export(items) ?? new List<EquipRecord>();
+    }
 
     internal void ImportItems(List<StackRecord>? stacks, List<EquipRecord>? gear, Registry<ItemDef>? items)
     {

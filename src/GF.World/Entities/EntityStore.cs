@@ -76,8 +76,8 @@ public sealed class EntityStore
 
     // ------------------------------------------------------------------ ciclo de vida
 
-    public Entity Spawn(ushort typeId, Vec3d position, double speed, string? tag = null) =>
-        Create(_nextId++, typeId, position, speed, tag, null);
+    public Entity Spawn(ushort typeId, Vec3d position, double speed, string? tag = null, int variant = 0) =>
+        Create(_nextId++, typeId, position, speed, tag, null, variant);
 
     public void Remove(Entity e)
     {
@@ -99,9 +99,9 @@ public sealed class EntityStore
         _farCursor = 0;
     }
 
-    private Entity Create(long id, ushort typeId, Vec3d position, double speed, string? tag, Vec3d? destination)
+    private Entity Create(long id, ushort typeId, Vec3d position, double speed, string? tag, Vec3d? destination, int variant = 0)
     {
-        var e = new Entity(id, typeId) { Speed = speed, Tag = tag };
+        var e = new Entity(id, typeId) { Speed = speed, Tag = tag, Variant = variant };
         if (Definitions != null && typeId < Definitions.Count) e.Def = Definitions.Get(typeId);
         _all[id] = e;
         e.Position = Normalize(position);
@@ -407,8 +407,13 @@ public sealed class EntityStore
             foreach (var (id, value) in e.RawOverrides)
                 (props ??= new List<PropertyRecord>()).Add(new PropertyRecord(PropertyIds.NameOf(id), value.Number, value.Text));
 
-            list.Add(new EntityRecord(e.Id, defs.Get(e.TypeId).Name, e.Position.X, e.Position.Y, e.Position.Z,
-                d?.X, d?.Y, d?.Z, e.Speed, e.Tag, props, e.ExportItems(Items), e.ExportGear(Items)));
+            // Solo lo que NO se deduce del tipo: posición (con 2 decimales), destino, y velocidad / variante / propiedades / inventario /
+            // equipamiento únicamente si se salen de lo que define el prototipo de su variante.
+            var def = defs.Get(e.TypeId);
+            list.Add(new EntityRecord(e.Id, def.Name, R2(e.Position.X), R2(e.Position.Y), R2(e.Position.Z),
+                d.HasValue ? R2(d.Value.X) : (double?)null, d.HasValue ? R2(d.Value.Y) : (double?)null, d.HasValue ? R2(d.Value.Z) : (double?)null,
+                e.Speed == def.DefaultSpeed ? null : e.Speed, e.Tag, props, e.ExportItems(Items), e.ExportGear(Items),
+                e.Variant > 0 && def.Variants != null && e.Variant < def.Variants.Count ? def.Variants[e.Variant].Name : null));
         }
         return list;
     }
@@ -425,7 +430,10 @@ public sealed class EntityStore
             Vec3d? dest = r.DestX.HasValue && r.DestY.HasValue && r.DestZ.HasValue
                 ? new Vec3d(r.DestX.Value, r.DestY.Value, r.DestZ.Value)
                 : null;
-            var entity = Create(r.Id, type, new Vec3d(r.X, r.Y, r.Z), r.Speed, r.Tag, dest);
+            var def = defs.Get(type);
+            int variant = r.Variant == null || def.Variants == null ? 0
+                : Math.Max(0, def.Variants.ToList().FindIndex(v => v.Name == r.Variant));   // variante desconocida: la primera
+            var entity = Create(r.Id, type, new Vec3d(r.X, r.Y, r.Z), r.Speed ?? def.DefaultSpeed, r.Tag, dest, variant);
             if (r.Props != null) foreach (var p in r.Props) entity.ImportProperty(p);
             entity.ImportItems(r.Items, r.Gear, Items);
             _nextId = Math.Max(_nextId, r.Id + 1);
@@ -433,6 +441,8 @@ public sealed class EntityStore
     }
 
     // ------------------------------------------------------------------ utilidades
+
+    private static double R2(double v) => Math.Round(v, 2);
 
     private static void AddTo<TKey>(Dictionary<TKey, HashSet<Entity>> index, TKey key, Entity e) where TKey : notnull
     {

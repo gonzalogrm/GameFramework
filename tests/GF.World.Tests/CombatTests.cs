@@ -72,16 +72,14 @@ public class PathfinderTests
 
 public class InventoryTests
 {
-    private static readonly Registry<ItemDef> Defs = Build(out Bone, out Sword, out Cap);
+    private static readonly Registry<ItemDef> Defs = new();
     private static readonly ushort Bone, Sword, Cap;
 
-    private static Registry<ItemDef> Build(out ushort bone, out ushort sword, out ushort cap)
+    static InventoryTests()
     {
-        var r = new Registry<ItemDef>();
-        bone = r.Register("bone", new ItemDef("bone", "Hueso", 4));
-        sword = r.Register("sword", new ItemDef("sword", "Espada", 1, EquipSlot.MainHand, Attack: 2f));
-        cap = r.Register("cap", new ItemDef("cap", "Gorro", 1, EquipSlot.Head, Defense: 1f));
-        return r;
+        Bone = Defs.Register("bone", new ItemDef("bone", "Hueso", 4));
+        Sword = Defs.Register("sword", new ItemDef("sword", "Espada", 1, EquipSlot.MainHand, Attack: 2f));
+        Cap = Defs.Register("cap", new ItemDef("cap", "Gorro", 1, EquipSlot.Head, Defense: 1f));
     }
 
     [Fact]

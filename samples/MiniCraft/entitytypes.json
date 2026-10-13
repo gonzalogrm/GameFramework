@@ -1,0 +1,53 @@
+// Tipos de entidad de MiniCraft: prototipos (propiedades por defecto), inventario y equipamiento, y VARIANTES.
+// Se carga al arrancar. Una instancia solo guarda QUE variante es y lo que cambie respecto a ella: si su inventario y equipamiento no han
+// cambiado, no se guarda nada de eso (ya esta aqui).
+//
+//   name           clave del tipo (es lo que se guarda en la partida: no la cambies en un mundo existente)
+//   title          nombre del prototipo para mensajes y el inspector (opcional)
+//   parent         hereda propiedades, inventario y equipamiento de otro tipo
+//   abstract       true = solo sirve de base, no se puede crear
+//   speed, size [ancho, alto], color [r,g,b], inventorySize
+//   properties     valores por defecto. 10.0 = decimal, 10 = entero. Un hijo puede redefinirlos
+//   inventory      [{ "item": "bone", "count": 2 }]      equipment   { "Head": "leather_cap" }  (MainHand, Head, Chest, Feet)
+//   variants       cada una es un prototipo hijo: puede cambiar propiedades, inventario y equipamiento. "weight" = probabilidad relativa
+//                  de que aparezca. Si una variante no indica inventory/equipment, hereda los del tipo; si los indica, los sustituyen
+// Los objetos (bone, leather_cap...) se definen en ItemTypes.cs.
+{
+  "types": [
+    { "name": "creature", "abstract": true, "title": "criatura",
+      "properties": { "name": "", "species": "criatura", "hp": 10.0, "max_hp": 10.0, "hunger": 0.0, "fear": 0.0, "age": 0, "level": 1 } },
+
+    { "name": "player", "abstract": true, "title": "jugador" },
+
+    { "name": "enemy", "abstract": true, "parent": "creature", "title": "enemigo",
+      "properties": { "species": "Enemigo", "damage": 2.0, "attack_cooldown": 1.0, "aggro": 20.0 } },
+
+    { "name": "villager", "parent": "creature", "title": "aldeano",
+      "speed": 3.0, "size": [0.6, 1.8], "color": [255, 200, 60],
+      "properties": { "species": "Aldeano", "hp": 8.0, "max_hp": 8.0 } },
+
+    { "name": "caravan", "parent": "creature", "title": "caravana",
+      "speed": 60.0, "size": [1.6, 1.4], "color": [230, 60, 200],
+      "properties": { "species": "Caravana", "hp": 40.0, "max_hp": 40.0, "cargo": 0 } },
+
+    { "name": "dog", "parent": "creature", "title": "perro",
+      "speed": 4.5, "size": [0.6, 0.8], "color": [150, 100, 60],
+      "properties": { "species": "Perro", "hp": 12.0, "max_hp": 12.0, "loyalty": 0.5 } },
+
+    { "name": "zombie", "parent": "enemy", "title": "zombi",
+      "speed": 3.3, "size": [0.6, 1.8], "color": [70, 150, 70], "inventorySize": 6,
+      "properties": { "species": "Zombi", "hp": 10.0, "max_hp": 10.0 },
+      "variants": [
+        { "name": "basic", "weight": 50 },
+        { "name": "scavenger", "weight": 25,
+          "inventory": [ { "item": "bone", "count": 2 }, { "item": "rotten_flesh", "count": 1 } ] },
+        { "name": "guard", "weight": 15,
+          "properties": { "hp": 14.0, "max_hp": 14.0 },
+          "equipment": { "Head": "leather_cap", "Chest": "leather_vest" },
+          "inventory": [ { "item": "bone", "count": 1 } ] },
+        { "name": "warrior", "weight": 10,
+          "properties": { "hp": 18.0, "max_hp": 18.0, "damage": 3.0 },
+          "equipment": { "Head": "iron_helmet", "MainHand": "iron_sword" } }
+      ] }
+  ]
+}

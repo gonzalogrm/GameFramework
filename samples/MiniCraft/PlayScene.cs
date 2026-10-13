@@ -220,7 +220,7 @@ public sealed class PlayScene : UiScene
         if (_save != null && SaveSystem.TryLoadEntities() is { } savedEntities)
         {
             _entities.Import(savedEntities.Entities, EntityTypes.Registry, savedEntities.Time);
-            _spawner.ImportPopulated(savedEntities.Populated);
+            _spawner.ImportPopulated(savedEntities.Columns);
             _spawner.CountExisting();
         }
 
@@ -262,7 +262,7 @@ public sealed class PlayScene : UiScene
             Yaw = _camera.Yaw, Pitch = _camera.Pitch, Selected = _selected, TimeOfDay = _day.Time,
             Player = _player.Export(),
         });
-        SaveSystem.WriteEntities(new EntitySave { Time = _entities.Time, Entities = _entities.Export(EntityTypes.Registry), Populated = _spawner.ExportPopulated() });
+        SaveSystem.WriteEntities(new EntitySave { Time = _entities.Time, Entities = _entities.Export(EntityTypes.Registry), Columns = _spawner.ExportPopulated() });
     }
 
     // ------------------------------------------------------------------ viaje
