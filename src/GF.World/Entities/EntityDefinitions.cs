@@ -10,7 +10,7 @@ namespace GF.World.Entities;
 /// </summary>
 public sealed class LoadoutTemplate
 {
-    public static readonly LoadoutTemplate Empty = new(Array.Empty<ItemStack>(), new ushort?[Equipment.SlotCount]);
+    public static readonly LoadoutTemplate Empty = new(Array.Empty<ItemStack>(), Array.Empty<ushort?>());
 
     private readonly ItemStack[] _items;
     private readonly ushort?[] _gear;
@@ -24,17 +24,20 @@ public sealed class LoadoutTemplate
     }
 
     public IReadOnlyList<ItemStack> Items => _items;
-    public ushort? Gear(EquipSlot slot) => _gear[(int)slot];
+    /// <summary>Objeto de la ranura (por índice de su SlotLayout) o null.</summary>
+    public ushort? Gear(int slot) => slot < _gear.Length ? _gear[slot] : null;
 
-    internal void FillInventory(Inventory inventory)
+    /// <summary>Copia las pilas de la plantilla al inventario (que se supone vacío).</summary>
+    public void FillInventory(Inventory inventory)
     {
         for (int i = 0; i < Math.Min(_items.Length, inventory.Size); i++) inventory[i] = _items[i];
     }
 
-    internal void FillEquipment(Equipment equipment)
+    /// <summary>Pone en el equipamiento lo que lleva la plantilla.</summary>
+    public void FillEquipment(Equipment equipment)
     {
-        for (int s = 0; s < Equipment.SlotCount; s++)
-            if (_gear[s] is { } id) equipment.Set((EquipSlot)s, id);
+        for (int s = 0; s < Math.Min(_gear.Length, equipment.SlotCount); s++)
+            if (_gear[s] is { } id) equipment.Set(s, id);
     }
 
     /// <summary>¿Tiene el inventario los mismos objetos y cantidades que la plantilla? (sin importar en qué ranura estén)</summary>
@@ -50,8 +53,8 @@ public sealed class LoadoutTemplate
 
     public bool SameGear(Equipment equipment)
     {
-        for (int s = 0; s < Equipment.SlotCount; s++)
-            if (equipment.Get((EquipSlot)s) != _gear[s]) return false;
+        for (int s = 0; s < Math.Max(_gear.Length, equipment.SlotCount); s++)
+            if ((s < equipment.SlotCount ? equipment.Get(s) : null) != Gear(s)) return false;
         return true;
     }
 }
@@ -62,16 +65,25 @@ public sealed class LoadoutTemplate
 /// </summary>
 public sealed record EntityVariant(string Name, int Weight, Prototype Prototype, LoadoutTemplate Loadout);
 
+/// <summary>Lo que define un tipo (también los abstractos, como el del jugador) además de su prototipo: ranuras, inventario y equipo iniciales.</summary>
+public sealed record EntityTypeInfo(SlotLayout Slots, LoadoutTemplate Loadout, int InventorySize);
+
 /// <summary>Los tipos de entidad cargados de un JSON: sus prototipos (por nombre, también los abstractos) y el registro de los instanciables.</summary>
 public sealed class EntityTypeSet
 {
     private readonly Dictionary<string, Prototype> _prototypes;
+    private readonly Dictionary<string, EntityTypeInfo> _infos;
 
-    internal EntityTypeSet(Registry<EntityDef> types, Dictionary<string, Prototype> prototypes)
+    internal EntityTypeSet(Registry<EntityDef> types, Dictionary<string, Prototype> prototypes, Dictionary<string, EntityTypeInfo> infos)
     {
         Types = types;
         _prototypes = prototypes;
+        _infos = infos;
     }
+
+    /// <summary>Ranuras, inventario y equipo de un tipo por nombre (p. ej. "player": con qué empieza el jugador).</summary>
+    public EntityTypeInfo Info(string name) =>
+        _infos.TryGetValue(name, out var i) ? i : throw new KeyNotFoundException($"El archivo de tipos no define '{name}'.");
 
     /// <summary>Tipos instanciables, en el orden del archivo (el id numérico es solo de ejecución: al guardar se usa el nombre).</summary>
     public Registry<EntityDef> Types { get; }
@@ -84,11 +96,12 @@ public sealed class EntityTypeSet
 /// Carga los tipos de entidad desde JSON. Cada tipo es un prototipo que puede heredar de otro; los que no son "abstract" se pueden crear.
 ///   { "types": [
 ///       { "name": "creature", "abstract": true, "properties": { "hp": 10.0, "level": 1 } },
-///       { "name": "zombie", "parent": "creature", "speed": 3.3, "size": [0.6, 1.8], "color": [70,150,70], "inventorySize": 6,
-///         "properties": { "hp": 12.0 },
-///         "inventory": [ { "item": "bone", "count": 2 } ],  "equipment": { "Head": "leather_cap" },
-///         "variants": [ { "name": "basic", "weight": 5 },
-///                       { "name": "guard", "weight": 1, "properties": { "hp": 20.0 }, "equipment": { "Head": "iron_helmet" } } ] } ] }
+///       { "name": "ogre", "parent": "creature", "speed": 2.4, "size": [1.0, 2.4], "color": [150,110,60], "inventorySize": 6,
+///         "slots": [ "hand", "hand", "hand", "head" ],        // tres brazos: ranuras hand, hand2, hand3, y cabeza
+///         "properties": { "hp": 30.0 },  "spawnWeight": 1,
+///         "inventory": [ { "item": "bone", "count": 2 } ],  "equipment": { "hand": "club", "hand2": "club", "hand3": "club" },
+///         "variants": [ { "name": "brute", "weight": 5 },
+///                       { "name": "warlord", "weight": 1, "equipment": { "hand": "club", "hand2": "club", "hand3": "iron_sword", "head": "iron_helmet" } } ] } ] }
 /// El tipo de una propiedad (entero, decimal, booleano, texto) lo da el ancestro que la define o, si es nueva, el propio valor (10.0 =
 /// decimal, 10 = entero). 'inventory' y 'equipment' de una variante sustituyen a los del tipo; si no los indica, hereda los del tipo.
 /// Los errores recuperables (objeto desconocido...) se añaden a 'messages'; un JSON inválido o una herencia circular lanzan InvalidDataException.
@@ -103,7 +116,7 @@ public static class EntityDefinitionLoader
     };
 
     private sealed record Resolved(Prototype Proto, double Speed, float Width, float Height, byte R, byte G, byte B, int InventorySize,
-        LoadoutTemplate Loadout, List<EntityVariant> Variants);
+        SlotLayout Slots, LoadoutTemplate Loadout, List<EntityVariant> Variants);
 
     public static EntityTypeSet Load(string json, Registry<ItemDef> items, List<string> messages)
     {
@@ -120,6 +133,7 @@ public static class EntityDefinitionLoader
 
         var resolved = new Dictionary<string, Resolved>(StringComparer.Ordinal);
         var prototypes = new Dictionary<string, Prototype>(StringComparer.Ordinal);
+        var infos = new Dictionary<string, EntityTypeInfo>(StringComparer.Ordinal);
 
         Resolved Resolve(string name, HashSet<string> visiting)
         {
@@ -136,7 +150,8 @@ public static class EntityDefinitionLoader
             float height = spec.Size is { Length: >= 2 } size2 ? size2[1] : parent?.Height ?? 1.8f;
             var color = spec.Color is { Length: >= 3 } c ? c : null;
             int inventorySize = spec.InventorySize ?? parent?.InventorySize ?? 8;
-            var loadout = BuildLoadout(spec.Inventory, spec.Equipment, parent?.Loadout, items, inventorySize, messages, name);
+            var slots = spec.Slots is { Length: > 0 } ? new SlotLayout(spec.Slots) : parent?.Slots ?? SlotLayout.Default;
+            var loadout = BuildLoadout(spec.Inventory, spec.Equipment, parent?.Loadout, items, inventorySize, slots, messages, name);
 
             var variants = new List<EntityVariant>();
             if (!spec.Abstract && spec.Variants is { Count: > 0 })
@@ -148,7 +163,7 @@ public static class EntityDefinitionLoader
                     if (!names.Add(vname)) { messages.Add($"'{name}': la variante '{vname}' está repetida: se ignora."); continue; }
                     var vproto = new Prototype($"{title}/{vname}", proto);
                     ApplyProperties(vproto, v.Properties, $"{name}/{vname}", messages);
-                    var vload = BuildLoadout(v.Inventory, v.Equipment, loadout, items, inventorySize, messages, $"{name}/{vname}");
+                    var vload = BuildLoadout(v.Inventory, v.Equipment, loadout, items, inventorySize, slots, messages, $"{name}/{vname}");
                     variants.Add(new EntityVariant(vname, Math.Max(0, v.Weight), vproto, vload));
                 }
             }
@@ -156,10 +171,11 @@ public static class EntityDefinitionLoader
 
             var result = new Resolved(proto, spec.Speed ?? parent?.Speed ?? 3.0, width, height,
                 color != null ? (byte)color[0] : parent?.R ?? 200, color != null ? (byte)color[1] : parent?.G ?? 200,
-                color != null ? (byte)color[2] : parent?.B ?? 200, inventorySize, loadout, variants);
+                color != null ? (byte)color[2] : parent?.B ?? 200, inventorySize, slots, loadout, variants);
             visiting.Remove(name);
             resolved[name] = result;
             prototypes[name] = proto;
+            infos[name] = new EntityTypeInfo(slots, loadout, inventorySize);
             return result;
         }
 
@@ -171,9 +187,10 @@ public static class EntityDefinitionLoader
         {
             if (!specs.TryGetValue(t.Name, out var spec) || !ReferenceEquals(spec, t) || spec.Abstract) continue;
             var r = resolved[t.Name];
-            types.Register(t.Name, new EntityDef(t.Name, r.Speed, r.R, r.G, r.B, r.Width, r.Height, r.Proto, r.InventorySize, r.Variants));
+            types.Register(t.Name, new EntityDef(t.Name, r.Speed, r.R, r.G, r.B, r.Width, r.Height, r.Proto, r.InventorySize, r.Variants,
+                r.Slots, Math.Max(0, spec.SpawnWeight)));
         }
-        return new EntityTypeSet(types, prototypes);
+        return new EntityTypeSet(types, prototypes, infos);
     }
 
     private static void ApplyProperties(Prototype proto, Dictionary<string, JsonElement>? properties, string owner, List<string> messages)
@@ -211,7 +228,7 @@ public static class EntityDefinitionLoader
     }
 
     private static LoadoutTemplate BuildLoadout(List<ItemSpec>? inventory, Dictionary<string, string>? equipment, LoadoutTemplate? inherited,
-        Registry<ItemDef> items, int inventorySize, List<string> messages, string owner)
+        Registry<ItemDef> items, int inventorySize, SlotLayout layout, List<string> messages, string owner)
     {
         var stacks = new List<ItemStack>();
         if (inventory != null)
@@ -235,19 +252,20 @@ public static class EntityDefinitionLoader
         }
         else if (inherited != null) stacks.AddRange(inherited.Items);
 
-        var gear = new ushort?[Equipment.SlotCount];
+        var gear = new ushort?[layout.Count];
         if (equipment != null)
         {
             foreach (var (slotName, itemName) in equipment)
             {
-                if (!Enum.TryParse<EquipSlot>(slotName, ignoreCase: true, out var slot)) { messages.Add($"'{owner}': la ranura '{slotName}' no existe."); continue; }
+                int slot = layout.IndexOf(slotName);
+                if (slot < 0) { messages.Add($"'{owner}': la ranura '{slotName}' no existe en este tipo."); continue; }
                 if (!items.TryGetId(itemName, out ushort id)) { messages.Add($"'{owner}': el objeto '{itemName}' no existe."); continue; }
-                if (items.Get(id).Slot != slot) { messages.Add($"'{owner}': '{itemName}' no se puede equipar en {slotName}."); continue; }
-                gear[(int)slot] = id;
+                if (items.Get(id).Slot != layout.Kind(slot)) { messages.Add($"'{owner}': '{itemName}' no se puede equipar en '{slotName}'."); continue; }
+                gear[slot] = id;
             }
         }
         else if (inherited != null)
-            for (int s = 0; s < Equipment.SlotCount; s++) gear[s] = inherited.Gear((EquipSlot)s);
+            for (int s = 0; s < gear.Length; s++) gear[s] = inherited.Gear(s);
 
         return stacks.Count == 0 && gear.All(g => !g.HasValue) ? LoadoutTemplate.Empty : new LoadoutTemplate(stacks.ToArray(), gear);
     }
@@ -269,6 +287,8 @@ public static class EntityDefinitionLoader
         public float[]? Size { get; set; }
         public int[]? Color { get; set; }
         public int? InventorySize { get; set; }
+        public string[]? Slots { get; set; }
+        public int SpawnWeight { get; set; }
         public Dictionary<string, JsonElement>? Properties { get; set; }
         public List<ItemSpec>? Inventory { get; set; }
         public Dictionary<string, string>? Equipment { get; set; }

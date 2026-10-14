@@ -30,7 +30,9 @@ public sealed class MiniCraftGame : FrameworkGame
         Input.Bind("Inventory", Keys.E);                   // inventario y equipamiento
         Input.Bind("Inspect", Keys.I);                      // panel de propiedades del bloque o la entidad apuntados
 
-        // Tipos de entidad (prototipos, inventarios y variantes) desde entitytypes.json, antes de crear ninguna escena.
+        // Objetos (items.json) y después los tipos de entidad (entitytypes.json: prototipos, inventarios y variantes, que los referencian),
+        // antes de crear ninguna escena.
+        foreach (var message in ItemTypes.Load(ItemTypes.DefaultPath)) Console.Error.WriteLine("[items] " + message);
         foreach (var message in EntityTypes.Load(EntityTypes.DefaultPath, ItemTypes.Registry)) Console.Error.WriteLine("[entitytypes] " + message);
 
         base.Initialize();

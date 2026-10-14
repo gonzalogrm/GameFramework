@@ -1,0 +1,40 @@
+// Objetos de MiniCraft. Se cargan al arrancar (ItemTypes.Load); los tipos de entidad (entitytypes.json) los referencian por nombre en sus
+// inventarios y equipamiento. Se guardan por nombre: no renombres un objeto en un mundo existente.
+//
+//   name       clave (lo que se guarda)            title      nombre que ve el jugador
+//   category   weapon, armor, accessory, potion, food, ingredient, misc... (libre: sirve para ordenar)
+//   maxStack   unidades por ranura (por defecto 64; 1 si es equipable)
+//   slot       TIPO de ranura donde se equipa: "hand", "head", "chest", "feet", "ring"... Una criatura equipa un objeto en una ranura de ese tipo
+//              segun las que defina su tipo ("slots"): un enemigo con tres ranuras "hand" puede llevar tres armas
+//   attack     daño que suma al estar equipado. TODOS los objetos equipados suman: tres brazos con tres armas hacen el daño de las tres
+//   defense    daño que resta a los golpes recibidos (suma de todo lo equipado)
+//   use        efectos del consumible: [ { "effect": "heal", "amount": 10 } ]. Al usarlo se gasta una unidad. Efectos del juego: "heal"
+{
+  "items": [
+    // ----- ingredientes -----
+    { "name": "bone",          "title": "Hueso",           "category": "ingredient" },
+    { "name": "rotten_flesh",  "title": "Carne podrida",   "category": "ingredient" },
+    { "name": "healing_herb",  "title": "Hierba curativa", "category": "ingredient" },
+
+    // ----- comida y frutas -----
+    { "name": "apple",         "title": "Manzana",         "category": "food", "maxStack": 16, "use": [ { "effect": "heal", "amount": 3 } ] },
+    { "name": "berries",       "title": "Bayas",           "category": "food", "maxStack": 32, "use": [ { "effect": "heal", "amount": 1 } ] },
+
+    // ----- pociones -----
+    { "name": "health_potion", "title": "Pocion de vida",  "category": "potion", "maxStack": 8, "use": [ { "effect": "heal", "amount": 10 } ] },
+
+    // ----- armas (ranura "hand") -----
+    { "name": "club",          "title": "Garrote",          "category": "weapon", "slot": "hand", "attack": 1.5 },
+    { "name": "wood_sword",    "title": "Espada de madera", "category": "weapon", "slot": "hand", "attack": 2 },
+    { "name": "iron_sword",    "title": "Espada de hierro", "category": "weapon", "slot": "hand", "attack": 4 },
+
+    // ----- armaduras -----
+    { "name": "leather_cap",   "title": "Gorro de cuero",   "category": "armor", "slot": "head",  "defense": 1 },
+    { "name": "leather_vest",  "title": "Peto de cuero",    "category": "armor", "slot": "chest", "defense": 2 },
+    { "name": "leather_boots", "title": "Botas de cuero",   "category": "armor", "slot": "feet",  "defense": 1 },
+    { "name": "iron_helmet",   "title": "Casco de hierro",  "category": "armor", "slot": "head",  "defense": 2 },
+
+    // ----- accesorios -----
+    { "name": "lucky_ring",    "title": "Anillo de la suerte", "category": "accessory", "slot": "ring", "attack": 0.5, "defense": 0.5 }
+  ]
+}

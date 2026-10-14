@@ -25,13 +25,14 @@ public class EntityDefinitionTests
         ] }
         """;
 
+    private const int Head = 1;   // índice en el SlotLayout por defecto: hand, head, chest, feet
     private static readonly Registry<ItemDef> Items = new();
     private static readonly ushort Bone, Cap;
 
     static EntityDefinitionTests()
     {
         Bone = Items.Register("bone", new ItemDef("bone", "Hueso", 4));
-        Cap = Items.Register("cap", new ItemDef("cap", "Gorro", 1, EquipSlot.Head, Defense: 1f));
+        Cap = Items.Register("cap", new ItemDef("cap", "Gorro", 1, "head", Defense: 1f));
     }
 
     private static (EntityTypeSet Set, EntityStore Store, List<string> Messages) Load()
@@ -71,7 +72,7 @@ public class EntityDefinitionTests
         _ = e.Inventory;   // consultar el inventario lo crea, pero igual que la plantilla: no cuenta como cambio
         _ = e.Equipment;
         Assert.Equal(5, e.Inventory.CountOf(Bone));
-        Assert.Equal(Cap, e.Equipment.Get(EquipSlot.Head));
+        Assert.Equal(Cap, e.Equipment.Get(Head));
 
         var record = store.Export(set.Types).Single();
         Assert.Equal("guard", record.Variant);
@@ -97,7 +98,7 @@ public class EntityDefinitionTests
         e.Inventory.Add(Items, Bone, 5);   // vuelve a ser como la plantilla
         Assert.Null(store.Export(set.Types).Single().Items);
 
-        e.Equipment.Set(EquipSlot.Head, null);
+        e.Equipment.Set(Head, null);
         var r2 = store.Export(set.Types).Single();
         Assert.NotNull(r2.Gear);
         Assert.Empty(r2.Gear!);
@@ -118,7 +119,7 @@ public class EntityDefinitionTests
         Assert.Equal("zombi/guard > zombi > criatura", e.Prototype!.ChainName);
         Assert.Equal(20f, e.GetFloat("hp"));
         Assert.Equal(5, e.Inventory.CountOf(Bone));
-        Assert.Equal(Cap, e.Equipment.Get(EquipSlot.Head));
+        Assert.Equal(Cap, e.Equipment.Get(Head));
         Assert.Equal(3.0, e.Speed);
     }
 

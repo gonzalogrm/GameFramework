@@ -19,8 +19,9 @@ public sealed class PlayerState : IEventReceiver, IInventoryHolder
     /// <summary>Segundos de invulnerabilidad que quedan (tras reaparecer).</summary>
     public float GraceSeconds { get; set; }
 
-    public Inventory Inventory { get; } = new(20);
-    public Equipment Equipment { get; } = new();
+    // Tamaño del inventario, ranuras y equipo inicial: los define el tipo "player" de entitytypes.json.
+    public Inventory Inventory { get; } = new(EntityTypes.PlayerInfo.InventorySize);
+    public Equipment Equipment { get; } = new(EntityTypes.PlayerInfo.Slots);
 
     // IEventReceiver: qué eventos procesa lo decide su prototipo.
     public Prototype? Prototype => EntityTypes.PlayerProto;
@@ -29,9 +30,36 @@ public sealed class PlayerState : IEventReceiver, IInventoryHolder
     /// <summary>Daño de un golpe: 1 con los puños, más el de lo que lleve en la mano.</summary>
     public float AttackPower => 1f + Combat.Attack(this);
 
+    /// <summary>Con lo que empieza una partida nueva: el inventario y el equipamiento del tipo "player" del JSON.</summary>
     public void GiveStarterKit()
     {
-        Equipment.Set(EquipSlot.MainHand, ItemTypes.WoodSword);
+        Inventory.Clear();
+        EntityTypes.PlayerInfo.Loadout.FillInventory(Inventory);
+        EntityTypes.PlayerInfo.Loadout.FillEquipment(Equipment);
+    }
+
+    /// <summary>Usa un consumible del inventario. Devuelve el mensaje, o null si no se pudo (no es consumible o no tendría efecto).</summary>
+    public string? UseItem(int index)
+    {
+        var defs = ItemTypes.Registry;
+        var stack = Inventory[index];
+        if (stack.IsEmpty) return null;
+        string title = defs.Get(stack.Item).Title;
+        float before = Hp;
+        return ItemOps.Use(Inventory, index, defs, ApplyEffect) ? $"{title}: +{Hp - before:0.#} HP" : null;
+    }
+
+    private bool ApplyEffect(ItemEffect effect)
+    {
+        switch (effect.Type)
+        {
+            case "heal":
+                if (Hp >= MaxHp) return false;   // curar con la vida llena no gasta el objeto
+                Hp = Math.Min(MaxHp, Hp + effect.Amount);
+                return true;
+            default:
+                return false;
+        }
     }
 
     public PlayerSave Export() => new()
@@ -65,7 +93,7 @@ public static class Combat
             int taken = stack.Count - to.Inventory.Add(defs, stack.Item, stack.Count);
             if (taken > 0) parts.Add($"{taken} {defs.Get(stack.Item).Title}");
         }
-        foreach (var slot in Enum.GetValues<EquipSlot>())
+        for (int slot = 0; slot < from.Equipment.SlotCount; slot++)
             if (from.Equipment.Get(slot) is { } item && to.Inventory.Add(defs, item, 1) == 0) parts.Add(defs.Get(item).Title);
         return parts.Count == 0 ? "" : " +" + string.Join(", ", parts);
     }

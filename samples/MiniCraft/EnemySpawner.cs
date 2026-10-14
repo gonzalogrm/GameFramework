@@ -6,9 +6,9 @@ using GF.World.Map;
 namespace MiniCraft;
 
 /// <summary>
-/// Enemigos en cada chunk: al cargarse la columna de chunks (una sola vez por columna, y se recuerda) aparecen 0, 1 o más zombis en tierra
+/// Enemigos en cada chunk: al cargarse la columna de chunks (una sola vez por columna, y se recuerda) aparecen 0, 1 o más enemigos en tierra
 /// firme, lejos del jugador. Es determinista: qué columna tiene cuántos y dónde sale de (semilla, columna), no del orden de carga.
-/// Cada zombi es de una VARIANTE (elegida al azar con los pesos de entitytypes.json); su inventario y equipamiento vienen de esa variante y
+/// El tipo de enemigo sale de los que tienen "spawnWeight" en entitytypes.json (zombi, ogro...) y su VARIANTE se elige al azar con sus pesos; su inventario y equipamiento vienen de esa variante y
 /// al guardar solo se anota cuál es. Lo que lleve puesto le protege y, al morir a manos del jugador, todo pasa a él.
 /// Hay un tope global (EnemyLimit) para no acumular enemigos al explorar.
 /// </summary>
@@ -24,6 +24,8 @@ public sealed class EnemySpawner
     private readonly WorldSettings _settings;
     private readonly Func<Vec3d?> _player;
     private readonly HashSet<(int X, int Z)> _populated = new();
+    private readonly List<(ushort Id, int Weight)> _table = new();   // tipos que aparecen y su peso
+    private readonly int _tableTotal;
     private int _count;
 
     /// <param name="player">Posición del jugador (en coordenadas de los chunks cargados), o null si aún no se puede aparecer (cargando).</param>
@@ -31,8 +33,13 @@ public sealed class EnemySpawner
         WorldSettings settings, Func<Vec3d?> player)
     {
         _store = store; _climate = climate; _scale = scale; _npcs = npcs; _seed = seed; _settings = settings; _player = player;
+        for (ushort id = 0; id < EntityTypes.Registry.Count; id++)
+        {
+            int weight = EntityTypes.Registry.Get(id).SpawnWeight;
+            if (weight > 0) { _table.Add((id, weight)); _tableTotal += weight; }
+        }
         world.ChunkLoaded += OnChunkLoaded;
-        store.Removed += e => { if (e.TypeId == EntityTypes.Zombie) _count--; };
+        store.Removed += e => { if (e.Def?.SpawnWeight > 0) _count--; };
     }
 
     public int EnemyCount => _count;
@@ -68,12 +75,12 @@ public sealed class EnemySpawner
                 for (int x = r[1]; x <= r[2]; x++) _populated.Add((x, r[0]));
     }
 
-    /// <summary>Recuenta los zombis que hay en el almacén (tras importar una partida).</summary>
-    public void CountExisting() => _count = _store.All.Count(e => e.TypeId == EntityTypes.Zombie);
+    /// <summary>Recuenta los enemigos que aparecen por spawner que hay en el almacén (tras importar una partida).</summary>
+    public void CountExisting() => _count = _store.All.Count(e => e.Def?.SpawnWeight > 0);
 
     private void OnChunkLoaded(ChunkCoord c)
     {
-        if (c.Y != 0 || _settings.EnemiesPerChunk <= 0f) return;   // una vez por columna (el chunk más bajo)
+        if (c.Y != 0 || _settings.EnemiesPerChunk <= 0f || _tableTotal <= 0) return;   // una vez por columna (el chunk más bajo)
         if (_player() is not { } player) return;
 
         int cx = _scale.WrapChunkX(c.X);
@@ -83,7 +90,6 @@ public sealed class EnemySpawner
         float expected = _settings.EnemiesPerChunk;
         int n = (int)expected + (rng.NextFloat() < expected - (int)expected ? 1 : 0);
         int size = _scale.ChunkSizeX;
-        var def = EntityTypes.Registry.Get(EntityTypes.Zombie);
 
         for (int i = 0; i < n && _count < _settings.EnemyLimit; i++)
         {
@@ -94,10 +100,24 @@ public sealed class EnemySpawner
             double dx = _scale.DeltaX(player.X, wx + 0.5), dz = wz + 0.5 - player.Z;
             if (dx * dx + dz * dz < SafeDistance * SafeDistance) continue;
 
-            var zombie = _store.Spawn(EntityTypes.Zombie, new Vec3d(wx + 0.5, ground + 2.0, wz + 0.5), def.DefaultSpeed, null, PickVariant(def, rng));
-            _npcs.BeginWander(zombie);
+            ushort type = PickType(rng);
+            var def = EntityTypes.Registry.Get(type);
+            var enemy = _store.Spawn(type, new Vec3d(wx + 0.5, ground + 2.0, wz + 0.5), def.DefaultSpeed, null, PickVariant(def, rng));
+            _npcs.BeginWander(enemy);
             _count++;
         }
+    }
+
+    /// <summary>Tipo de enemigo al azar según su spawnWeight.</summary>
+    private ushort PickType(SplitMixRandom rng)
+    {
+        int roll = rng.Next(_tableTotal);
+        foreach (var (id, weight) in _table)
+        {
+            roll -= weight;
+            if (roll < 0) return id;
+        }
+        return _table[0].Id;
     }
 
     /// <summary>Variante al azar según los pesos de entitytypes.json (la primera si el tipo no tiene variantes).</summary>

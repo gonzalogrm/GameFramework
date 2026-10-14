@@ -22,6 +22,9 @@ public static class EntityTypes
     public static Prototype VillagerProto { get; private set; } = null!;
     public static Prototype DogProto { get; private set; } = null!;
 
+    /// <summary>Ranuras, inventario y equipo iniciales del jugador (el tipo abstracto "player" del JSON).</summary>
+    public static EntityTypeInfo PlayerInfo { get; private set; } = null!;
+
     // Ids de ejecución de los tipos instanciables (por nombre al guardar).
     public static ushort Villager { get; private set; }
     public static ushort Caravan { get; private set; }
@@ -38,6 +41,7 @@ public static class EntityTypes
         Registry = set.Types;
         Creature = set.Get("creature");
         PlayerProto = set.Get("player");
+        PlayerInfo = set.Info("player");
         EnemyProto = set.Get("enemy");
         VillagerProto = set.Get("villager");
         DogProto = set.Get("dog");

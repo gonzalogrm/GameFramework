@@ -47,7 +47,8 @@ internal sealed class EnemyAi
             if (st.AttackCooldown <= 0f)
             {
                 st.AttackCooldown = e.GetFloat("attack_cooldown");
-                hub.Send(target, new GameEvent(GameEvents.Melee, e, e.GetFloat("damage")));
+                // Golpe base + el ataque de TODO lo que lleva equipado: un enemigo de tres brazos con tres armas hace el daño de las tres.
+                hub.Send(target, new GameEvent(GameEvents.Melee, e, e.GetFloat("damage") + Combat.Attack(e)));
             }
             return true;
         }

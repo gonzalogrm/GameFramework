@@ -72,14 +72,15 @@ public class PathfinderTests
 
 public class InventoryTests
 {
+    private const int Hand = 0, Head = 1;   // índices del SlotLayout por defecto: hand, head, chest, feet
     private static readonly Registry<ItemDef> Defs = new();
     private static readonly ushort Bone, Sword, Cap;
 
     static InventoryTests()
     {
         Bone = Defs.Register("bone", new ItemDef("bone", "Hueso", 4));
-        Sword = Defs.Register("sword", new ItemDef("sword", "Espada", 1, EquipSlot.MainHand, Attack: 2f));
-        Cap = Defs.Register("cap", new ItemDef("cap", "Gorro", 1, EquipSlot.Head, Defense: 1f));
+        Sword = Defs.Register("sword", new ItemDef("sword", "Espada", 1, "hand", Attack: 2f));
+        Cap = Defs.Register("cap", new ItemDef("cap", "Gorro", 1, "head", Defense: 1f));
     }
 
     [Fact]
@@ -104,15 +105,15 @@ public class InventoryTests
         inv.Add(Defs, Cap, 1);
 
         Assert.True(ItemOps.Equip(inv, eq, Defs, 0));
-        Assert.Equal(Sword, eq.Get(EquipSlot.MainHand));
+        Assert.Equal(Sword, eq.Get(Hand));
         Assert.Equal(0, inv.CountOf(Sword));
         Assert.Equal(2f, eq.Attack(Defs));
 
         Assert.True(ItemOps.Equip(inv, eq, Defs, 1));
         Assert.Equal(1f, eq.Defense(Defs));
 
-        Assert.True(ItemOps.Unequip(inv, eq, Defs, EquipSlot.MainHand));
-        Assert.Null(eq.Get(EquipSlot.MainHand));
+        Assert.True(ItemOps.Unequip(inv, eq, Defs, Hand));
+        Assert.Null(eq.Get(Hand));
         Assert.Equal(1, inv.CountOf(Sword));
         Assert.False(ItemOps.Equip(inv, eq, Defs, 3));   // ranura vacía: nada que equipar
     }
@@ -126,13 +127,13 @@ public class InventoryTests
         Assert.Null(eq.Export(Defs));
 
         inv.Add(Defs, Bone, 3);
-        eq.Set(EquipSlot.Head, Cap);
+        eq.Set(Head, Cap);
         var inv2 = new Inventory(4);
         var eq2 = new Equipment();
         inv2.Import(inv.Export(Defs), Defs);
         eq2.Import(eq.Export(Defs), Defs);
 
         Assert.Equal(3, inv2.CountOf(Bone));
-        Assert.Equal(Cap, eq2.Get(EquipSlot.Head));
+        Assert.Equal(Cap, eq2.Get(Head));
     }
 }

@@ -8,19 +8,27 @@
 //   abstract       true = solo sirve de base, no se puede crear
 //   speed, size [ancho, alto], color [r,g,b], inventorySize
 //   properties     valores por defecto. 10.0 = decimal, 10 = entero. Un hijo puede redefinirlos
-//   inventory      [{ "item": "bone", "count": 2 }]      equipment   { "Head": "leather_cap" }  (MainHand, Head, Chest, Feet)
+//   slots          ranuras de equipamiento: lista de TIPOS de ranura, p. ej. ["hand", "hand", "hand", "head"] (un enemigo de 3 brazos). Cada una
+//                  se llama por su tipo y un numero: hand, hand2, hand3, head. Por defecto ["hand", "head", "chest", "feet"]; se hereda
+//   inventory      [{ "item": "bone", "count": 2 }]      equipment   { "hand": "club", "hand2": "club", "head": "leather_cap" }
+//                  (el objeto debe encajar en el tipo de la ranura: las armas en "hand", los cascos en "head"...)
+//   spawnWeight    > 0 = el spawner de enemigos lo crea al cargar chunks, con ese peso relativo frente a los demas
 //   variants       cada una es un prototipo hijo: puede cambiar propiedades, inventario y equipamiento. "weight" = probabilidad relativa
 //                  de que aparezca. Si una variante no indica inventory/equipment, hereda los del tipo; si los indica, los sustituyen
 // Los objetos (bone, leather_cap...) se definen en ItemTypes.cs.
 {
   "types": [
-    { "name": "creature", "abstract": true, "title": "criatura",
+    { "name": "creature", "abstract": true, "title": "criatura", "inventorySize": 8, "slots": ["hand", "head", "chest", "feet"],
       "properties": { "name": "", "species": "criatura", "hp": 10.0, "max_hp": 10.0, "hunger": 0.0, "fear": 0.0, "age": 0, "level": 1 } },
 
-    { "name": "player", "abstract": true, "title": "jugador" },
+    // Con lo que empieza el jugador: ranuras, inventario y equipamiento iniciales
+    { "name": "player", "abstract": true, "title": "jugador", "inventorySize": 20,
+      "slots": ["hand", "head", "chest", "feet", "ring"],
+      "equipment": { "hand": "wood_sword" },
+      "inventory": [ { "item": "apple", "count": 3 } ] },
 
     { "name": "enemy", "abstract": true, "parent": "creature", "title": "enemigo",
-      "properties": { "species": "Enemigo", "damage": 2.0, "attack_cooldown": 1.0, "aggro": 20.0 } },
+      "properties": { "species": "Enemigo", "damage": 1.0,   /* golpe base; se le SUMA el ataque de todo lo equipado */  "attack_cooldown": 1.0, "aggro": 20.0 } },
 
     { "name": "villager", "parent": "creature", "title": "aldeano",
       "speed": 3.0, "size": [0.6, 1.8], "color": [255, 200, 60],
@@ -35,19 +43,32 @@
       "properties": { "species": "Perro", "hp": 12.0, "max_hp": 12.0, "loyalty": 0.5 } },
 
     { "name": "zombie", "parent": "enemy", "title": "zombi",
-      "speed": 3.3, "size": [0.6, 1.8], "color": [70, 150, 70], "inventorySize": 6,
+      "speed": 3.3, "size": [0.6, 1.8], "color": [70, 150, 70], "inventorySize": 6, "spawnWeight": 10,
       "properties": { "species": "Zombi", "hp": 10.0, "max_hp": 10.0 },
       "variants": [
         { "name": "basic", "weight": 50 },
         { "name": "scavenger", "weight": 25,
-          "inventory": [ { "item": "bone", "count": 2 }, { "item": "rotten_flesh", "count": 1 } ] },
+          "inventory": [ { "item": "bone", "count": 2 }, { "item": "rotten_flesh", "count": 1 }, { "item": "apple", "count": 1 } ] },
         { "name": "guard", "weight": 15,
           "properties": { "hp": 14.0, "max_hp": 14.0 },
-          "equipment": { "Head": "leather_cap", "Chest": "leather_vest" },
+          "equipment": { "head": "leather_cap", "chest": "leather_vest" },
           "inventory": [ { "item": "bone", "count": 1 } ] },
         { "name": "warrior", "weight": 10,
-          "properties": { "hp": 18.0, "max_hp": 18.0, "damage": 3.0 },
-          "equipment": { "Head": "iron_helmet", "MainHand": "iron_sword" } }
+          "properties": { "hp": 18.0, "max_hp": 18.0 },
+          "equipment": { "head": "iron_helmet", "hand": "iron_sword" } }
+      ] },
+
+    // Un enemigo con TRES BRAZOS: tres ranuras de mano, y cada una lleva un arma. Su golpe suma el daño de las tres (1 + 1.5 + 1.5 + 1.5).
+    { "name": "ogre", "parent": "enemy", "title": "ogro",
+      "speed": 2.4, "size": [1.0, 2.4], "color": [160, 110, 60], "inventorySize": 6, "spawnWeight": 1,
+      "slots": ["hand", "hand", "hand", "head"],
+      "properties": { "species": "Ogro", "hp": 30.0, "max_hp": 30.0, "aggro": 18.0 },
+      "variants": [
+        { "name": "brute", "weight": 3,
+          "equipment": { "hand": "club", "hand2": "club", "hand3": "club" } },
+        { "name": "warlord", "weight": 1,
+          "equipment": { "hand": "club", "hand2": "club", "hand3": "iron_sword", "head": "iron_helmet" },
+          "inventory": [ { "item": "health_potion", "count": 1 } ] }
       ] }
   ]
 }

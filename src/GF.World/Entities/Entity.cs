@@ -16,7 +16,7 @@ public enum SimulationTier { Dormant, Approximate, Active }
 /// </summary>
 public sealed record EntityDef(string Name, double DefaultSpeed, byte R, byte G, byte B,
     float Width = 0.6f, float Height = 1.8f, Prototype? Prototype = null, int InventorySize = 8,
-    IReadOnlyList<EntityVariant>? Variants = null);
+    IReadOnlyList<EntityVariant>? Variants = null, SlotLayout? Slots = null, int SpawnWeight = 0);
 
 /// <summary>Un cambio de propiedad de una entidad, para guardar. El tipo (entero, decimal...) lo da el prototipo al cargar.</summary>
 public sealed record PropertyRecord(string Name, double Number, string? Text);
@@ -135,7 +135,7 @@ public sealed class Entity : IEventReceiver, IInventoryHolder
 
     private Equipment NewEquipment()
     {
-        var equipment = new Equipment();
+        var equipment = new Equipment(Def?.Slots ?? SlotLayout.Default);   // las ranuras las define el tipo (un enemigo de 3 brazos tiene 3 de mano)
         Loadout?.FillEquipment(equipment);
         return equipment;
     }

@@ -2,14 +2,21 @@ using GF.Core;
 
 namespace GF.World.Items;
 
-/// <summary>Ranuras de equipamiento.</summary>
-public enum EquipSlot : byte { MainHand, Head, Chest, Feet }
+/// <summary>Un efecto de un objeto consumible al usarlo ("heal", 10). Qué significa cada tipo lo decide el juego.</summary>
+public sealed record ItemEffect(string Type, float Amount);
 
 /// <summary>
-/// Definición de un tipo de objeto (se registra una vez en un Registry&lt;ItemDef&gt;). Slot != null = se puede equipar en esa ranura.
-/// Attack suma daño (mano principal) y Defense resta daño recibido (armadura).
+/// Definición de un tipo de objeto (se carga de JSON, ver ItemDefinitionLoader). Category: weapon, armor, accessory, potion, food,
+/// ingredient, misc... (libre; sirve para ordenar y filtrar). Slot != null = se puede equipar en una ranura de ESE tipo ("hand", "head"...).
+/// Attack suma daño y Defense resta daño recibido: cuentan todos los objetos equipados, así que una criatura con 3 ranuras de mano y 3 armas
+/// hace el daño de las 3. Use != null = consumible: al usarlo aplica sus efectos y gasta una unidad.
 /// </summary>
-public sealed record ItemDef(string Name, string Title, int MaxStack = 64, EquipSlot? Slot = null, float Attack = 0f, float Defense = 0f);
+public sealed record ItemDef(string Name, string Title, int MaxStack = 64, string? Slot = null, float Attack = 0f, float Defense = 0f,
+    string Category = "misc", IReadOnlyList<ItemEffect>? Use = null)
+{
+    public bool IsEquippable => Slot != null;
+    public bool IsUsable => Use is { Count: > 0 };
+}
 
 /// <summary>Una pila de objetos en una ranura del inventario. Count 0 = vacía.</summary>
 public readonly record struct ItemStack(ushort Item, int Count)
@@ -17,9 +24,9 @@ public readonly record struct ItemStack(ushort Item, int Count)
     public bool IsEmpty => Count <= 0;
 }
 
-/// <summary>Para guardar: nombre del objeto (los ids numéricos dependen del orden de registro) y cantidad.</summary>
+/// <summary>Para guardar: nombre del objeto (los ids numéricos dependen del orden de carga) y cantidad.</summary>
 public sealed record StackRecord(string Item, int Count);
-/// <summary>Para guardar: ranura equipada y nombre del objeto.</summary>
+/// <summary>Para guardar: nombre de la ranura de equipamiento ("hand", "hand2", "head"...) y nombre del objeto.</summary>
 public sealed record EquipRecord(string Slot, string Item);
 
 /// <summary>Algo con inventario y equipamiento: las entidades y el jugador.</summary>
@@ -27,6 +34,43 @@ public interface IInventoryHolder
 {
     Inventory Inventory { get; }
     Equipment Equipment { get; }
+}
+
+/// <summary>
+/// Las ranuras de equipamiento de un tipo de criatura: una lista de TIPOS de ranura, p. ej. ["hand", "hand", "hand", "head"] para un enemigo
+/// de tres brazos. Cada ranura tiene un nombre único ("hand", "hand2", "hand3", "head") que es lo que se guarda. Inmutable y compartida.
+/// </summary>
+public sealed class SlotLayout
+{
+    public static readonly SlotLayout Default = new(new[] { "hand", "head", "chest", "feet" });
+
+    private readonly string[] _kinds;
+    private readonly string[] _names;
+
+    public SlotLayout(IEnumerable<string> kinds)
+    {
+        _kinds = kinds.Select(k => k.Trim().ToLowerInvariant()).ToArray();
+        _names = new string[_kinds.Length];
+        var seen = new Dictionary<string, int>();
+        for (int i = 0; i < _kinds.Length; i++)
+        {
+            int n = seen.GetValueOrDefault(_kinds[i]) + 1;
+            seen[_kinds[i]] = n;
+            _names[i] = n == 1 ? _kinds[i] : _kinds[i] + n;
+        }
+    }
+
+    public int Count => _kinds.Length;
+    public string Kind(int slot) => _kinds[slot];
+    public string Name(int slot) => _names[slot];
+
+    /// <summary>Índice de una ranura por nombre ("hand2"). Acepta mayúsculas y el nombre antiguo "mainhand". -1 si no existe.</summary>
+    public int IndexOf(string name)
+    {
+        name = name.Trim().ToLowerInvariant();
+        if (name == "mainhand") name = "hand";
+        return Array.IndexOf(_names, name);
+    }
 }
 
 /// <summary>Inventario de tamaño fijo (ranuras con pilas). Solo hilo principal.</summary>
@@ -124,19 +168,30 @@ public sealed class Inventory
     }
 }
 
-/// <summary>Una ranura por EquipSlot con un objeto (o ninguno). Solo hilo principal.</summary>
+/// <summary>Un objeto (o ninguno) por ranura de un SlotLayout. Solo hilo principal.</summary>
 public sealed class Equipment
 {
-    public const int SlotCount = 4;
-    private readonly ushort?[] _items = new ushort?[SlotCount];
+    private readonly SlotLayout _layout;
+    private readonly ushort?[] _items;
 
-    public ushort? Get(EquipSlot slot) => _items[(int)slot];
+    public Equipment() : this(SlotLayout.Default) { }
+
+    public Equipment(SlotLayout layout)
+    {
+        _layout = layout;
+        _items = new ushort?[layout.Count];
+    }
+
+    public SlotLayout Layout => _layout;
+    public int SlotCount => _items.Length;
+
+    public ushort? Get(int slot) => _items[slot];
 
     /// <summary>Pone (o quita, con null) el objeto de una ranura. Devuelve el que había.</summary>
-    public ushort? Set(EquipSlot slot, ushort? item)
+    public ushort? Set(int slot, ushort? item)
     {
-        var previous = _items[(int)slot];
-        _items[(int)slot] = item;
+        var previous = _items[slot];
+        _items[slot] = item;
         return previous;
     }
 
@@ -149,6 +204,19 @@ public sealed class Equipment
         }
     }
 
+    /// <summary>Una ranura de ese tipo: la primera vacía y, si todas están ocupadas, la primera. -1 si no hay ninguna.</summary>
+    public int FindSlot(string kind)
+    {
+        int first = -1;
+        for (int i = 0; i < _items.Length; i++)
+        {
+            if (_layout.Kind(i) != kind) continue;
+            if (!_items[i].HasValue) return i;
+            if (first < 0) first = i;
+        }
+        return first;
+    }
+
     public float Sum(Registry<ItemDef> defs, Func<ItemDef, float> value)
     {
         float total = 0f;
@@ -156,14 +224,15 @@ public sealed class Equipment
         return total;
     }
 
+    /// <summary>Daño que suman TODOS los objetos equipados: tres brazos con tres armas hacen el daño de las tres.</summary>
     public float Attack(Registry<ItemDef> defs) => Sum(defs, d => d.Attack);
     public float Defense(Registry<ItemDef> defs) => Sum(defs, d => d.Defense);
 
     public List<EquipRecord>? Export(Registry<ItemDef> defs)
     {
         List<EquipRecord>? list = null;
-        for (int s = 0; s < SlotCount; s++)
-            if (_items[s] is { } id) (list ??= new List<EquipRecord>()).Add(new EquipRecord(((EquipSlot)s).ToString(), defs.Get(id).Name));
+        for (int s = 0; s < _items.Length; s++)
+            if (_items[s] is { } id) (list ??= new List<EquipRecord>()).Add(new EquipRecord(_layout.Name(s), defs.Get(id).Name));
         return list;
     }
 
@@ -172,18 +241,23 @@ public sealed class Equipment
         Array.Clear(_items);
         if (records == null) return;
         foreach (var r in records)
-            if (Enum.TryParse<EquipSlot>(r.Slot, out var slot) && defs.TryGetId(r.Item, out ushort id)) _items[(int)slot] = id;
+        {
+            int slot = _layout.IndexOf(r.Slot);
+            if (slot >= 0 && defs.TryGetId(r.Item, out ushort id)) _items[slot] = id;
+        }
     }
 }
 
-/// <summary>Operaciones entre inventario y equipamiento.</summary>
+/// <summary>Operaciones entre inventario, equipamiento y uso de objetos.</summary>
 public static class ItemOps
 {
-    /// <summary>Equipa la pila de la ranura 'index' en la ranura que le corresponda; el objeto que había vuelve al inventario.</summary>
+    /// <summary>Equipa la pila de la ranura 'index' en una ranura de su tipo (una vacía si hay); el objeto que había vuelve al inventario.</summary>
     public static bool Equip(Inventory inventory, Equipment equipment, Registry<ItemDef> defs, int index)
     {
         var stack = inventory[index];
-        if (stack.IsEmpty || defs.Get(stack.Item).Slot is not { } slot) return false;
+        if (stack.IsEmpty || defs.Get(stack.Item).Slot is not { } kind) return false;
+        int slot = equipment.FindSlot(kind);
+        if (slot < 0) return false;
 
         var previous = equipment.Set(slot, stack.Item);
         inventory[index] = new ItemStack(stack.Item, stack.Count - 1);
@@ -196,12 +270,26 @@ public static class ItemOps
         return true;
     }
 
-    /// <summary>Quita lo equipado en una ranura y lo guarda en el inventario (false si no hay sitio).</summary>
-    public static bool Unequip(Inventory inventory, Equipment equipment, Registry<ItemDef> defs, EquipSlot slot)
+    /// <summary>Quita lo equipado en una ranura y lo guarda en el inventario (false si no hay nada o no hay sitio).</summary>
+    public static bool Unequip(Inventory inventory, Equipment equipment, Registry<ItemDef> defs, int slot)
     {
         if (equipment.Get(slot) is not { } item) return false;
         if (inventory.Add(defs, item, 1) > 0) return false;
         equipment.Set(slot, null);
         return true;
+    }
+
+    /// <summary>
+    /// Usa una unidad de un consumible: aplica cada efecto con 'apply' (devuelve si tuvo efecto: p. ej. curar con la vida llena no lo tiene)
+    /// y, si alguno lo tuvo, gasta la unidad.
+    /// </summary>
+    public static bool Use(Inventory inventory, int index, Registry<ItemDef> defs, Func<ItemEffect, bool> apply)
+    {
+        var stack = inventory[index];
+        if (stack.IsEmpty || defs.Get(stack.Item).Use is not { Count: > 0 } effects) return false;
+        bool any = false;
+        foreach (var effect in effects) any |= apply(effect);
+        if (any) inventory[index] = new ItemStack(stack.Item, stack.Count - 1);
+        return any;
     }
 }

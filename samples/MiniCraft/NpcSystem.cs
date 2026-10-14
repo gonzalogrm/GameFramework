@@ -196,7 +196,7 @@ public sealed class NpcSystem
             float wishX = 0, wishZ = 0;
             // Enemigos: si el jugador está cerca los gobierna EnemyAi (A* y ataque); si no, vagan como el resto.
             bool engaged = Player != null && Events != null && _ai!.Think(e, state, local, player, Player, Events, dt, out wishX, out wishZ);
-            if (!engaged && e.Destination == null && e.TypeId == EntityTypes.Zombie) _store.SetDestination(e, WanderTarget(e.Position));
+            if (!engaged && e.Destination == null && e.Prototype?.Is(EntityTypes.EnemyProto) == true) _store.SetDestination(e, WanderTarget(e.Position));
             if (!engaged && e.Destination is { } d)
             {
                 double dx = _scale.DeltaX(local.X, d.X), dz = d.Z - local.Z;

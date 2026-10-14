@@ -24,6 +24,8 @@
     <Content Include="worldsettings.json" CopyToOutputDirectory="PreserveNewest" />
     <!-- Tipos de entidad: prototipos, inventarios, equipamiento y variantes -->
     <Content Include="entitytypes.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Objetos: armas, armaduras, pociones, comida... -->
+    <Content Include="items.json" CopyToOutputDirectory="PreserveNewest" />
     <!-- Tamaños de los sprites en bloques (no es contenido compilado: se copia tal cual a Content/sprites/) -->
     <None Include="Content\sprites\sprites.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
