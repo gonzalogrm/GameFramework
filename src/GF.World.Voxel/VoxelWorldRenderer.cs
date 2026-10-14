@@ -95,6 +95,17 @@ public sealed class VoxelWorldRenderer : IDisposable
 {
     private readonly record struct MeshResult(ChunkCoord Coord, int Version, MeshData Data);
 
+    /// <summary>
+    /// Un grupo de chunks que se remallan a la vez porque una edición cambió la luz: se construyen en paralelo y sus mallas se suben TODAS en el mismo frame,
+    /// para que la luz no se vea cortada en las fronteras de chunk mientras cada uno llega por su lado.
+    /// </summary>
+    private sealed class EditBatch
+    {
+        public readonly List<(ChunkCoord Coord, int Version)> Chunks = new();
+        public readonly ConcurrentDictionary<ChunkCoord, MeshData> Results = new();
+        public int Remaining;   // trabajos sin terminar (se decrementa desde los hilos)
+    }
+
     private const int MaxBillboards = 8000;   // por frame (los vértices caben en índices de 16 bits)
 
     private readonly GraphicsDevice _device;
@@ -115,6 +126,8 @@ public sealed class VoxelWorldRenderer : IDisposable
     private readonly HashSet<ChunkCoord> _built = new();      // chunks que ya tienen (o tuvieron) una malla, aunque vacía
     private readonly HashSet<ChunkCoord> _dirty = new();      // pendientes de mallar en segundo plano
     private readonly HashSet<ChunkCoord> _urgent = new();     // editados: mallar ya
+    private readonly HashSet<ChunkCoord> _lightGroup = new(); // vecinos que la luz de una edición alcanza: se remallan JUNTO con el editado
+    private readonly List<EditBatch> _batches = new();
     private readonly HashSet<ChunkCoord> _inFlight = new();   // trabajos lanzados y no consumidos
     private readonly Dictionary<ChunkCoord, int> _versions = new();
     private readonly List<ChunkCoord> _stale = new();
@@ -275,7 +288,7 @@ public sealed class VoxelWorldRenderer : IDisposable
         {
             var c = new ChunkCoord(x, y, z);
             if (c == own) continue;   // el propio chunk ya va por _urgent
-            if (_world.GetChunk(c) != null && (_built.Contains(c) || _inFlight.Contains(c))) _dirty.Add(c);
+            if (_world.GetChunk(c) != null && (_built.Contains(c) || _inFlight.Contains(c))) _lightGroup.Add(c);
         }
     }
 
@@ -319,12 +332,13 @@ public sealed class VoxelWorldRenderer : IDisposable
             VisibilityVersion++;
         }
 
-        // 1) Ediciones del jugador: síncrono.
-        if (_urgent.Count > 0)
-        {
-            foreach (var c in _urgent) BuildNow(c);
-            _urgent.Clear();
-        }
+        // 1) Ediciones del jugador. Sin cambio de luz: el chunk se malla ya, síncrono. Con cambio de luz (poner o quitar un bloque luminoso, opaco o
+        //    translúcido): el chunk y los vecinos que la luz alcanza se construyen en paralelo y se aplican a la vez (ver EditBatch).
+        if (_lightGroup.Count > 0) StartBatch();
+        else foreach (var c in _urgent) BuildNow(c);
+        _urgent.Clear();
+        _lightGroup.Clear();
+        ApplyFinishedBatches();
 
         // 2) Resultados de los hilos de fondo: subir a la GPU con presupuesto de tiempo.
         long start = Stopwatch.GetTimestamp();
@@ -369,6 +383,57 @@ public sealed class VoxelWorldRenderer : IDisposable
                 }
                 catch (Exception e) { _failures.Enqueue(e); }
             });
+        }
+    }
+
+    private void StartBatch()
+    {
+        var group = new HashSet<ChunkCoord>(_urgent);
+        group.UnionWith(_lightGroup);
+        var batch = new EditBatch();
+        var jobs = new List<(ChunkCoord Coord, ChunkSnapshot<ushort> Snapshot, int Version)>();
+        foreach (var c in group)
+        {
+            var chunk = _world.GetChunk(c);
+            if (chunk == null) continue;
+            var snapshot = ChunkSnapshot<ushort>.Capture(_world, chunk);   // en el hilo principal: ya incluye la edición
+            chunk.IsDirty = false;
+            _dirty.Remove(c);
+            int version = ++_versionCounter;
+            _versions[c] = version;   // descarta cualquier trabajo en vuelo anterior de este chunk
+            batch.Chunks.Add((c, version));
+            jobs.Add((c, snapshot, version));
+        }
+        if (jobs.Count == 0) return;
+
+        batch.Remaining = jobs.Count;   // antes de lanzar ninguno
+        _batches.Add(batch);
+        var blocks = _blocks; var atlas = _atlas; var sprites = _sprites; var env = Light.Environment;
+        foreach (var (coord, snapshot, _) in jobs)
+        {
+            Task.Run(() =>
+            {
+                try { batch.Results[coord] = ChunkMesher.Build(snapshot, blocks, atlas, sprites, env); }
+                catch (Exception e) { _failures.Enqueue(e); }
+                finally { Interlocked.Decrement(ref batch.Remaining); }
+            });
+        }
+    }
+
+    /// <summary>Sube a la GPU, todas en este frame, las mallas de los grupos de edición ya terminados (las de chunks reeditados o descargados se descartan).</summary>
+    private void ApplyFinishedBatches()
+    {
+        for (int i = 0; i < _batches.Count; i++)
+        {
+            var batch = _batches[i];
+            if (Volatile.Read(ref batch.Remaining) > 0) continue;
+            _batches.RemoveAt(i--);
+            foreach (var (coord, version) in batch.Chunks)
+            {
+                if (!_versions.TryGetValue(coord, out int current) || current != version) continue;   // obsoleto
+                if (_world.GetChunk(coord) == null || !batch.Results.TryGetValue(coord, out var data)) continue;
+                Apply(coord, data);
+            }
         }
     }
 

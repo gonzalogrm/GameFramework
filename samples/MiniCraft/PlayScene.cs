@@ -668,12 +668,13 @@ public sealed class PlayScene : UiScene
             var color = new Color(def.R, def.G, def.B);
             // La luz de su celda (las entidades son canónicas: X relativa al jugador): de noche y en cuevas se oscurecen.
             double x = _pos.X + _scale.DeltaX(_pos.X, e.Position.X);
-            var lv = _renderer.Light.Sample(new CellCoord(IntMath.FloorToInt(x), IntMath.FloorToInt(e.Position.Y + 0.5), IntMath.FloorToInt(e.Position.Z)));
-            if (lv.Known)
-            {
-                var t = lv.Total;
-                color = new Color(color.ToVector3() * new Vector3(Brightness(t.X), Brightness(t.Y), Brightness(t.Z)));
-            }
+            var cell = new CellCoord(IntMath.FloorToInt(x), IntMath.FloorToInt(e.Position.Y + 0.5), IntMath.FloorToInt(e.Position.Z));
+            // Sin el terreno de su chunk construido y ya visible, la entidad flotaría sobre el vacío (aparecía y desaparecía a lo lejos).
+            if (!_renderer.IsFullyVisible(_world.Shape.ToChunk(cell))) continue;
+            var lv = _renderer.Light.Sample(cell);
+            // Sin dato de luz todavía se supone cielo abierto (de noche, oscuro): antes se dibujaba a pleno brillo.
+            var t = lv.Known ? lv.Total : Vector3.Max(lv.Ambient, _day.SkyLight * LightField.Max);
+            color = new Color(color.ToVector3() * new Vector3(Brightness(t.X), Brightness(t.Y), Brightness(t.Z)));
             yield return new EntityBox(e.Position, new Vector3(def.Width, def.Height, def.Width), color);
         }
     }
