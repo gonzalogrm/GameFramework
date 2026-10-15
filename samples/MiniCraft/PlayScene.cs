@@ -2,6 +2,7 @@ using GF.Core;
 using GF.Engine;
 using GF.UI;
 using GF.World;
+using GF.World.Cosmos;
 using GF.World.Entities;
 using GF.World.Events;
 using GF.World.Map;
@@ -73,12 +74,20 @@ public sealed class PlayScene : UiScene
     private readonly DayNightCycle _day = new();
     private int _daySpeed;   // 0 normal, 1 rápido, 2 parado
 
-	public PlayScene(int seed, WorldSettings settings, SaveData? save = null)
+    private readonly UniverseSession _session;
+    private readonly Planet _planet;
+    private readonly string _saveDir;   // carpeta de guardado de ESTE planeta
+
+    /// <param name="seed">Semilla del terreno: la del planeta (PlanetAddress.WorldSeed).</param>
+    public PlayScene(int seed, WorldSettings settings, SaveData? save, UniverseSession session, Planet planet, string saveDir)
     {
         _seed = seed;
         _settings = settings;
         _scale = settings.CreateScale();
         _save = save;
+        _session = session;
+        _planet = planet;
+        _saveDir = saveDir;
     }
 
     protected override Widget BuildUi()
@@ -105,6 +114,7 @@ public sealed class PlayScene : UiScene
 
     public override void Load()
     {
+        SaveSystem.UseDirectory(_saveDir);   // el almacén de chunks y los guardados de este planeta
         if (_save != null)
         {
             _pos = new Vec3d(_save.X, _save.Y, _save.Z);
@@ -253,6 +263,7 @@ public sealed class PlayScene : UiScene
 
     private void Save()
     {
+        SaveSystem.UseDirectory(_saveDir);   // el mundo guardado es el de este planeta, aunque ya se haya abierto otro
         if (!_spawned) return;   // no guardar una posición provisional
         _chunks.SaveAll();
         _store.Flush();
@@ -262,6 +273,7 @@ public sealed class PlayScene : UiScene
             Yaw = _camera.Yaw, Pitch = _camera.Pitch, Selected = _selected, TimeOfDay = _day.Time,
             Player = _player.Export(),
         });
+        SaveSystem.WriteUniverse(_session.ToSave());
         SaveSystem.WriteEntities(new EntitySave { Time = _entities.Time, Entities = _entities.Export(EntityTypes.Registry), Columns = _spawner.ExportPopulated() });
     }
 
@@ -362,6 +374,16 @@ public sealed class PlayScene : UiScene
         {
             if (_entities.Count == 0) _npcs.SpawnInitial(_pos);   // mundo nuevo (o guardado sin entidades)
             _entitiesInit = true;
+        }
+
+        if (input.Pressed("Universe"))
+        {
+            Save();
+            Game.Scenes.Push(new UniverseScene(_session, _planet.Address, planet =>
+            {
+                Game.Scenes.Reset(_session.CreateScene(planet));   // el mundo actual se guarda al descargarse (en su propia carpeta)
+            }));
+            return;
         }
 
         if (input.Pressed("Inventory"))
@@ -617,7 +639,7 @@ public sealed class PlayScene : UiScene
             _player.Hp = MathF.Min(_player.MaxHp, _player.Hp + 0.4f * dt);
         if (_player.Hp <= 0f) Respawn();
 
-        string text = $"HP {MathF.Ceiling(_player.Hp):0}/{_player.MaxHp:0}   Ataque {_player.AttackPower:0.#}   Defensa {Combat.Defense(_player):0.#}   [E] inventario";
+        string text = $"{_planet.Name}  |  HP {MathF.Ceiling(_player.Hp):0}/{_player.MaxHp:0}   Ataque {_player.AttackPower:0.#}   Defensa {Combat.Defense(_player):0.#}   [E] inventario  [U] universo";
         if (text != _hudText) { _hudText = text; _hpLabel.Text = text; }
     }
 

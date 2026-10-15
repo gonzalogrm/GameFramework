@@ -58,9 +58,16 @@ public sealed class WorldSettings
     public int Villagers { get; set; } = 8;
     public int Caravans { get; set; } = 60;
     public float EnemiesPerChunk { get; set; } = 0.4f;        // zombis esperados por columna de chunks al cargarse (0 = sin enemigos)
+    public int Galaxies { get; set; } = 10;                   // UNIVERSO NUEVO: galaxias (se guardan con el universo; cambiarlas cambia los IDs)
+    public int SystemsPerGalaxy { get; set; } = 100;          // sistemas solares por galaxia
+    public int MinPlanets { get; set; } = 1;                  // planetas por sistema solar: entre estos dos valores
+    public int MaxPlanets { get; set; } = 5;
     public int EnemyLimit { get; set; } = 200;                // máximo de zombis en el mundo (para no acumular al explorar)
     public int WorkerThreads { get; set; } = 0;               // hilos de fondo para generar y mallar (0 = automático: núcleos - 2)
     public int MapSamplesPerAxis { get; set; } = 6;           // precisión del mapamundi (muestras por región = n*n)
+
+    /// <summary>Copia independiente de estos ajustes (para derivar los de cada planeta del universo).</summary>
+    public WorldSettings Clone() => JsonSerializer.Deserialize<WorldSettings>(JsonSerializer.Serialize(this))!;
 
     // ----- Derivados -----
     [JsonIgnore] public int WorldHeight => VerticalChunks * ChunkSize;
@@ -81,6 +88,10 @@ public sealed class WorldSettings
         WorkerThreads = other.WorkerThreads;
         EnemiesPerChunk = other.EnemiesPerChunk;
         EnemyLimit = other.EnemyLimit;
+        Galaxies = other.Galaxies;
+        SystemsPerGalaxy = other.SystemsPerGalaxy;
+        MinPlanets = other.MinPlanets;
+        MaxPlanets = other.MaxPlanets;
     }
 
     public WorldScale CreateScale() => new(MapWidth, MapHeight, RegionChunksX, RegionChunksZ, ChunkSize, ChunkSize);
@@ -190,6 +201,10 @@ public sealed class WorldSettings
         Caravans = I(nameof(Caravans), Caravans, 0, 2000);
         EnemiesPerChunk = F(nameof(EnemiesPerChunk), EnemiesPerChunk, 0f, 4f);
         EnemyLimit = I(nameof(EnemyLimit), EnemyLimit, 0, 5000);
+        Galaxies = I(nameof(Galaxies), Galaxies, 1, 100);
+        SystemsPerGalaxy = I(nameof(SystemsPerGalaxy), SystemsPerGalaxy, 1, 1000);
+        MinPlanets = I(nameof(MinPlanets), MinPlanets, 1, 12);
+        MaxPlanets = I(nameof(MaxPlanets), MaxPlanets, 1, 12);
         MapSamplesPerAxis = I(nameof(MapSamplesPerAxis), MapSamplesPerAxis, 1, 16);
         WorkerThreads = I(nameof(WorkerThreads), WorkerThreads, 0, 64);
         return warnings;
