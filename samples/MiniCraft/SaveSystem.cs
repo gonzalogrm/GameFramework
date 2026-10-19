@@ -115,6 +115,58 @@ public static class SaveSystem
         File.Move(tmp, JsonPath, overwrite: true);
     }
 
+    // ------------------------------------------------------------------ el personaje (universal)
+
+    private static string PlayerPath => Path.Combine(UniverseRoot, "player.json");
+
+    /// <summary>Vida, inventario y equipo del jugador: UNO para todo el universo (no depende del planeta), para llevar objetos de un mundo a otro.</summary>
+    public static PlayerSave? TryLoadPlayer()
+    {
+        try
+        {
+            return File.Exists(PlayerPath) ? JsonSerializer.Deserialize<PlayerSave>(File.ReadAllText(PlayerPath)) : null;
+        }
+        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    public static void WritePlayer(PlayerSave data)
+    {
+        Directory.CreateDirectory(UniverseRoot);
+        var tmp = PlayerPath + ".tmp";
+        File.WriteAllText(tmp, JsonSerializer.Serialize(data, new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull }));
+        File.Move(tmp, PlayerPath, overwrite: true);
+    }
+
+    // ------------------------------------------------------------------ objetos de runtime del mundo (items.json del mundo)
+
+    private static string ItemsPath => Path.Combine(Root, "items.json");
+
+    /// <summary>Los objetos creados en partida (cuchillos únicos...): solo nombre, objeto base y cambios.</summary>
+    public static List<RuntimeItemRecord>? TryLoadItems()
+    {
+        try
+        {
+            return File.Exists(ItemsPath) ? JsonSerializer.Deserialize<List<RuntimeItemRecord>>(File.ReadAllText(ItemsPath)) : null;
+        }
+        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Guarda los objetos de runtime; sin ninguno, borra el archivo (un mundo sin objetos únicos no guarda nada).</summary>
+    public static void WriteItems(IReadOnlyCollection<RuntimeItemRecord> items)
+    {
+        if (items.Count == 0) { if (File.Exists(ItemsPath)) File.Delete(ItemsPath); return; }
+        Directory.CreateDirectory(Root);
+        var tmp = ItemsPath + ".tmp";
+        File.WriteAllText(tmp, JsonSerializer.Serialize(items, new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull }));
+        File.Move(tmp, ItemsPath, overwrite: true);
+    }
+
     public static void Delete()
     {
         if (Directory.Exists(Root)) Directory.Delete(Root, recursive: true);
@@ -157,4 +209,6 @@ public sealed class PlayerSave
     public float Hp { get; set; }
     public List<StackRecord>? Inventory { get; set; }
     public List<EquipRecord>? Gear { get; set; }
+    /// <summary>Definiciones de los objetos de runtime que lleva (de cualquier mundo), para recrearlos en el mundo donde se abra.</summary>
+    public List<RuntimeItemRecord>? Items { get; set; }
 }

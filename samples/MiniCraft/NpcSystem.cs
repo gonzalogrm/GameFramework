@@ -26,6 +26,7 @@ public sealed class NpcSystem
         public int PathIndex;
         public float RepathTimer;
         public float AttackCooldown;
+        public float ThinkTimer;   // tick de los componentes de lo que lleva equipado
     }
 
     private const double MaxActiveSpeed = 10.0;   // por encima, la física por pasos atravesaría bloques
@@ -226,6 +227,13 @@ public sealed class NpcSystem
             {
                 local = VoxelPhysics.MoveAndCollide(_world, Blocks.Registry, local, size, pushed - local, out _);
                 if (onEntity) { state.OnGround = true; if (state.Vel.Y < 0) state.Vel.Y = 0; }
+            }
+
+            // Los componentes de lo equipado (regeneración...) hacen su tick una vez por segundo; solo cuesta mirar sus ranuras.
+            if (Events != null && e.GearSlotCount > 0 && (state.ThinkTimer += dt) >= 1f)
+            {
+                ItemBehaviors.Think(e, state.ThinkTimer, Events);
+                state.ThinkTimer = 0f;
             }
 
             _store.Move(e, local);   // vuelve a coordenadas canónicas

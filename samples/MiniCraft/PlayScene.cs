@@ -4,6 +4,8 @@ using GF.UI;
 using GF.World;
 using GF.World.Cosmos;
 using GF.World.Entities;
+using GF.World.History;
+using GF.World.Items;
 using GF.World.Events;
 using GF.World.Map;
 using GF.World.Tiles;
@@ -38,6 +40,10 @@ public sealed class PlayScene : UiScene
     private readonly List<Entity> _collisionScratch = new();
     private readonly PlayerState _player = new();   // vida, inventario y equipamiento del jugador
     private EnemySpawner _spawner = null!;
+    private PlayerSave? _universalPlayer;
+    private WorldHistory _history = null!;
+    private LegendaryRegistry _legendary = null!;
+    private float _thinkTimer;   // tick de los componentes de lo que lleva equipado el jugador
     private Label _hpLabel = null!;
     private string _hudText = "";
     private Vec3d _respawn;
@@ -115,6 +121,14 @@ public sealed class PlayScene : UiScene
     public override void Load()
     {
         SaveSystem.UseDirectory(_saveDir);   // el almacén de chunks y los guardados de este planeta
+        // Catálogo de objetos de ESTE mundo: los del JSON y, además, los creados en partida que se guardaron (antes que entidades e inventarios, que los
+        // referencian por nombre).
+        // El personaje es UNIVERSAL: su inventario, equipo y vida vienen del universo, no de este planeta. Los objetos de runtime que lleva (de otros mundos) se
+        // recrean aquí junto a los de este mundo.
+        _universalPlayer = SaveSystem.TryLoadPlayer();
+        var worldItems = SaveSystem.TryLoadItems() ?? new List<RuntimeItemRecord>();
+        if (_universalPlayer?.Items != null) worldItems = worldItems.Concat(_universalPlayer.Items).ToList();
+        foreach (var problem in ItemTypes.BeginWorld(worldItems)) Console.Error.WriteLine("[items] " + problem);
         if (_save != null)
         {
             _pos = new Vec3d(_save.X, _save.Y, _save.Z);
@@ -221,7 +235,19 @@ public sealed class PlayScene : UiScene
         _npcs.Player = _player;                 // los enemigos persiguen y golpean al jugador
         _npcs.Events = _events;
         _spawner = new EnemySpawner(_entities, _world, _climate, _scale, _npcs, _seed, _settings, () => _spawned ? (Vec3d?)_pos : null);
-        if (_save?.Player != null) _player.Restore(_save.Player); else _player.GiveStarterKit();
+        // Historia del mundo (sale de la semilla, no se guarda) y sus objetos legendarios: variantes de armas creadas en partida, con su héroe y su destino.
+        _history = WorldHistory.Generate((ulong)(uint)_seed);
+        _legendary = LegendaryRegistry.Create(_history, (ulong)(uint)_seed, ItemTypes.Catalog, _scale,
+            (x, z) => MiniCraftClimate.ToBlockHeight(_climate.Sample(x, z).Height) > _climate.SeaLevel + _settings.BeachHeight,
+            new LegendaryOptions { Components = new[] { "thorns", "regeneration" }, NamePrefix = $"legendary_{(uint)_seed:x8}" });
+        _spawner.Legendary = _legendary;
+        foreach (var a in _legendary.Artifacts)
+            Console.WriteLine($"[historia] {a.Title}: {a.Fate}, columna ({a.ColumnX},{a.ColumnZ}), x {a.X} z {a.Z}, ataque {a.Attack:0.#}");
+
+        // Primero el personaje del universo; si no hay (partidas anteriores), el que guardó este mundo; si no, el inicial.
+        if (_universalPlayer != null) _player.Restore(_universalPlayer);
+        else if (_save?.Player != null) _player.Restore(_save.Player);
+        else _player.GiveStarterKit();
 		_lightWatcher = new LightWatcher(_events, _renderer.Light, _scale, GameEvents.DarkEnter, GameEvents.LightEnter);
 		_boxes = new BoxRenderer(Game.GraphicsDevice, _scale)
         {
@@ -271,9 +297,10 @@ public sealed class PlayScene : UiScene
         {
             Seed = _seed, Settings = _settings, X = _pos.X, Y = _pos.Y, Z = _pos.Z,
             Yaw = _camera.Yaw, Pitch = _camera.Pitch, Selected = _selected, TimeOfDay = _day.Time,
-            Player = _player.Export(),
         });
         SaveSystem.WriteUniverse(_session.ToSave());
+        SaveSystem.WriteItems(ItemTypes.Catalog.ExportRuntime());
+        SaveSystem.WritePlayer(_player.Export(ItemTypes.Catalog));   // universal: lo lee el siguiente mundo que se abra
         SaveSystem.WriteEntities(new EntitySave { Time = _entities.Time, Entities = _entities.Export(EntityTypes.Registry), Columns = _spawner.ExportPopulated() });
     }
 
@@ -383,6 +410,12 @@ public sealed class PlayScene : UiScene
             {
                 Game.Scenes.Reset(_session.CreateScene(planet));   // el mundo actual se guarda al descargarse (en su propia carpeta)
             }));
+            return;
+        }
+
+        if (input.Pressed("History"))
+        {
+            Game.Scenes.Push(new HistoryScene(_history, _legendary, _entities, _player, _spawner, TeleportTo));
             return;
         }
 
@@ -634,12 +667,17 @@ public sealed class PlayScene : UiScene
     private void UpdatePlayerState(float dt)
     {
         _player.SecondsSinceHurt += dt;
+        if ((_thinkTimer += dt) >= 1f)   // componentes de lo que lleva equipado (regeneración...)
+        {
+            ItemBehaviors.Think(_player, _thinkTimer, _events);
+            _thinkTimer = 0f;
+        }
         if (_player.GraceSeconds > 0f) _player.GraceSeconds -= dt;
         if (_player.Hp > 0f && _player.Hp < _player.MaxHp && _player.SecondsSinceHurt > 6f)
             _player.Hp = MathF.Min(_player.MaxHp, _player.Hp + 0.4f * dt);
         if (_player.Hp <= 0f) Respawn();
 
-        string text = $"{_planet.Name}  |  HP {MathF.Ceiling(_player.Hp):0}/{_player.MaxHp:0}   Ataque {_player.AttackPower:0.#}   Defensa {Combat.Defense(_player):0.#}   [E] inventario  [U] universo";
+        string text = $"{_planet.Name}  |  HP {MathF.Ceiling(_player.Hp):0}/{_player.MaxHp:0}   Ataque {_player.AttackPower:0.#}   Defensa {Combat.Defense(_player):0.#}   [E] inventario  [U] universo  [H] historia";
         if (text != _hudText) { _hudText = text; _hpLabel.Text = text; }
     }
 

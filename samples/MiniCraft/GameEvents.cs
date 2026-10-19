@@ -18,6 +18,8 @@ public static class GameEvents
     public static readonly EventKind Fire = Damage.Derive("fuego");
     public static readonly EventKind Fireball = Fire.Derive("bola_de_fuego");
     public static readonly EventKind Alarm = new("alarma");
+    /// <summary>Daño devuelto por el componente "thorns" (hereda de daño, pero no vuelve a activar espinas).</summary>
+    public static readonly EventKind Thorns = Damage.Derive("espinas");
 
     // Los emite LightWatcher al medir la luz de las entidades: el nivel (0..15) viaja en Amount.
     public static readonly EventKind DarkEnter = new("entra_oscuridad");
@@ -49,7 +51,8 @@ public static class GameEvents
 
     private static void TakeDamage(Entity e, GameEvent ev, EventHub hub)
     {
-        // La armadura que lleve puesta resta daño (mínimo 0,5).
+        // Los componentes de lo que lleva equipado reciben el evento (espinas...). Después, la armadura que lleve puesta resta daño (mínimo 0,5).
+        ItemBehaviors.OnHolderEvent(e, ev, hub);
         float amount = MathF.Max(0.5f, ev.Amount - Combat.Defense(e));
         float hp = e.GetFloat("hp") - amount;
         if (hp > 0f)
@@ -60,7 +63,8 @@ public static class GameEvents
         }
         // Si lo mata el jugador, todo lo que llevaba (inventario y equipo) pasa a su inventario.
         string loot = ev.Source is PlayerState killer ? Combat.Loot(e, killer) : "";
-        hub.Notify($"{e.Label} muere ({ev.Kind.Name}){loot}");
+        string verb = e.Prototype?.HasComponent("container") == true ? "se abre" : $"muere ({ev.Kind.Name})";   // un alijo es un contenedor
+        hub.Notify($"{e.Label} {verb}{loot}");
         hub.Entities.Remove(e);
     }
 
@@ -68,6 +72,7 @@ public static class GameEvents
     private static void PlayerTakesDamage(PlayerState player, GameEvent ev, EventHub hub)
     {
         if (player.GraceSeconds > 0f || player.Hp <= 0f) return;
+        ItemBehaviors.OnHolderEvent(player, ev, hub);
         float amount = MathF.Max(0.5f, ev.Amount - Combat.Defense(player));
         player.Hp = MathF.Max(0f, player.Hp - amount);
         player.SecondsSinceHurt = 0f;

@@ -31,7 +31,7 @@ public class ItemTests
     private static (Registry<ItemDef> Items, List<string> Messages) LoadItems()
     {
         var messages = new List<string>();
-        return (ItemDefinitionLoader.Load(ItemsJson, messages), messages);
+        return (ItemDefinitionLoader.Load(ItemsJson, messages).Registry, messages);
     }
 
     [Fact]

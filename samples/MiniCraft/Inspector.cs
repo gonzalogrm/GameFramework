@@ -4,6 +4,7 @@ using GF.Core;
 using GF.World;
 using GF.World.Entities;
 using GF.World.Events;
+using GF.World.Items;
 using GF.World.Map;
 using GF.World.Voxel;
 
@@ -26,8 +27,40 @@ public static class Inspector
             : "Destino: ninguno");
         sb.AppendLine();
         AppendEvents(sb, hub, e.Prototype);
+        AppendComponents(sb, e.Prototype);
+        AppendGear(sb, e);
         AppendProperties(sb, e.Properties);
         return sb.ToString();
+    }
+
+    /// <summary>Los componentes (comportamientos) del tipo, propios y heredados.</summary>
+    private static void AppendComponents(StringBuilder sb, Prototype? prototype)
+    {
+        var components = prototype?.AllComponents();
+        if (components is { Count: > 0 }) sb.AppendLine("Componentes: " + string.Join(", ", components));
+    }
+
+    /// <summary>
+    /// Lo que lleva la entidad: EQUIPO (armas y armaduras en cada ranura, con lo que dan) e INVENTARIO. Es lo de su variante salvo que haya cambiado; el dato
+    /// sale de los mismos prototipos de objeto que se comparten entre todas las entidades.
+    /// </summary>
+    private static void AppendGear(StringBuilder sb, Entity e)
+    {
+        var defs = ItemTypes.Registry;
+        var equipment = e.Equipment;
+        sb.AppendLine($"Equipamiento ({equipment.SlotCount} ranuras)   ataque +{Combat.Attack(e):0.#}  defensa +{Combat.Defense(e):0.#}:");
+        for (int s = 0; s < equipment.SlotCount; s++)
+        {
+            sb.Append("  ").Append(ItemText.SlotTitle(equipment.Layout, s).PadRight(9)).Append(": ");
+            sb.AppendLine(equipment.Get(s) is { } id ? ItemText.Name(defs.Get(id)) + ItemText.Stats(defs.Get(id)) : "-");
+        }
+        var inventory = e.Inventory;
+        int used = inventory.Stacks.Count();
+        sb.AppendLine($"Inventario ({used}/{inventory.Size}):");
+        if (used == 0) sb.AppendLine("  (vacio)");
+        foreach (var stack in inventory.Stacks)
+            sb.AppendLine($"  {ItemText.Name(defs.Get(stack.Item))} x{stack.Count}{ItemText.Stats(defs.Get(stack.Item))}");
+        sb.AppendLine();
     }
 
     public static string Describe(World<ushort> world, BlockRegistry blocks, CellCoord cell, EventHub? hub = null)

@@ -6,16 +6,88 @@ namespace GF.World.Items;
 public sealed record ItemEffect(string Type, float Amount);
 
 /// <summary>
-/// Definición de un tipo de objeto (se carga de JSON, ver ItemDefinitionLoader). Category: weapon, armor, accessory, potion, food,
-/// ingredient, misc... (libre; sirve para ordenar y filtrar). Slot != null = se puede equipar en una ranura de ESE tipo ("hand", "head"...).
-/// Attack suma daño y Defense resta daño recibido: cuentan todos los objetos equipados, así que una criatura con 3 ranuras de mano y 3 armas
-/// hace el daño de las 3. Use != null = consumible: al usarlo aplica sus efectos y gasta una unidad.
+/// Un tipo de objeto. Es una VISTA de un Prototype: todas sus propiedades (daño, defensa, apilado, ranura, efectos...) salen de él y de sus ancestros, que
+/// pueden ser VARIOS (herencia múltiple: en  knife = [item, weapon]  gana el último, weapon). El inventario y el equipamiento solo guardan el ID de
+/// este objeto, así que un prototipo lo comparten miles de entidades sin copiarlo.
+///
+/// Propiedades que el motor entiende (todas opcionales, se heredan y se pueden redefinir):
+///   title (texto), category (texto), max_stack (entero; por defecto 64, o 1 si es equipable), slot (texto: tipo de ranura donde se equipa),
+///   attack y defense (decimales), use_&lt;efecto&gt; (decimal: consumible; use_heal = 3 cura 3). Cualquier otra propiedad se consulta con Get.
 /// </summary>
-public sealed record ItemDef(string Name, string Title, int MaxStack = 64, string? Slot = null, float Attack = 0f, float Defense = 0f,
-    string Category = "misc", IReadOnlyList<ItemEffect>? Use = null)
+public sealed class ItemDef
 {
+    public const string UsePrefix = "use_";
+
+    /// <summary>Atajo para crear un objeto suelto (sin herencia) desde código o tests: se arma un prototipo propio con estos valores.</summary>
+    public ItemDef(string Name, string Title, int MaxStack = 64, string? Slot = null, float Attack = 0f, float Defense = 0f,
+        string Category = "misc", IReadOnlyList<ItemEffect>? Use = null)
+        : this(Name, Build(Name, Title, MaxStack, Slot, Attack, Defense, Category, Use), false) { }
+
+    internal ItemDef(string name, Prototype prototype, bool isRuntime)
+    {
+        Name = name;
+        Prototype = prototype;
+        IsRuntime = isRuntime;
+
+        string title = Get("title") is { Kind: PropKind.Text } t ? t.AsText : "";
+        Title = title.Length > 0 ? title : name;
+        string slot = Get("slot") is { Kind: PropKind.Text } sl ? sl.AsText.Trim().ToLowerInvariant() : "";
+        Slot = slot.Length > 0 ? slot : null;
+        Attack = Math.Max(0f, Get("attack")?.AsFloat ?? 0f);
+        Defense = Math.Max(0f, Get("defense")?.AsFloat ?? 0f);
+
+        List<ItemEffect>? effects = null;
+        foreach (var def in prototype.AllDefs())
+        {
+            string propName = PropertyIds.NameOf(def.Id);
+            if (propName.Length > UsePrefix.Length && propName.StartsWith(UsePrefix, StringComparison.Ordinal) && def.Default.Number != 0)
+                (effects ??= new List<ItemEffect>()).Add(new ItemEffect(propName[UsePrefix.Length..], (float)def.Default.Number));
+        }
+        Use = effects;
+        Components = prototype.AllComponents();
+
+        // Sin max_stack: 64 por defecto, o 1 si se equipa.
+        MaxStack = Get("max_stack") is { } ms ? Math.Max(1, ms.AsInt) : Slot != null ? 1 : 64;
+        string category = Get("category") is { Kind: PropKind.Text } c ? c.AsText.Trim().ToLowerInvariant() : "";
+        Category = category.Length > 0 ? category : Slot != null ? (Attack > Defense ? "weapon" : "armor") : Use != null ? "consumable" : "misc";
+    }
+
+    public string Name { get; }
+    public string Title { get; }
+    /// <summary>El prototipo (con su herencia) del que salen todas las propiedades.</summary>
+    public Prototype Prototype { get; }
+    /// <summary>true = creado durante la partida como variante de otro objeto (se guarda con el mundo). false = definido en el JSON de objetos.</summary>
+    public bool IsRuntime { get; }
+    public int MaxStack { get; }
+    /// <summary>Tipo de ranura donde se equipa ("hand", "head"...), o null.</summary>
+    public string? Slot { get; }
+    public float Attack { get; }
+    public float Defense { get; }
+    public string Category { get; }
+    public IReadOnlyList<ItemEffect>? Use { get; }
+    /// <summary>Componentes (propios y heredados): el juego les asocia comportamientos (eventos que recibe, efectos por tick...).</summary>
+    public IReadOnlyList<string> Components { get; }
+    public bool HasComponent(string name) => Prototype.HasComponent(name);
+
     public bool IsEquippable => Slot != null;
     public bool IsUsable => Use is { Count: > 0 };
+
+    /// <summary>¿Hereda (directa o indirectamente) de este prototipo? Polimorfismo: un cuchillo "es" un arma y es un objeto.</summary>
+    public bool Is(Prototype other) => Prototype.Is(other);
+
+    /// <summary>Una propiedad cualquiera, ya resuelta por la herencia (null si ningún ancestro la define).</summary>
+    public PropValue? Get(string name) =>
+        PropertyOps.TryGet(Prototype, null, PropertyIds.Of(name), out var v) ? v : null;
+
+    private static Prototype Build(string name, string title, int maxStack, string? slot, float attack, float defense, string category,
+        IReadOnlyList<ItemEffect>? use)
+    {
+        var p = new Prototype(name).Text("title", title).Int("max_stack", maxStack).Text("category", category)
+            .Float("attack", attack).Float("defense", defense);
+        if (slot != null) p.Text("slot", slot);
+        if (use != null) foreach (var e in use) p.Float(UsePrefix + e.Type, e.Amount);
+        return p;
+    }
 }
 
 /// <summary>Una pila de objetos en una ranura del inventario. Count 0 = vacía.</summary>

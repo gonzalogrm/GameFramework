@@ -12,6 +12,7 @@
 //                  se llama por su tipo y un numero: hand, hand2, hand3, head. Por defecto ["hand", "head", "chest", "feet"]; se hereda
 //   inventory      [{ "item": "bone", "count": 2 }]      equipment   { "hand": "club", "hand2": "club", "head": "leather_cap" }
 //                  (el objeto debe encajar en el tipo de la ranura: las armas en "hand", los cascos en "head"...)
+//   components     componentes (comportamientos) del tipo, heredados: "chase_player" (IA: persigue y ataca al jugador), "container" (se abre al golpearlo)...
 //   spawnWeight    > 0 = el spawner de enemigos lo crea al cargar chunks, con ese peso relativo frente a los demas
 //   variants       cada una es un prototipo hijo: puede cambiar propiedades, inventario y equipamiento. "weight" = probabilidad relativa
 //                  de que aparezca. Si una variante no indica inventory/equipment, hereda los del tipo; si los indica, los sustituyen
@@ -28,7 +29,13 @@
       "inventory": [ { "item": "apple", "count": 3 } ] },
 
     { "name": "enemy", "abstract": true, "parent": "creature", "title": "enemigo",
+      "components": ["chase_player"],
       "properties": { "species": "Enemigo", "damage": 1.0,   /* golpe base; se le SUMA el ataque de todo lo equipado */  "attack_cooldown": 1.0, "aggro": 20.0 } },
+
+    // Alijo: aqui se esconden las armas legendarias. No se mueve; se abre golpeandolo y su contenido pasa al jugador
+    { "name": "relic_cache", "parent": "creature", "title": "alijo", "speed": 0.0, "size": [0.8, 0.8], "color": [230, 200, 60], "inventorySize": 4,
+      "components": ["container"],
+      "properties": { "species": "Alijo", "hp": 1.0, "max_hp": 1.0 } },
 
     { "name": "villager", "parent": "creature", "title": "aldeano",
       "speed": 3.0, "size": [0.6, 1.8], "color": [255, 200, 60],
@@ -66,7 +73,9 @@
       "variants": [
         { "name": "brute", "weight": 3,
           "equipment": { "hand": "club", "hand2": "club", "hand3": "club" } },
+        // Un LIDER: al aparecer recibe un cuchillo UNICO creado en partida como variante de "knife", con su nombre (ver EnemySpawner).
         { "name": "warlord", "weight": 1,
+          "properties": { "leader": true },
           "equipment": { "hand": "club", "hand2": "club", "hand3": "iron_sword", "head": "iron_helmet" },
           "inventory": [ { "item": "health_potion", "count": 1 } ] }
       ] }

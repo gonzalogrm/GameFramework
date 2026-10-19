@@ -112,7 +112,7 @@ public static class UniverseGenerator
     private static readonly string[] Codas = { "", "n", "r", "s", "x", "th", "l", "m" };
 
     /// <summary>Nombre pronunciable (2 o 3 sílabas) a partir de un RNG.</summary>
-    internal static string MakeName(SplitMixRandom rng)
+    public static string MakeName(SplitMixRandom rng)
     {
         int syllables = rng.Next(2, 4);
         var name = new System.Text.StringBuilder();

@@ -30,6 +30,9 @@ public static class EntityTypes
     public static ushort Caravan { get; private set; }
     public static ushort Dog { get; private set; }
     public static ushort Zombie { get; private set; }
+    /// <summary>Alijo donde se esconde un arma legendaria (contenedor: se abre golpeándolo).</summary>
+    public static ushort RelicCache { get; private set; }
+    public static ushort Ogre { get; private set; }
 
     /// <returns>Avisos de la carga (objetos desconocidos...). Un archivo ausente o inválido lanza una excepción con el motivo.</returns>
     public static List<string> Load(string path, Registry<ItemDef> items)
@@ -43,12 +46,14 @@ public static class EntityTypes
         PlayerProto = set.Get("player");
         PlayerInfo = set.Info("player");
         EnemyProto = set.Get("enemy");
+        RelicCache = set.Types.IdOf("relic_cache");
         VillagerProto = set.Get("villager");
         DogProto = set.Get("dog");
         Villager = set.Types.IdOf("villager");
         Caravan = set.Types.IdOf("caravan");
         Dog = set.Types.IdOf("dog");
         Zombie = set.Types.IdOf("zombie");
+        Ogre = set.Types.IdOf("ogre");
         return messages;
     }
 }

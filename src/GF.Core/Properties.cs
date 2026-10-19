@@ -78,6 +78,9 @@ public readonly record struct PropertyView(string Name, PropKind Kind, PropValue
 
 /// <summary>
 /// Definición de un tipo: propiedades y valores por defecto. Se construye una vez al arrancar y después es de solo lectura.
+/// HERENCIA MÚLTIPLE: un prototipo puede heredar de varios; el ORDEN importa y el ÚLTIMO gana. En  knife = [item, weapon]  una propiedad que tengan
+/// los dos sale del arma; las propias del hijo mandan sobre todas. La resolución es la linealización C3 (la de Python) con los padres en orden
+/// inverso: en una herencia en diamante el ancestro común queda siempre por detrás de los dos caminos.
 ///     var criatura = new Prototype("criatura").Text("nombre", "").Float("vida", 10f).Float("vida_max", 10f);
 ///     var perro = criatura.Derive("perro").Text("especie", "Perro").Float("vida", 12f);   // hereda y cambia un valor
 /// </summary>
@@ -85,31 +88,108 @@ public sealed class Prototype
 {
     private readonly Dictionary<ushort, PropDef> _defs = new();
 
-    public string Name { get; }
-    public Prototype? Parent { get; }
+    private readonly Prototype[] _parents;
+    private readonly Prototype[] _lineage;
+    private HashSet<string>? _components;
 
-    public Prototype(string name, Prototype? parent = null)
+    public string Name { get; }
+
+    /// <summary>Los padres, en el orden en que se declararon (el último tiene más prioridad).</summary>
+    public IReadOnlyList<Prototype> Parents => _parents;
+
+    /// <summary>El padre de más prioridad (el último declarado): con herencia simple, el único padre. null si no hereda.</summary>
+    public Prototype? Parent => _parents.Length > 0 ? _parents[^1] : null;
+
+    /// <summary>Orden de resolución: este prototipo y luego sus ancestros por prioridad decreciente. La primera definición de una propiedad en esta lista es la que vale.</summary>
+    public IReadOnlyList<Prototype> Lineage => _lineage;
+
+    public Prototype(string name, Prototype? parent = null) : this(name, parent == null ? Array.Empty<Prototype>() : new[] { parent }) { }
+
+    /// <param name="parents">Padres en orden: si dos tienen la misma propiedad, vale la del ÚLTIMO.</param>
+    public Prototype(string name, IEnumerable<Prototype> parents)
     {
         Name = name;
-        Parent = parent;
+        _parents = parents.Distinct().ToArray();   // un padre repetido cuenta una vez (por la última posición)
+        _lineage = Linearize(this, _parents);
+        // Una misma propiedad no puede tener tipos distintos en prototipos de la herencia.
+        var kinds = new Dictionary<ushort, PropKind>();
+        foreach (var p in _lineage)
+            foreach (var def in p._defs.Values)
+                if (kinds.TryGetValue(def.Id.Value, out var kind) && kind != def.Kind)
+                    throw new InvalidOperationException($"'{name}': la propiedad '{PropertyIds.NameOf(def.Id)}' es {kind} en un ancestro y {def.Kind} en otro.");
+                else kinds[def.Id.Value] = def.Kind;
     }
 
     public Prototype Derive(string name) => new(name, this);
+
+    // ------------------------------------------------------------------ componentes
+
+    /// <summary>
+    /// Añade un COMPONENTE: una etiqueta con nombre que el juego asocia a un comportamiento (eventos que recibe, IA, efectos por tick...). Se hereda: un
+    /// hijo tiene los de todos sus ancestros. Se puede añadir también a prototipos creados en tiempo de ejecución.
+    /// </summary>
+    public Prototype AddComponent(string name)
+    {
+        (_components ??= new HashSet<string>(StringComparer.Ordinal)).Add(name.Trim().ToLowerInvariant());
+        return this;
+    }
+
+    public bool HasComponent(string name)
+    {
+        name = name.Trim().ToLowerInvariant();
+        foreach (var p in _lineage) if (p._components != null && p._components.Contains(name)) return true;
+        return false;
+    }
+
+    /// <summary>Todos los componentes (propios y heredados), sin repetir.</summary>
+    public IReadOnlyList<string> AllComponents()
+    {
+        var list = new List<string>();
+        foreach (var p in _lineage)
+            if (p._components != null)
+                foreach (var c in p._components) if (!list.Contains(c)) list.Add(c);
+        return list;
+    }
+
+    /// <summary>Linealización C3 con los padres en orden inverso (el último primero): el prototipo y sus ancestros por prioridad.</summary>
+    private static Prototype[] Linearize(Prototype self, Prototype[] parents)
+    {
+		var ordered = Enumerable.Reverse(parents).ToList();  // el de más prioridad primero
+		var sequences = ordered.Select(p => p._lineage.ToList()).ToList();
+        sequences.Add(ordered);
+        var result = new List<Prototype> { self };
+        while (true)
+        {
+            sequences.RemoveAll(s => s.Count == 0);
+            if (sequences.Count == 0) return result.ToArray();
+
+            Prototype? next = null;
+            foreach (var seq in sequences)
+            {
+                var head = seq[0];
+                if (sequences.Any(other => other.IndexOf(head) > 0)) continue;   // sigue siendo ancestro de otro que aún no se ha colocado
+                next = head;
+                break;
+            }
+            if (next == null)
+                throw new InvalidOperationException($"'{self.Name}': el orden de herencia es inconsistente (los padres ponen a sus ancestros en órdenes contradictorios).");
+            result.Add(next);
+            foreach (var seq in sequences) if (seq.Count > 0 && ReferenceEquals(seq[0], next)) seq.RemoveAt(0);
+        }
+    }
 
     /// <summary>"perro > criatura": el tipo y sus ancestros.</summary>
     public string ChainName
     {
         get
         {
-            var parts = new List<string>();
-            for (var p = this; p != null; p = p.Parent) parts.Add(p.Name);
-            return string.Join(" > ", parts);
+            return string.Join(" > ", _lineage.Select(p => p.Name));
         }
     }
 
     public bool Is(Prototype other)
     {
-        for (var p = this; p != null; p = p.Parent) if (ReferenceEquals(p, other)) return true;
+        foreach (var p in _lineage) if (ReferenceEquals(p, other)) return true;
         return false;
     }
 
@@ -130,7 +210,7 @@ public sealed class Prototype
     /// <summary>Busca la definición en este tipo y, si no está, en sus ancestros.</summary>
     public bool TryGetDef(PropertyId id, out PropDef def)
     {
-        for (var p = this; p != null; p = p.Parent)
+        foreach (var p in _lineage)   // por prioridad: la propia, luego la del último padre...
             if (p._defs.TryGetValue(id.Value, out def!)) return true;
         def = null!;
         return false;
@@ -139,9 +219,8 @@ public sealed class Prototype
     /// <summary>Todas las propiedades efectivas: primero las del ancestro más lejano; un hijo que redefine un valor lo sustituye en su sitio.</summary>
     public List<PropDef> AllDefs()
     {
-        var chain = new List<Prototype>();
-        for (var p = this; p != null; p = p.Parent) chain.Add(p);
-        chain.Reverse();
+        var chain = new List<Prototype>(_lineage);
+        chain.Reverse();   // de menor a mayor prioridad: la que vale al final sustituye a las anteriores
 
         var result = new List<PropDef>();
         var index = new Dictionary<ushort, int>();

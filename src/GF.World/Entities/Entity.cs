@@ -144,6 +144,21 @@ public sealed class Entity : IEventReceiver, IInventoryHolder
     /// Solo si el inventario DIFIERE de la plantilla de su variante (si no, ya está en el prototipo y no se guarda nada). Si difiere se guarda
     /// entero, y una lista vacía significa "se vació". null = sin cambios.
     /// </summary>
+    // ------------------------------------------------------------------ consultas sin crear el inventario
+
+    /// <summary>Cuántas ranuras de equipamiento tiene, sin crear el equipamiento si aún es el de la plantilla.</summary>
+    public int GearSlotCount => _equipment?.SlotCount ?? Loadout?.GearLength ?? 0;
+
+    /// <summary>Objeto equipado en una ranura (desde la plantilla si la instancia no ha tocado su equipo). null si está vacía.</summary>
+    public ushort? GearAt(int slot) => _equipment != null ? _equipment.Get(slot) : Loadout?.Gear(slot);
+
+    /// <summary>¿Lleva este objeto, en el inventario o equipado? Mira la plantilla si la instancia no ha tocado su inventario o su equipo (no los crea).</summary>
+    public bool Holds(ushort item)
+    {
+        for (int s = 0; s < GearSlotCount; s++) if (GearAt(s) == item) return true;
+        return _inventory != null ? _inventory.CountOf(item) > 0 : (Loadout?.CountOf(item) ?? 0) > 0;
+    }
+
     internal List<StackRecord>? ExportItems(Registry<ItemDef>? items)
     {
         if (items == null || _inventory == null) return null;

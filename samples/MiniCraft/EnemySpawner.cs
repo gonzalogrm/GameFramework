@@ -1,6 +1,8 @@
 using GF.Core;
 using GF.World;
+using GF.World.Cosmos;
 using GF.World.Entities;
+using GF.World.History;
 using GF.World.Map;
 
 namespace MiniCraft;
@@ -44,6 +46,12 @@ public sealed class EnemySpawner
 
     public int EnemyCount => _count;
 
+    /// <summary>Objetos legendarios del mundo: al generarse la columna donde están, se colocan (en un alijo o con un guardián).</summary>
+    public LegendaryRegistry? Legendary { get; set; }
+
+    /// <summary>¿Ya se generó esta columna de chunks (cx envuelto, cz)? Sus objetos legendarios ya se colocaron.</summary>
+    public bool IsPopulated(int cx, int cz) => _populated.Contains((cx, cz));
+
     /// <summary>
     /// Las columnas ya pobladas como TRAMOS [z, x0, x1] (las columnas visitadas son contiguas: un tramo sustituye a decenas de números).
     /// </summary>
@@ -80,11 +88,14 @@ public sealed class EnemySpawner
 
     private void OnChunkLoaded(ChunkCoord c)
     {
-        if (c.Y != 0 || _settings.EnemiesPerChunk <= 0f || _tableTotal <= 0) return;   // una vez por columna (el chunk más bajo)
+        if (c.Y != 0) return;   // una vez por columna (el chunk más bajo)
         if (_player() is not { } player) return;
 
         int cx = _scale.WrapChunkX(c.X);
         if (!_populated.Add((cx, c.Z))) return;
+
+        PlaceArtifacts(cx, c.Z);   // los objetos legendarios de esta columna, aunque los enemigos comunes estén desactivados
+        if (_settings.EnemiesPerChunk <= 0f || _tableTotal <= 0) return;
 
         var rng = new SplitMixRandom(Hashing.Combine(_seed, cx, 0xE4E3, c.Z));
         float expected = _settings.EnemiesPerChunk;
@@ -103,9 +114,62 @@ public sealed class EnemySpawner
             ushort type = PickType(rng);
             var def = EntityTypes.Registry.Get(type);
             var enemy = _store.Spawn(type, new Vec3d(wx + 0.5, ground + 2.0, wz + 0.5), def.DefaultSpeed, null, PickVariant(def, rng));
+            if (IsLeader(def, enemy.Variant)) GiveLeaderWeapon(enemy, rng);
             _npcs.BeginWander(enemy);
             _count++;
         }
+    }
+
+    /// <summary>
+    /// Coloca los objetos legendarios cuya columna se acaba de generar. ESCONDIDO: un alijo (entidad contenedor) con el arma en su inventario, en las coordenadas
+    /// del objeto; se abre golpeándolo. EN POSESIÓN: un guardián (ogro líder) que lleva el arma en su última ranura de mano. En los dos casos es solo un
+    /// objeto en un inventario o equipo de una entidad: se guarda como cualquier cambio de entidad.
+    /// </summary>
+    private void PlaceArtifacts(int cx, int cz)
+    {
+        if (Legendary == null) return;
+        var items = ItemTypes.Registry;
+        foreach (var a in Legendary.ForColumn(cx, cz))
+        {
+            int ground = MiniCraftClimate.ToBlockHeight(_climate.Sample(a.X, a.Z).Height);
+            if (a.Fate == ArtifactFate.Hidden)
+            {
+                var cache = _store.Spawn(EntityTypes.RelicCache, new Vec3d(a.X + 0.5, ground + 1.0, a.Z + 0.5), 0.0);
+                cache.Inventory.Add(items, a.ItemId, 1);
+                continue;
+            }
+
+            var def = EntityTypes.Registry.Get(EntityTypes.Ogre);
+            int variant = def.Variants == null ? 0 : Math.Max(0, def.Variants.ToList().FindIndex(v => v.Name == "warlord"));
+            var guardian = _store.Spawn(EntityTypes.Ogre, new Vec3d(a.X + 0.5, ground + 2.0, a.Z + 0.5), def.DefaultSpeed, null, variant);
+            if (IsLeader(def, variant)) GiveLeaderWeapon(guardian, new SplitMixRandom(Hashing.Combine(_seed, cx, 0x6A4D, cz)));
+            var weapon = items.Get(a.ItemId);
+            for (int slot = guardian.Equipment.SlotCount - 1; slot >= 0; slot--)   // la última ranura del tipo que le sirve
+                if (guardian.Equipment.Layout.Kind(slot) == weapon.Slot) { guardian.Equipment.Set(slot, a.ItemId); break; }
+            _npcs.BeginWander(guardian);
+            _count++;
+        }
+    }
+
+    private static bool IsLeader(EntityDef def, int variant) =>
+        def.Variants != null && variant < def.Variants.Count &&
+        PropertyOps.TryGet(def.Variants[variant].Prototype, null, PropertyIds.Of("leader"), out var v) && v.AsBool;
+
+    /// <summary>
+    /// Los líderes llevan un arma ÚNICA creada en tiempo de ejecución: una variante de "knife" con el nombre ficticio del líder y más
+    /// ataque que el normal. El objeto nuevo es un prototipo más, con su ID; la entidad solo guarda ese ID en su ranura, y el mundo guarda el objeto
+    /// (nombre, objeto base y lo que cambia). Determinista: el nombre y el ataque salen del RNG de la columna.
+    /// </summary>
+    private void GiveLeaderWeapon(Entity enemy, SplitMixRandom rng)
+    {
+        var catalog = ItemTypes.Catalog;
+        string leader = UniverseGenerator.MakeName(rng);
+        float baseAttack = PropertyOps.Get(catalog.GetPrototype("knife"), null, PropertyIds.Of("attack")).AsFloat;
+        var weapon = catalog.CreateRuntime("knife", $"knife_of_{leader.ToLowerInvariant()}_{(uint)_seed:x8}", $"Cuchillo de {leader}",   // el nombre lleva el mundo: puede viajar con el jugador
+            new Dictionary<string, PropValue> { ["attack"] = PropValue.Of(baseAttack + 1f + rng.NextFloat() * 3f) });
+        enemy.Set("name", leader);
+        int slot = enemy.Equipment.FindSlot("hand");
+        if (slot >= 0) enemy.Equipment.Set(slot, catalog.Registry.IdOf(weapon.Name));
     }
 
     /// <summary>Tipo de enemigo al azar según su spawnWeight.</summary>

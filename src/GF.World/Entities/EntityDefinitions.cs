@@ -24,6 +24,9 @@ public sealed class LoadoutTemplate
     }
 
     public IReadOnlyList<ItemStack> Items => _items;
+    public int GearLength => _gear.Length;
+    public int CountOf(ushort item) => _totals.GetValueOrDefault(item);
+
     /// <summary>Objeto de la ranura (por índice de su SlotLayout) o null.</summary>
     public ushort? Gear(int slot) => slot < _gear.Length ? _gear[slot] : null;
 
@@ -145,6 +148,7 @@ public static class EntityDefinitionLoader
             string title = spec.Title ?? spec.Name;
             var proto = new Prototype(title, parent?.Proto);
             ApplyProperties(proto, spec.Properties, name, messages);
+            if (spec.Components != null) foreach (var comp in spec.Components) proto.AddComponent(comp);
 
             float width = spec.Size is { Length: >= 2 } size ? size[0] : parent?.Width ?? 0.6f;
             float height = spec.Size is { Length: >= 2 } size2 ? size2[1] : parent?.Height ?? 1.8f;
@@ -163,6 +167,7 @@ public static class EntityDefinitionLoader
                     if (!names.Add(vname)) { messages.Add($"'{name}': la variante '{vname}' está repetida: se ignora."); continue; }
                     var vproto = new Prototype($"{title}/{vname}", proto);
                     ApplyProperties(vproto, v.Properties, $"{name}/{vname}", messages);
+                    if (v.Components != null) foreach (var comp in v.Components) vproto.AddComponent(comp);
                     var vload = BuildLoadout(v.Inventory, v.Equipment, loadout, items, inventorySize, slots, messages, $"{name}/{vname}");
                     variants.Add(new EntityVariant(vname, Math.Max(0, v.Weight), vproto, vload));
                 }
@@ -289,6 +294,7 @@ public static class EntityDefinitionLoader
         public int? InventorySize { get; set; }
         public string[]? Slots { get; set; }
         public int SpawnWeight { get; set; }
+        public List<string>? Components { get; set; }
         public Dictionary<string, JsonElement>? Properties { get; set; }
         public List<ItemSpec>? Inventory { get; set; }
         public Dictionary<string, string>? Equipment { get; set; }
@@ -299,6 +305,7 @@ public static class EntityDefinitionLoader
     {
         public string Name { get; set; } = "";
         public int Weight { get; set; } = 1;
+        public List<string>? Components { get; set; }
         public Dictionary<string, JsonElement>? Properties { get; set; }
         public List<ItemSpec>? Inventory { get; set; }
         public Dictionary<string, string>? Equipment { get; set; }

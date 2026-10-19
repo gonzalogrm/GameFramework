@@ -105,7 +105,8 @@ public sealed class EventHub
     /// </summary>
     private Action<object, GameEvent, EventHub>? FindHandler(Prototype? prototype, EventKind kind)
     {
-        for (var p = prototype; p != null; p = p.Parent)
+        if (prototype == null) return null;
+        foreach (var p in prototype.Lineage)   // con herencia múltiple: por prioridad (el último padre antes)
         {
             if (!_handlers.TryGetValue(p, out var table)) continue;
             for (var k = kind; k != null; k = k.Parent)
@@ -120,7 +121,8 @@ public sealed class EventHub
     public List<EventKind> AcceptedKinds(Prototype? prototype)
     {
         var result = new List<EventKind>();
-        for (var p = prototype; p != null; p = p.Parent)
+        if (prototype == null) return result;
+        foreach (var p in prototype.Lineage)
             if (_handlers.TryGetValue(p, out var table))
                 foreach (var kind in table.Keys)
                     if (!result.Contains(kind)) result.Add(kind);

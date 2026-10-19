@@ -62,12 +62,25 @@ public sealed class PlayerState : IEventReceiver, IInventoryHolder
         }
     }
 
-    public PlayerSave Export() => new()
+    /// <summary>
+    /// El personaje es UNIVERSAL: vida, inventario y equipo viajan de un mundo a otro. Los objetos creados en partida (legendarios, armas únicas) solo existen en el
+    /// catálogo de su mundo, así que se guardan AQUÍ las definiciones de los que lleva (solo el delta) y cada mundo las recrea al abrirse.
+    /// </summary>
+    public PlayerSave Export(ItemCatalog catalog)
     {
-        Hp = Hp,
-        Inventory = Inventory.Export(ItemTypes.Registry),
-        Gear = Equipment.Export(ItemTypes.Registry),
-    };
+        var defs = catalog.Registry;
+        var carried = new List<string>();
+        foreach (var stack in Inventory.Stacks) if (defs.Get(stack.Item).IsRuntime) carried.Add(defs.Get(stack.Item).Name);
+        for (int s = 0; s < Equipment.SlotCount; s++) if (Equipment.Get(s) is { } id && defs.Get(id).IsRuntime) carried.Add(defs.Get(id).Name);
+        var items = catalog.ExportRuntimeFor(carried);
+        return new PlayerSave
+        {
+            Hp = Hp,
+            Inventory = Inventory.Export(defs),
+            Gear = Equipment.Export(defs),
+            Items = items.Count == 0 ? null : items,
+        };
+    }
 
     public void Restore(PlayerSave save)
     {

@@ -42,26 +42,6 @@ public sealed class InventoryScene : UiScene
         if (Game.Input.Pressed("Inventory") || Game.Input.Pressed("Pause")) Game.Scenes.Pop();
     }
 
-    /// <summary>Nombre en pantalla de un tipo de ranura (los desconocidos salen tal cual).</summary>
-    private static string KindTitle(string kind) => kind switch
-    {
-        "hand" => "Mano",
-        "head" => "Cabeza",
-        "chest" => "Torso",
-        "feet" => "Pies",
-        "ring" => "Anillo",
-        _ => kind,
-    };
-
-    private static string Stats(ItemDef def)
-    {
-        var parts = new List<string>();
-        if (def.Attack > 0) parts.Add($"ataque +{def.Attack:0.#}");
-        if (def.Defense > 0) parts.Add($"defensa +{def.Defense:0.#}");
-        if (def.Use is { } use) parts.AddRange(use.Select(e => $"{e.Type} {e.Amount:0.#}"));
-        return parts.Count == 0 ? "" : " (" + string.Join(", ", parts) + ")";
-    }
-
     private void Fill()
     {
         var defs = ItemTypes.Registry;
@@ -81,8 +61,8 @@ public sealed class InventoryScene : UiScene
         for (int i = 0; i < equipment.SlotCount; i++)
         {
             int slot = i;
-            string name = equipment.Get(slot) is { } id ? defs.Get(id).Title : "-";
-            _list.Widgets.Add(Ui.Button($"{KindTitle(equipment.Layout.Kind(slot))}: {name}", () =>
+            string name = equipment.Get(slot) is { } id ? ItemText.Name(defs.Get(id)) : "-";
+            _list.Widgets.Add(Ui.Button($"{ItemText.SlotTitle(equipment.Layout, slot)}: {name}", () =>
             {
                 ItemOps.Unequip(inventory, equipment, defs, slot);
                 _note = "";
@@ -99,10 +79,10 @@ public sealed class InventoryScene : UiScene
             shown++;
             var def = defs.Get(stack.Item);
             int index = i;
-            string text = $"{def.Title} x{stack.Count}{Stats(def)}";
+            string text = $"{ItemText.Name(def)} x{stack.Count}{ItemText.Stats(def)}";
             if (def.IsEquippable)
             {
-                _list.Widgets.Add(Ui.Button($"[{KindTitle(def.Slot!)}] {text}", () =>
+                _list.Widgets.Add(Ui.Button($"[{ItemText.KindTitle(def.Slot!)}] {text}", () =>
                 {
                     _note = ItemOps.Equip(inventory, equipment, defs, index) ? "" : "No se puede equipar (sin ranura o sin sitio)";
                     Fill();

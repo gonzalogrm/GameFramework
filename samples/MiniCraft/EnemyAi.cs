@@ -30,7 +30,8 @@ internal sealed class EnemyAi
         out float wishX, out float wishZ)
     {
         wishX = wishZ = 0f;
-        if (e.Prototype is not { } proto || !proto.Is(EntityTypes.EnemyProto)) return false;
+        // La IA es un COMPONENTE del tipo ("chase_player" en entitytypes.json), no una comprobación de tipo: cualquier tipo o variante puede tenerla.
+        if (e.Prototype is not { } proto || !proto.HasComponent("chase_player")) return false;
 
         st.AttackCooldown -= dt;
         double dx = player.X - local.X, dz = player.Z - local.Z, dy = player.Y - local.Y;
