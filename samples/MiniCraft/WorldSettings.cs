@@ -22,16 +22,31 @@ public sealed class WorldSettings
 
     // ----- Relieve -----
     public float SeaLevelFraction { get; set; } = 0.5f;       // nivel del mar, fracción de la altura
-    public float ContinentSize { get; set; } = 6000f;         // tamaño típico de un continente
-    public float MountainSize { get; set; } = 1500f;          // tamaño de las cordilleras
-    public float DetailSize { get; set; } = 110f;             // tamaño de las colinas
-    public float ContinentAmplitude { get; set; } = 0.25f;    // fracción de la altura
-    public float MountainAmplitude { get; set; } = 0.53f;
-    public float DetailAmplitude { get; set; } = 0.08f;
-    public float LandBias { get; set; } = 0f;                 // >0 más tierra, <0 más océano
+    public float ContinentSize { get; set; } = 24000f;         // tamaño típico de un continente
+    public float MountainSize { get; set; } = 3500f;          // tamaño de las cordilleras
+    public float DetailSize { get; set; } = 80f;             // tamaño de las colinas
+    public float ContinentAmplitude { get; set; } = 0.43f;    // fracción de la altura
+    public float MountainAmplitude { get; set; } = 1.0f;
+    public float DetailAmplitude { get; set; } = 0.02f;
+    public float LandBias { get; set; } = 0.1f;                 // >0 más tierra, <0 más océano
     public int ContinentOctaves { get; set; } = 3;
-    public int MountainOctaves { get; set; } = 4;
-    public int DetailOctaves { get; set; } = 4;
+    public int MountainOctaves { get; set; } = 5;
+    public int DetailOctaves { get; set; } = 3;
+
+    // ----- Relieve: llanuras, colinas, cordilleras súbitas, mesetas, lagos, ríos y valles -----
+    public float RangeCoverage { get; set; } = 0.15f;         // fracción de la tierra cubierta por cordilleras (el resto: llanuras, colinas, mesetas)
+    public float RangeSharpness { get; set; } = 0.10f;        // brusquedad del pie de las cordilleras: menor = más súbito
+    public float RangeWarp { get; set; } = 700f;              // deformación (domain warping) de las cordilleras, en bloques: más = más sinuosas
+    public float HillSize { get; set; } = 450f;               // tamaño de las colinas
+    public float HillAmplitude { get; set; } = 0.12f;         // altura de las colinas (fracción de la altura del mundo)
+    public float HillRegionSize { get; set; } = 2800f;        // tamaño de las regiones con colinas (entre ellas, llanura)
+    public float PlateauHeight { get; set; } = 10f;           // salto de las mesetas (acantilados), en bloques
+    public float Terracing { get; set; } = 0.35f;             // 0..1: terrazas escalonadas en algunas regiones
+    public float RiverSpacing { get; set; } = 2200f;          // separación típica de los ríos
+    public float RiverWidth { get; set; } = 14f;              // anchura del cauce, en bloques
+    public float ValleyWidth { get; set; } = 80f;             // anchura del valle a cada lado del río
+    public float ValleyDepth { get; set; } = 0.85f;           // 0..1: cuánto baja el terreno hacia el río
+    public float Lakes { get; set; } = 0.4f;                  // 0..1: cantidad de lagos en las llanuras
     public float MinHeightFraction { get; set; } = 0.05f;     // fondo marino mínimo
     public float MaxHeightFraction { get; set; } = 0.90f;     // cumbre máxima
 
@@ -166,6 +181,19 @@ public sealed class WorldSettings
         ContinentOctaves = I(nameof(ContinentOctaves), ContinentOctaves, 1, 8);
         MountainOctaves = I(nameof(MountainOctaves), MountainOctaves, 1, 8);
         DetailOctaves = I(nameof(DetailOctaves), DetailOctaves, 1, 8);
+        RangeCoverage = F(nameof(RangeCoverage), RangeCoverage, 0f, 0.6f);
+        RangeSharpness = F(nameof(RangeSharpness), RangeSharpness, 0.02f, 0.6f);
+        RangeWarp = F(nameof(RangeWarp), RangeWarp, 0f, 3000f);
+        HillSize = F(nameof(HillSize), HillSize, 50f, 5000f);
+        HillAmplitude = F(nameof(HillAmplitude), HillAmplitude, 0f, 0.5f);
+        HillRegionSize = F(nameof(HillRegionSize), HillRegionSize, 200f, 20_000f);
+        PlateauHeight = F(nameof(PlateauHeight), PlateauHeight, 0f, 40f);
+        Terracing = F(nameof(Terracing), Terracing, 0f, 1f);
+        RiverSpacing = F(nameof(RiverSpacing), RiverSpacing, 300f, 20_000f);
+        RiverWidth = F(nameof(RiverWidth), RiverWidth, 2f, 80f);
+        ValleyWidth = F(nameof(ValleyWidth), ValleyWidth, 10f, 400f);
+        ValleyDepth = F(nameof(ValleyDepth), ValleyDepth, 0f, 1f);
+        Lakes = F(nameof(Lakes), Lakes, 0f, 1f);
         MinHeightFraction = F(nameof(MinHeightFraction), MinHeightFraction, 0f, 0.5f);
         MaxHeightFraction = F(nameof(MaxHeightFraction), MaxHeightFraction, 0.5f, 1f);
         if (MaxHeightFraction < SeaLevelFraction + 0.1f)
