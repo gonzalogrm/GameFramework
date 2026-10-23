@@ -51,6 +51,7 @@ public sealed class DecorationStage : IGenerationStage<ushort>
         var o = shape.Origin(chunk.Coord);
         float mult = _climate.Settings.PropDensityMultiplier;
         if (mult <= 0f) return;
+        if (o.Y + shape.SizeY <= _climate.SeaLevel || o.Y > _climate.MaxHeightBlocks + 2) return;   // sin suelo donde poner plantas
 
         for (int z = 0; z < shape.SizeZ; z++)
         for (int x = 0; x < shape.SizeX; x++)

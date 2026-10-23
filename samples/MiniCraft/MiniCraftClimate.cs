@@ -21,6 +21,8 @@ public sealed class MiniCraftClimate : IClimateModel
     public INoise Noise { get; }
     public WorldSettings Settings => _s;
     public int SeaLevel { get; }
+    /// <summary>Altura máxima del terreno, en bloques (techo para saltarse los chunks que no tienen suelo).</summary>
+    public int MaxHeightBlocks => (int)_maxH;
     /// <summary>Altura máxima del suelo donde aún caben un tronco y una copa.</summary>
     public int MaxTreeGround => _s.WorldHeight - 14;
 

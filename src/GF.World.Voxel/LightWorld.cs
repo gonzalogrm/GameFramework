@@ -70,7 +70,7 @@ public sealed class LightWorld
         if (_chunks.TryGetValue(cc, out var data))
         {
             int i = shape.Index(lx, ly, lz);
-            ushort s = data.Sky[i], b = data.Block[i];
+            ushort s = data.GetSky(i), b = data.GetBlock(i);
             return new LightLevels(amb,
                 new Vector3(Rgb4.R(s), Rgb4.G(s), Rgb4.B(s)) * _sky,
                 new Vector3(Rgb4.R(b), Rgb4.G(b), Rgb4.B(b)), true);

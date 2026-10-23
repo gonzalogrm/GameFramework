@@ -32,6 +32,9 @@ public sealed class TreeStage : IGenerationStage<ushort>
         float density = _climate.Settings.TreeDensityMultiplier;
         int minGround = _climate.SeaLevel + _climate.Settings.BeachHeight;
 
+        // Sin suelo posible en este chunk: todo por debajo del nivel mínimo de árboles, o por encima de la cima más el árbol más alto.
+        if (o.Y + shape.SizeY <= minGround || o.Y > _climate.MaxHeightBlocks + 24) return;
+
         for (int wz = o.Z - CanopyRadius; wz < o.Z + shape.SizeZ + CanopyRadius; wz++)
         for (int wx = o.X - CanopyRadius; wx < o.X + shape.SizeX + CanopyRadius; wx++)
         {

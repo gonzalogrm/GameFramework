@@ -39,10 +39,54 @@ public readonly record struct LightLevels(Vector3 Ambient, Vector3 Sky, Vector3 
     public float Level { get { var t = Total; return 0.2126f * t.X + 0.7152f * t.Y + 0.0722f * t.Z; } }
 }
 
-/// <summary>Luz de las celdas de UN chunk (índice = ChunkShape.Index). La publica el mallador; se consulta desde el hilo principal.</summary>
+/// <summary>
+/// Una capa de luz de un chunk comprimida por TANDAS (valor repetido): el aire abierto es casi todo el mismo valor, y el subsuelo, cero. Ocupa unas decenas
+/// de KB en vez de los 64 KB del array completo; leer una celda es una búsqueda binaria entre las tandas.
+/// </summary>
+public sealed class RleU16
+{
+    private readonly ushort[] _values;
+    private readonly int[] _ends;   // _ends[k] = índice (exclusivo) donde termina la tanda k
+
+    private RleU16(ushort[] values, int[] ends) { _values = values; _ends = ends; }
+
+    public int RunCount => _ends.Length;
+
+    public static RleU16 Encode(ushort[] data)
+    {
+        var values = new List<ushort>();
+        var ends = new List<int>();
+        int i = 0;
+        while (i < data.Length)
+        {
+            ushort v = data[i];
+            int j = i + 1;
+            while (j < data.Length && data[j] == v) j++;
+            values.Add(v); ends.Add(j);
+            i = j;
+        }
+        return new RleU16(values.ToArray(), ends.ToArray());
+    }
+
+    public ushort Get(int index)
+    {
+        int lo = 0, hi = _ends.Length - 1;
+        while (lo < hi)
+        {
+            int mid = (lo + hi) >> 1;
+            if (index < _ends[mid]) hi = mid; else lo = mid + 1;
+        }
+        return _values[lo];
+    }
+}
+
+/// <summary>Luz de las celdas de UN chunk (índice = ChunkShape.Index), comprimida. La publica el mallador; se consulta desde el hilo principal.</summary>
 public sealed class LightChunk
 {
-    internal LightChunk(ushort[] sky, ushort[] block) { Sky = sky; Block = block; }
-    internal ushort[] Sky { get; }
-    internal ushort[] Block { get; }
+    private readonly RleU16 _sky, _block;
+
+    internal LightChunk(RleU16 sky, RleU16 block) { _sky = sky; _block = block; }
+
+    internal ushort GetSky(int index) => _sky.Get(index);
+    internal ushort GetBlock(int index) => _block.Get(index);
 }

@@ -54,7 +54,7 @@ public sealed class LightField
             int src = Index(x + Ox, y + Oy, z + Oz), dst = (y * Sz + z) * Sx + x;
             sky[dst] = Sky[src]; block[dst] = Block[src];
         }
-        return new LightChunk(sky, block);
+        return new LightChunk(RleU16.Encode(sky), RleU16.Encode(block));
     }
 }
 

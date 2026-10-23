@@ -4,9 +4,15 @@
 	<MonoGamePlatform>DesktopGL</MonoGamePlatform>
     <OutputType>Exe</OutputType>
     <ServerGarbageCollector>false</ServerGarbageCollector>
-    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <!-- El GC concurrente reserva memoria extra para el recolector en segundo plano; con tantas mallas grandes (LOH) conviene compactar y devolver memoria -->
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <TieredPGO>true</TieredPGO>
+    <AutoreleasePoolSupport>false</AutoreleasePoolSupport>
   </PropertyGroup>
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+    <RuntimeHostConfigurationOption Include="System.GC.RetainVM" Value="false" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\GF.World.Voxel\GF.World.Voxel.csproj" />
     <ProjectReference Include="..\..\src\GF.World.Tiles\GF.World.Tiles.csproj" />
