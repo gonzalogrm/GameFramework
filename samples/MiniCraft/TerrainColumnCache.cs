@@ -74,16 +74,38 @@ public sealed class TerrainColumnCache
         return GetColumn(cx, cz).Biome[(wx - cx * _size) + (wz - cz * _size) * _size];
     }
 
+    /// <summary>Desnivel (bloques) con un vecino a partir del cual la ladera queda al descubierto: roca en vez de hierba o arena.</summary>
+    private const int CliffDrop = 3;
+
     private ColumnData Compute(int canonicalChunkX, int chunkZ)
     {
-        var heights = new int[_size * _size];
-        var biomes = new ushort[_size * _size];
-        for (int z = 0; z < _size; z++)
-        for (int x = 0; x < _size; x++)
+        int size = _size, n = size + 2;   // las alturas llevan un anillo de 1 columna alrededor para ver el desnivel con los vecinos del borde
+        var ext = new int[n * n];
+        var samples = new ColumnSample[size * size];
+        for (int z = -1; z <= size; z++)
+        for (int x = -1; x <= size; x++)
         {
-            var s = _climate.Sample(canonicalChunkX * _size + x, chunkZ * _size + z);
-            heights[x + z * _size] = MiniCraftClimate.ToBlockHeight(s.Height);
-            biomes[x + z * _size] = _climate.Classify(s);
+            var s = _climate.Sample(canonicalChunkX * size + x, chunkZ * size + z);
+            ext[(x + 1) + (z + 1) * n] = MiniCraftClimate.ToBlockHeight(s.Height);
+            if (x >= 0 && x < size && z >= 0 && z < size) samples[x + z * size] = s;
+        }
+
+        var heights = new int[size * size];
+        var biomes = new ushort[size * size];
+        int beach = _climate.SeaLevel + _climate.Settings.BeachHeight;
+        for (int z = 0; z < size; z++)
+        for (int x = 0; x < size; x++)
+        {
+            int i = (x + 1) + (z + 1) * n, h = ext[i];
+            heights[x + z * size] = h;
+            ushort biome = _climate.Classify(samples[x + z * size]);
+            // CONTRASTE: acantilados, bordes de meseta y laderas abruptas dejan la roca al aire (y sin árboles ni hierba), con lo que el relieve se lee de lejos.
+            if (h > beach)
+            {
+                int drop = Math.Max(Math.Max(Math.Abs(h - ext[i - 1]), Math.Abs(h - ext[i + 1])), Math.Max(Math.Abs(h - ext[i - n]), Math.Abs(h - ext[i + n])));
+                if (drop >= CliffDrop) biome = Biomes.Mountains;
+            }
+            biomes[x + z * size] = biome;
         }
         return new ColumnData(heights, biomes);
     }

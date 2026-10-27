@@ -13,7 +13,7 @@
 
   // ---------- RELIEVE ----------
   "SeaLevelFraction": 0.1,    // nivel del mar como fraccion de la altura (0.1..0.9)
-  "ContinentSize": 30000,  // TAMANO DE LOS CONTINENTES (500..100000). Mayor = continentes mas grandes
+  "ContinentSize": 50000,  // TAMANO DE LOS CONTINENTES (500..100000). Mayor = continentes mas grandes
   "MountainSize": 8000,  // anchura de las cordilleras (200..50000); la altura de sus crestas se reparte en varias octavas
   "DetailSize": 100,  // tamano del detalle del suelo (10..2000)
   "ContinentAmplitude": 0.50,  // profundidad de los mares (fraccion de la altura, 0..1)
@@ -21,28 +21,28 @@
   "DetailAmplitude": 0.10,  // relieve fino del suelo (fraccion de la altura, 0..0.5). Poco: las llanuras deben ser llanas
   "LandBias": 0.00,  // -0.5..0.5. Positivo = mas tierra, negativo = mas oceano
   "ContinentOctaves": 4,      // capas de ruido (1..8). Mas capas = bordes mas irregulares, algo mas lento
-  "MountainOctaves": 5,  // capas de las crestas: mas = aristas y picos mas finos
+  "MountainOctaves": 4,  // capas de las crestas: mas = aristas y picos mas finos
   "DetailOctaves": 4,
   // ----- Relieve: llanuras, colinas, cordilleras subitas, mesetas, lagos, rios y valles -----
-  "RangeCoverage": 0.20,      // fraccion de la tierra cubierta por cordilleras (0..0.6). El resto: llanuras, colinas y mesetas
-  "RangeSharpness": 0.50,     // brusquedad del pie de las cordilleras (0.02..0.6). Menor = mas subito
+  "RangeCoverage": 0.15,      // fraccion de la tierra cubierta por cordilleras (0..0.6). El resto: llanuras, colinas y mesetas
+  "RangeSharpness": 0.30,     // brusquedad del pie de las cordilleras (0.02..0.6). Menor = mas subito
   "RangeWarp": 3000,           // deformacion (domain warping) de las cordilleras en bloques (0..3000). Mas = mas sinuosas y menos redondas
-  "HillSize": 3000,            // tamano de las colinas
+  "HillSize": 1000,            // tamano de las colinas
   "HillAmplitude": 0.30,      // altura de las colinas (fraccion de la altura del mundo)
   "HillRegionSize": 5000,     // tamano de las regiones con colinas (entre ellas, llanura)
-  "PlateauHeight": 10,        // salto de las mesetas (acantilados), en bloques
-  "Terracing": 0.30,          // 0..1: terrazas escalonadas en algunas regiones
-  "RiverSpacing": 5000,       // separacion tipica de los rios
-  "RiverWidth": 20,           // anchura del cauce en bloques
-  "ValleyWidth": 80,          // anchura del valle a cada lado del rio
+  "PlateauHeight": 5,        // salto de las mesetas (acantilados), en bloques
+  "Terracing": 0.50,          // 0..1: terrazas escalonadas en algunas regiones
+  "RiverSpacing": 40000,       // separacion tipica de los rios
+  "RiverWidth": 1000,           // anchura del cauce en bloques
+  "ValleyWidth": 40,          // anchura del valle a cada lado del rio
   "ValleyDepth": 0.50,        // 0..1: cuanto baja el terreno hacia el rio
-  "Lakes": 0.20,               // 0..1: cantidad de lagos en las llanuras
+  "Lakes": 0.10,               // 0..1: cantidad de lagos en las llanuras
   "MinHeightFraction": 0.05,  // fondo marino minimo (fraccion de la altura)
   "MaxHeightFraction": 0.95,  // cumbre maxima (fraccion de la altura)
 
   // ---------- CLIMA Y BIOMAS ----------
-  "TemperatureNoiseSize": 1000,  // tamano de las manchas de temperatura
-  "HumidityNoiseSize": 500,     // tamano de las manchas de humedad
+  "TemperatureNoiseSize": 8000,  // tamano de las manchas de temperatura
+  "HumidityNoiseSize": 8000,     // tamano de las manchas de humedad
   "LatitudeWeight": 0.8,         // 0..1. Cuanto manda la latitud (frio en los polos, calor en el ecuador)
   "AltitudeCooling": 0.4,        // 0..1. Cuanto enfria la altura
   "ClimateWarmth": 0.0,          // -0.5..0.5. Sube o baja todas las temperaturas (mas desiertos / mas tundra)
@@ -55,10 +55,10 @@
 
   // ---------- JUEGO ----------
   "ViewDistance": 12,          // distancia de vision en chunks (2..24). Mucho mayor = muchisimo mas coste
-  "FadeChunks": 2,            // SHADER DE FUNDIDO: anchura en chunks de la franja donde los bloques se disuelven sobre el terreno lejano (0 = sin fundido; necesita FarDistanceChunks > ViewDistance)
+  "FadeChunks": 4,            // SHADER DE FUNDIDO: anchura en chunks de la franja donde los bloques se disuelven sobre el terreno lejano (0 = sin fundido; necesita FarDistanceChunks > ViewDistance)
   "FadeInSeconds": 0.5,       // 0..3. Lo que tarda en aparecer, disolviendose, un chunk recien construido (0 = aparece de golpe)
   "FarCloseChunks": 10,        // DISTANCIA CERCANA del terreno lejano, en chunks: por dentro de ella no hay malla lejana (0 = automatico: ViewDistance)
-  "FarDistanceChunks": 24,   // DISTANCIA LEJANA (LOD): el relieve aproximado se genera solo entre FarCloseChunks y esta distancia (0 = sin terreno lejano). 64 = 1024 bloques
+  "FarDistanceChunks": 36,   // DISTANCIA LEJANA (LOD): el relieve aproximado se genera solo entre FarCloseChunks y esta distancia (0 = sin terreno lejano). 64 = 1024 bloques
   "FarDetail": 2.0,           // 0.8..4. Mas detalle en la distancia (y mas tiles que generar). Los chunks siguen mandando en su zona
   "Villagers": 20,             // aldeanos iniciales alrededor del jugador
   "Caravans": 60,             // caravanas repartidas por el mundo
