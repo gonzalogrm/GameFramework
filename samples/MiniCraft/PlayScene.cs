@@ -32,14 +32,15 @@ public sealed class PlayScene : UiScene
     private readonly SaveData? _save;
     private readonly WorldSettings _settings;
     private readonly WorldScale _scale;
-	private readonly ushort[] _hotbarBlocks =
-		  { Blocks.Grass, Blocks.Dirt, Blocks.Stone, Blocks.Sand, Blocks.Log, Blocks.Leaves,
-			Blocks.Lamp, Blocks.LampWarm, Blocks.LampBlue, Blocks.GlassBlue };
-	private readonly FirstPersonCamera _camera = new();
+    private readonly ushort[] _hotbarBlocks =
+          { Blocks.Grass, Blocks.Dirt, Blocks.Stone, Blocks.Sand, Blocks.Log, Blocks.Leaves,
+            Blocks.Lamp, Blocks.LampWarm, Blocks.LampBlue, Blocks.GlassBlue };
+    private readonly FirstPersonCamera _camera = new();
     private readonly FrameProfiler _prof = new();
     private readonly List<Entity> _collisionScratch = new();
     private readonly PlayerState _player = new();   // vida, inventario y equipamiento del jugador
     private EnemySpawner _spawner = null!;
+    private CityPlanner _cities = null!;
     private PlayerSave? _universalPlayer;
     private WorldHistory _history = null!;
     private LegendaryRegistry _legendary = null!;
@@ -76,7 +77,7 @@ public sealed class PlayScene : UiScene
     private int _selected, _frames;
     private float _fpsTimer, _fps, _autosave;
     private VoxelHit? _target;
-	private LightWatcher _lightWatcher = null!;
+    private LightWatcher _lightWatcher = null!;
     private readonly DayNightCycle _day = new();
     private int _daySpeed;   // 0 normal, 1 rápido, 2 parado
 
@@ -106,9 +107,12 @@ public sealed class PlayScene : UiScene
         root.Widgets.Add(_debug);
         _inspector = new Label
         {
-            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(8), Padding = new Thickness(8),
-            Background = new SolidBrush(new Color(0, 0, 0, 160)), Visible = false,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8),
+            Padding = new Thickness(8),
+            Background = new SolidBrush(new Color(0, 0, 0, 160)),
+            Visible = false,
         };
         root.Widgets.Add(_inspector);
         _status = new Label { Text = "Generando mundo...", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 60, 0, 0) };
@@ -142,10 +146,14 @@ public sealed class PlayScene : UiScene
         _climate = new MiniCraftClimate(_seed, _settings, _scale);
         // Altura y bioma de cada columna se calculan una sola vez y los comparten terreno, árboles y decoración.
         var columns = new TerrainColumnCache(_climate, _scale);
-        var generator = new WorldGenerator<ushort>(_seed, _climate.Noise)
+        var cities = new CityPlanner(_seed, _climate, _scale, columns);
+        _cities = cities;
+		Task.Run(cities.PlanAll);
+		var generator = new WorldGenerator<ushort>(_seed, _climate.Noise)
             .AddStage(new TerrainStage(_climate, columns))
-            .AddStage(new TreeStage(_climate, _scale, columns))
-            .AddStage(new DecorationStage(_climate, _scale, columns));
+            .AddStage(new CityStage(cities, _scale, columns))
+            .AddStage(new TreeStage(_climate, _scale, columns, cities))
+            .AddStage(new DecorationStage(_climate, _scale, columns, cities));
 
         int cs = _settings.ChunkSize, layers = _settings.VerticalChunks, view = _settings.ViewDistance;
         float viewBlocks = view * cs;
@@ -173,10 +181,14 @@ public sealed class PlayScene : UiScene
             fallback: new FileChunkStore<ushort>(SaveSystem.ChunksDir, canonical));
         _chunks = new ChunkManager<ushort>(_world, generator)
         {
-            RadiusX = view, RadiusY = layers, RadiusZ = view,
+            RadiusX = view,
+            RadiusY = layers,
+            RadiusZ = view,
             MaxConcurrentJobs = genThreads,
-            MinChunkY = LowestChunkY, MaxChunkY = layers - 1,
-            MinChunkZ = 0, MaxChunkZ = _scale.ChunkCountZ - 1,   // los polos
+            MinChunkY = LowestChunkY,
+            MaxChunkY = layers - 1,
+            MinChunkZ = 0,
+            MaxChunkZ = _scale.ChunkCountZ - 1,   // los polos
             Store = _store,
         };
         // Sprites 2D: cada textura de Content/sprites/ (compilada por MGCB) es un sprite, de cualquier tamaño. Los .png sueltos de una
@@ -201,9 +213,13 @@ public sealed class PlayScene : UiScene
         _renderer = new VoxelWorldRenderer(Game.GraphicsDevice, _world, Blocks.Registry, AtlasFactory.Load(Game.Content, Game.GraphicsDevice), _sprites, chunkFade)
         {
             MaxMeshingJobs = meshThreads,
-            FadeStart = fadeBand.Start, FadeEnd = fadeBand.End, FadeInSeconds = fadeBand.Enabled ? _settings.FadeInSeconds : 0,
+            FadeStart = fadeBand.Start,
+            FadeEnd = fadeBand.End,
+            FadeInSeconds = fadeBand.Enabled ? _settings.FadeInSeconds : 0,
             CanMesh = _chunks.AreNeighborsSettled,   // no mallar hasta que los vecinos estén cargados: cada chunk se malla una vez, no diez
-            FogColor = MiniCraftGame.SkyColor, FogStart = fogStart, FogEnd = fogEnd,
+            FogColor = MiniCraftGame.SkyColor,
+            FogStart = fogStart,
+            FogEnd = fogEnd,
         };
 
         _camera.FarPlane = Math.Max(500f, fogRange * 1.2f);
@@ -213,10 +229,13 @@ public sealed class PlayScene : UiScene
         // distancia de chunks lo sustituyen los bloques (con colinas finas, árboles, sprites y entidades).
         if (farEnabled)
         {
-            _far = new FarTerrainRenderer(Game.GraphicsDevice, new MiniCraftFarSource(_climate, _scale), _scale.HeightBlocks)
+            _far = new FarTerrainRenderer(Game.GraphicsDevice, new MiniCraftFarSource(_climate, _scale, cities), _scale.HeightBlocks)
             {
-                FarDistance = farBlocks, SplitFactor = _settings.FarDetail,
-                FogColor = MiniCraftGame.SkyColor, FogStart = fogStart, FogEnd = fogEnd,
+                FarDistance = farBlocks,
+                SplitFactor = _settings.FarDetail,
+                FogColor = MiniCraftGame.SkyColor,
+                FogStart = fogStart,
+                FogEnd = fogEnd,
             };
         }
 
@@ -235,6 +254,8 @@ public sealed class PlayScene : UiScene
         _npcs.Player = _player;                 // los enemigos persiguen y golpean al jugador
         _npcs.Events = _events;
         _spawner = new EnemySpawner(_entities, _world, _climate, _scale, _npcs, _seed, _settings, () => _spawned ? (Vec3d?)_pos : null);
+        new CitySpawner(_entities, _world, cities, _npcs, _scale);
+
         // Historia del mundo (sale de la semilla, no se guarda) y sus objetos legendarios: variantes de armas creadas en partida, con su héroe y su destino.
         _history = WorldHistory.Generate((ulong)(uint)_seed);
         _legendary = LegendaryRegistry.Create(_history, (ulong)(uint)_seed, ItemTypes.Catalog, _scale,
@@ -248,10 +269,12 @@ public sealed class PlayScene : UiScene
         if (_universalPlayer != null) _player.Restore(_universalPlayer);
         else if (_save?.Player != null) _player.Restore(_save.Player);
         else _player.GiveStarterKit();
-		_lightWatcher = new LightWatcher(_events, _renderer.Light, _scale, GameEvents.DarkEnter, GameEvents.LightEnter);
-		_boxes = new BoxRenderer(Game.GraphicsDevice, _scale)
+        _lightWatcher = new LightWatcher(_events, _renderer.Light, _scale, GameEvents.DarkEnter, GameEvents.LightEnter);
+        _boxes = new BoxRenderer(Game.GraphicsDevice, _scale)
         {
-            FogColor = MiniCraftGame.SkyColor, FogStart = fogStart, FogEnd = fogEnd,
+            FogColor = MiniCraftGame.SkyColor,
+            FogStart = fogStart,
+            FogEnd = fogEnd,
         };
         if (_save != null && SaveSystem.TryLoadEntities() is { } savedEntities)
         {
@@ -295,8 +318,15 @@ public sealed class PlayScene : UiScene
         _store.Flush();
         SaveSystem.Write(new SaveData
         {
-            Seed = _seed, Settings = _settings, X = _pos.X, Y = _pos.Y, Z = _pos.Z,
-            Yaw = _camera.Yaw, Pitch = _camera.Pitch, Selected = _selected, TimeOfDay = _day.Time,
+            Seed = _seed,
+            Settings = _settings,
+            X = _pos.X,
+            Y = _pos.Y,
+            Z = _pos.Z,
+            Yaw = _camera.Yaw,
+            Pitch = _camera.Pitch,
+            Selected = _selected,
+            TimeOfDay = _day.Time,
         });
         SaveSystem.WriteUniverse(_session.ToSave());
         SaveSystem.WriteItems(ItemTypes.Catalog.ExportRuntime());
@@ -345,22 +375,22 @@ public sealed class PlayScene : UiScene
     {
         int cx = _scale.MapWidth / 2, cz = _scale.MapHeight / 2;
         for (int r = 0; r < _scale.MapWidth; r++)
-        for (int dz = -r; dz <= r; dz++)
-        for (int dx = -r; dx <= r; dx++)
-        {
-            if (Math.Max(Math.Abs(dx), Math.Abs(dz)) != r) continue;
-            int rz = cz + dz;
-            if (rz < 0 || rz >= _scale.MapHeight) continue;
-            int rx = ((cx + dx) % _scale.MapWidth + _scale.MapWidth) % _scale.MapWidth;
+            for (int dz = -r; dz <= r; dz++)
+                for (int dx = -r; dx <= r; dx++)
+                {
+                    if (Math.Max(Math.Abs(dx), Math.Abs(dz)) != r) continue;
+                    int rz = cz + dz;
+                    if (rz < 0 || rz >= _scale.MapHeight) continue;
+                    int rx = ((cx + dx) % _scale.MapWidth + _scale.MapWidth) % _scale.MapWidth;
 
-            var c = map.GetCell(new CellCoord(rx, rz, 0));
-            if (c.WaterFraction < 0.2f && c.Temperature > 0.3f && c.Biome != Biomes.Mountains && c.Biome != Biomes.SnowPeaks)
-            {
-                var center = _scale.RegionCenter(rx, rz);
-                wx = center.X; wz = center.Z;
-                return true;
-            }
-        }
+                    var c = map.GetCell(new CellCoord(rx, rz, 0));
+                    if (c.WaterFraction < 0.2f && c.Temperature > 0.3f && c.Biome != Biomes.Mountains && c.Biome != Biomes.SnowPeaks)
+                    {
+                        var center = _scale.RegionCenter(rx, rz);
+                        wx = center.X; wz = center.Z;
+                        return true;
+                    }
+                }
         wx = wz = 0;
         return false;
     }
@@ -518,8 +548,8 @@ public sealed class PlayScene : UiScene
         {
             _entities.Update(dt, _pos);
             _npcs.Update(dt, _pos);
-			_lightWatcher.Update(dt, _pos);
-		}
+            _lightWatcher.Update(dt, _pos);
+        }
 
         _target = VoxelRaycaster.Raycast(_world, Blocks.Registry, _camera.Position, _camera.Forward, Reach, out var hit) ? hit : null;
 
@@ -550,7 +580,7 @@ public sealed class PlayScene : UiScene
             _day.DayLengthSeconds = _daySpeed == 1 ? 30 : 600;
             ShowMessage($"Ciclo dia/noche: {(new[] { "normal", "rapido", "parado" })[_daySpeed]} ({_day.Clock})");
         }
-		if (input.Pressed("Fireball")) CastFireball();
+        if (input.Pressed("Fireball")) CastFireball();
         if (_target is { } t)
         {
             if (input.RightClicked)
@@ -564,14 +594,14 @@ public sealed class PlayScene : UiScene
         }
     }
 
-	private string LightText()
-	{
-		var l = _renderer.Light.Sample(new CellCoord(IntMath.FloorToInt(_pos.X), IntMath.FloorToInt(_pos.Y + 0.5), IntMath.FloorToInt(_pos.Z)));
-		return l.Known ? $"nivel {l.Level:0.0} | cielo {l.Sky.Y:0} | bloque RGB {l.Block.X:0},{l.Block.Y:0},{l.Block.Z:0}" : "desconocida";
-	}
+    private string LightText()
+    {
+        var l = _renderer.Light.Sample(new CellCoord(IntMath.FloorToInt(_pos.X), IntMath.FloorToInt(_pos.Y + 0.5), IntMath.FloorToInt(_pos.Z)));
+        return l.Known ? $"nivel {l.Level:0.0} | cielo {l.Sky.Y:0} | bloque RGB {l.Block.X:0},{l.Block.Y:0},{l.Block.Z:0}" : "desconocida";
+    }
 
 
-	public override void Draw(GameTime gameTime)
+    public override void Draw(GameTime gameTime)
     {
         using (_prof.Measure("dibujo"))
             _renderer.Draw(_camera, () =>
@@ -746,6 +776,9 @@ public sealed class PlayScene : UiScene
             var def = EntityTypes.Registry.Get(e.TypeId);
             yield return new MapMarker((float)e.Position.X, (float)e.Position.Z, new Color(def.R, def.G, def.B), 5f);
         }
+
+        foreach (var c in _cities.Known)
+            yield return new MapMarker(c.CenterX, c.CenterZ, Color.White, 9f);
     }
 
     private void UpdateDebug(GameTime gameTime)
@@ -773,8 +806,9 @@ public sealed class PlayScene : UiScene
                       $"Mallado {_renderer.AverageMeshMs:0.0} ms/chunk\n" +
                       $"Terreno lejano: {FarInfo()}\n" +
                       $"Tiempos del hilo principal (ms): {_prof.Report()}\n" +
-                      $"Luz aqui: {LightText()}\n";
-	}
+					  $"{CityText()}\n" +
+					  $"Luz aqui: {LightText()}\n";
+    }
 
     /// <summary>Muestra un aviso breve en pantalla (se reutiliza la etiqueta de estado del centro).</summary>
     private void ShowMessage(string text)
@@ -798,5 +832,13 @@ public sealed class PlayScene : UiScene
         return _pos.X - hx < c.X + 1 && _pos.X + hx > c.X &&
                _pos.Y < c.Y + 1 && _pos.Y + BodySize.Y > c.Y &&
                _pos.Z - hz < c.Z + 1 && _pos.Z + hz > c.Z;
+    }
+
+    private string CityText()
+    {
+        var c = _cities.CityAt(IntMath.FloorToInt(_pos.X), IntMath.FloorToInt(_pos.Z));
+        return c == null ? "Ciudad: ninguna aqui"
+            : $"Ciudad: centro ({c.CenterX}, {c.CenterZ}) radio {c.Radius} suelo {c.GroundY} | conocidas {_cities.Known.Count()}";
+
     }
 }

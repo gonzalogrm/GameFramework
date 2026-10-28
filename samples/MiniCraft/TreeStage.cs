@@ -9,6 +9,7 @@ namespace MiniCraft;
 /// depende solo de (semilla, x envuelta, z), del clima de esa columna y de su bioma, nunca del chunk.
 /// Cada chunk examina las columnas de su zona ampliada por el radio de la copa y escribe únicamente las
 /// celdas que caen dentro de sí mismo. Precedencia fija (tronco > hojas > aire).
+/// No aparecen árboles en las zonas reservadas a ciudades (CityPlanner).
 /// </summary>
 public sealed class TreeStage : IGenerationStage<ushort>
 {
@@ -17,12 +18,14 @@ public sealed class TreeStage : IGenerationStage<ushort>
     private readonly MiniCraftClimate _climate;
     private readonly WorldScale _scale;
     private readonly TerrainColumnCache _columns;
+    private readonly CityPlanner _planner;
 
-    public TreeStage(MiniCraftClimate climate, WorldScale scale, TerrainColumnCache columns)
+    public TreeStage(MiniCraftClimate climate, WorldScale scale, TerrainColumnCache columns, CityPlanner planner)
     {
         _climate = climate;
         _scale = scale;
         _columns = columns;
+        _planner = planner;
     }
 
     public void Apply(Chunk<ushort> chunk, GenerationContext ctx)
@@ -43,6 +46,8 @@ public sealed class TreeStage : IGenerationStage<ushort>
             ulong h = Hashing.Combine(ctx.Seed, _scale.WrapX(wx), 0x7EE, wz);
             float u = (h >> 40) * (1f / (1 << 24));
             if (u >= Biomes.MaxTreeDensity * density) continue;   // descarte barato antes de calcular el clima
+
+            if (_planner.IsReserved(wx, wz)) continue;            // zona de ciudad
 
             if (u >= Biomes.TreeDensity[_columns.BiomeAt(wx, wz)] * density) continue;
 

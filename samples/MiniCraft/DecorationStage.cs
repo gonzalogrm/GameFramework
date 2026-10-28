@@ -9,6 +9,7 @@ namespace MiniCraft;
 /// decisión depende solo de (semilla, x envuelta, z) y del bioma de la columna, así que no hay costuras entre chunks. Va después
 /// de los árboles: no pisa nada que ya ocupe la celda. Un sprite grande (el matorral mide 3 x 2,25 bloques) solo necesita su
 /// celda de anclaje libre; el resto del dibujo sobresale por encima y a los lados.
+/// No aparece nada en las zonas reservadas a ciudades (CityPlanner).
 /// </summary>
 public sealed class DecorationStage : IGenerationStage<ushort>
 {
@@ -22,12 +23,14 @@ public sealed class DecorationStage : IGenerationStage<ushort>
     private readonly MiniCraftClimate _climate;
     private readonly WorldScale _scale;
     private readonly TerrainColumnCache _columns;
+    private readonly CityPlanner _planner;
 
-    public DecorationStage(MiniCraftClimate climate, WorldScale scale, TerrainColumnCache columns)
+    public DecorationStage(MiniCraftClimate climate, WorldScale scale, TerrainColumnCache columns, CityPlanner planner)
     {
         _climate = climate;
         _scale = scale;
         _columns = columns;
+        _planner = planner;
     }
 
     private static Props[] BuildDensity()
@@ -60,6 +63,8 @@ public sealed class DecorationStage : IGenerationStage<ushort>
             ulong h = Hashing.Combine(ctx.Seed, _scale.WrapX(wx), 0xDEC0, wz);
             float u = (h >> 40) * (1f / (1 << 24));
             if (u >= MaxProbability * mult) continue;   // descarte barato antes de mirar el terreno
+
+            if (_planner.IsReserved(wx, wz)) continue;  // zona de ciudad
 
             int ground = _columns.HeightAt(wx, wz);
             if (ground <= _climate.SeaLevel) continue;   // bajo el agua no hay nada

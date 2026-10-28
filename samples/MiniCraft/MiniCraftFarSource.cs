@@ -8,16 +8,21 @@ namespace MiniCraft;
 /// Terreno lejano de MiniCraft: sale directamente del modelo climático (la misma función que genera los chunks), sin necesidad de
 /// tener chunks cargados. Las alturas llegan filtradas según la separación entre muestras (SampleLod), así que montañas y valles
 /// se conservan a cualquier distancia y las colinas finas aparecen al acercarte. El color es el del bioma, como en el mapamundi.
+/// Las ciudades aparecen niveladas y en gris (sin edificios) para que no se vea el terreno original por debajo.
 /// </summary>
 public sealed class MiniCraftFarSource : IFarTerrainSource
 {
     private readonly MiniCraftClimate _climate;
+    private readonly WorldScale _scale;
+    private readonly CityPlanner? _cities;
     private readonly int _zMax;
     private readonly float _landRange;
 
-    public MiniCraftFarSource(MiniCraftClimate climate, WorldScale scale)
+    public MiniCraftFarSource(MiniCraftClimate climate, WorldScale scale, CityPlanner? cities = null)
     {
         _climate = climate;
+        _scale = scale;
+        _cities = cities;
         _zMax = scale.HeightBlocks - 1;
         _landRange = Math.Max(1f, climate.Settings.WorldHeight - climate.SeaLevel);
     }
@@ -25,6 +30,18 @@ public sealed class MiniCraftFarSource : IFarTerrainSource
     public void Sample(int wx, int wz, int spacing, out float height, out Color color)
     {
         wz = Math.Clamp(wz, 0, _zMax);   // más allá de los polos, el borde se repite
+
+        if (_cities?.CityAt(wx, wz) is { } city)
+        {
+            double dx = _scale.DeltaX(city.CenterX, wx), dz = wz - city.CenterZ;
+            if (dx * dx + dz * dz <= (double)city.Radius * city.Radius)
+            {
+                height = city.GroundY;
+                color = new Color(150, 150, 140, 255);
+                return;
+            }
+        }
+
         var s = _climate.SampleLod(wx, wz, spacing);
         int sea = _climate.SeaLevel;
 
