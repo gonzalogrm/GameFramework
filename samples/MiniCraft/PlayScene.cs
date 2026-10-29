@@ -41,7 +41,8 @@ public sealed class PlayScene : UiScene
     private readonly PlayerState _player = new();   // vida, inventario y equipamiento del jugador
     private EnemySpawner _spawner = null!;
     private CityPlanner _cities = null!;
-    private PlayerSave? _universalPlayer;
+	private CitySpawner _citySpawner = null!;
+	private PlayerSave? _universalPlayer;
     private WorldHistory _history = null!;
     private LegendaryRegistry _legendary = null!;
     private float _thinkTimer;   // tick de los componentes de lo que lleva equipado el jugador
@@ -146,8 +147,8 @@ public sealed class PlayScene : UiScene
         _climate = new MiniCraftClimate(_seed, _settings, _scale);
         // Altura y bioma de cada columna se calculan una sola vez y los comparten terreno, árboles y decoración.
         var columns = new TerrainColumnCache(_climate, _scale);
-        var cities = new CityPlanner(_seed, _climate, _scale, columns);
-        _cities = cities;
+		var cities = new CityPlanner(_seed, _climate, _scale, columns, _settings.Cities.ToOptions());
+		_cities = cities;
 		Task.Run(cities.PlanAll);
 		var generator = new WorldGenerator<ushort>(_seed, _climate.Noise)
             .AddStage(new TerrainStage(_climate, columns))
@@ -247,17 +248,18 @@ public sealed class PlayScene : UiScene
         // Eventos: cada prototipo declara cuáles procesa (GameEvents.Register). Los manejadores avisan al jugador con Notify.
         _events = new EventHub(_entities);
         GameEvents.Register(_events);
-        _events.Message += ShowMessage;
+		CityNpcs.Register(_events);
+		_events.Message += ShowMessage;
         _events.Delivered += OnDelivered;
         _npcs = new NpcSystem(_entities, _world, _climate, _scale, () => _map, _seed);
         _entities.Items = ItemTypes.Registry;   // guardar el inventario y el equipo de las entidades (por nombre de objeto)
         _npcs.Player = _player;                 // los enemigos persiguen y golpean al jugador
         _npcs.Events = _events;
         _spawner = new EnemySpawner(_entities, _world, _climate, _scale, _npcs, _seed, _settings, () => _spawned ? (Vec3d?)_pos : null);
-        new CitySpawner(_entities, _world, cities, _npcs, _scale);
+		_citySpawner = new CitySpawner(_entities, _world, cities, _npcs, _scale, _settings.Cities);
 
-        // Historia del mundo (sale de la semilla, no se guarda) y sus objetos legendarios: variantes de armas creadas en partida, con su héroe y su destino.
-        _history = WorldHistory.Generate((ulong)(uint)_seed);
+		// Historia del mundo (sale de la semilla, no se guarda) y sus objetos legendarios: variantes de armas creadas en partida, con su héroe y su destino.
+		_history = WorldHistory.Generate((ulong)(uint)_seed);
         _legendary = LegendaryRegistry.Create(_history, (ulong)(uint)_seed, ItemTypes.Catalog, _scale,
             (x, z) => MiniCraftClimate.ToBlockHeight(_climate.Sample(x, z).Height) > _climate.SeaLevel + _settings.BeachHeight,
             new LegendaryOptions { Components = new[] { "thorns", "regeneration" }, NamePrefix = $"legendary_{(uint)_seed:x8}" });

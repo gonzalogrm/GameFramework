@@ -8,7 +8,7 @@ public sealed class CityOptions
 {
     public float Chance { get; set; } = 0.8f;     // probabilidad de intentar una ciudad por celda
     public int CellSize { get; set; } = 1024;     // debe ser múltiplo del tamaño de chunk (8, 16, 32)
-    public int MinRadius { get; set; } = 40;
+    public int MinRadius { get; set; } = 52;
     public int MaxRadius { get; set; } = 80;
     public int MaxSlope { get; set; } = 8;        // desnivel máximo (bloques) dentro de la ciudad
     public int Attempts { get; set; } = 16;       // posiciones candidatas por celda
@@ -17,7 +17,31 @@ public sealed class CityOptions
     public bool Log { get; set; } = true;         // escribe cada ciudad encontrada en la consola
 }
 
-public sealed record City(int Id, int CenterX, int CenterZ, int Radius, int GroundY, int MaxFloors);
+/// <summary>Trazado de las calles de una ciudad: separación entre calles en X y Z, anchura y cuánto se desplazan (0 = cuadrícula regular).</summary>
+public sealed record CityLayout(int PitchX, int PitchZ, int StreetW, int Jitter);
+
+/// <summary>Fases del contorno irregular de una ciudad (salen de su celda: mismo mundo, mismo borde).</summary>
+public sealed record CityShape(double P1, double P2, double P3);
+
+public sealed record City(int Id, int CenterX, int CenterZ, int Radius, int GroundY, int MaxFloors, CityStyle Style, CityLayout Layout,
+    CityType Type, CityShape Shape, bool Hamlet = false)
+{
+    public int PlazaHalf => Type.PlazaHalf;
+
+    /// <summary>Mayor distancia al centro a la que puede haber ciudad (el contorno nunca la supera).</summary>
+    public double Extent => Radius * (1 + Type.Irregularity);
+
+    /// <summary>Radio de la ciudad en la dirección de (rx, rz), relativos al centro: un círculo deformado por tres ondas (irregularidad según el tipo).</summary>
+    public double BoundaryRadius(int rx, int rz)
+    {
+        double th = Math.Atan2(rz, rx), irr = Type.Irregularity;
+        double m = 1 + irr * (0.55 * Math.Sin(2 * th + Shape.P1) + 0.30 * Math.Sin(3 * th + Shape.P2) + 0.15 * Math.Sin(5 * th + Shape.P3));
+        return Radius * m;
+    }
+
+    /// <summary>¿Cae (rx, rz), relativos al centro, dentro del contorno?</summary>
+    public bool Contains(int rx, int rz) => Math.Sqrt((double)rx * rx + (double)rz * rz) <= BoundaryRadius(rx, rz);
+}
 
 /// <summary>Decide dónde hay ciudades. Puro y thread-safe: depende solo de (semilla, celda) y del terreno.</summary>
 public sealed class CityPlanner
@@ -28,8 +52,8 @@ public sealed class CityPlanner
     private readonly MiniCraftClimate _climate;
     private readonly WorldScale _scale;
     private readonly CityOptions _opt;
-    private readonly ConcurrentDictionary<(int X, int Z), Lazy<City?>> _cache = new();
-    private int _noChance, _noSite, _found, _rejWater, _rejSlope, _rejHeight;
+    private readonly ConcurrentDictionary<(int X, int Z), Lazy<City[]>> _cache = new();
+    private int _noChance, _noSite, _found, _rejWater, _rejSlope, _rejHeight, _hamlets;
 
     public CityPlanner(int seed, MiniCraftClimate climate, WorldScale scale, TerrainColumnCache columns, CityOptions? options = null)
     {
@@ -48,7 +72,8 @@ public sealed class CityPlanner
         get
         {
             foreach (var lazy in _cache.Values)
-                if (lazy.IsValueCreated && lazy.Value is { } city) yield return city;
+                if (lazy.IsValueCreated)
+                    foreach (var city in lazy.Value) yield return city;
         }
     }
 
@@ -60,41 +85,93 @@ public sealed class CityPlanner
     {
         for (int cz = 0; cz < _cellsZ; cz++)
         for (int cx = 0; cx < _cellsX; cx++)
-            GetCity(cx, cz);
+            GetCities(cx, cz);
         if (_opt.Log)
-            Console.WriteLine($"[ciudades] {_found} ciudades en {CellCount} celdas | sin intento por azar {_noChance} | sin sitio llano {_noSite} " +
+            Console.WriteLine($"[ciudades] {_found} ciudades y {_hamlets} poblados en {CellCount} celdas | sin intento por azar {_noChance} | sin sitio llano {_noSite} " +
                               $"(rechazos: agua {_rejWater}, desnivel>{_opt.MaxSlope} {_rejSlope}, altura {_rejHeight})");
     }
 
+    /// <summary>La ciudad y los poblados de la celda donde cae la columna (vacío si no hay). Un chunk cae siempre en una sola celda.</summary>
+    public City[] CitiesAt(int wx, int wz)
+    {
+        if ((uint)wz >= (uint)_scale.HeightBlocks) return Array.Empty<City>();
+        int cx = _scale.WrapX(wx) / _opt.CellSize, cz = wz / _opt.CellSize;
+        if (cx >= _cellsX || cz >= _cellsZ) return Array.Empty<City>();
+        return GetCities(cx, cz);
+    }
+
+    /// <summary>La ciudad o poblado cuya zona (contorno más margen) contiene la columna, o null.</summary>
     public City? CityAt(int wx, int wz)
     {
-        if ((uint)wz >= (uint)_scale.HeightBlocks) return null;
-        int cx = _scale.WrapX(wx) / _opt.CellSize, cz = wz / _opt.CellSize;
-        if (cx >= _cellsX || cz >= _cellsZ) return null;
-        return GetCity(cx, cz);
+        foreach (var c in CitiesAt(wx, wz))
+        {
+            int dx = (int)Math.Round(_scale.DeltaX(c.CenterX, wx)), dz = wz - c.CenterZ;
+            if (Math.Sqrt((double)dx * dx + (double)dz * dz) <= c.BoundaryRadius(dx, dz) + _opt.ReserveMargin) return c;
+        }
+        return null;
     }
 
-    private City? GetCity(int cx, int cz) =>
-        _cache.GetOrAdd((cx, cz), k => new Lazy<City?>(() => Compute(k.X, k.Z))).Value;
+    private City[] GetCities(int cx, int cz) =>
+        _cache.GetOrAdd((cx, cz), k => new Lazy<City[]>(() => Compute(k.X, k.Z))).Value;
 
-    /// <summary>¿Esta columna está dentro de una ciudad (más su margen)? Árboles y decoración no deben aparecer.</summary>
-    public bool IsReserved(int wx, int wz)
+    /// <summary>¿Esta columna está dentro de una ciudad o poblado (más su margen)? Árboles y decoración no deben aparecer.</summary>
+    public bool IsReserved(int wx, int wz) => CityAt(wx, wz) != null;
+
+    private City[] Compute(int cx, int cz)
     {
-        var c = CityAt(wx, wz);
-        if (c == null) return false;
-        long dx = (long)Math.Round(_scale.DeltaX(c.CenterX, wx)), dz = wz - c.CenterZ;
-        long r = c.Radius + _opt.ReserveMargin;
-        return dx * dx + dz * dz <= r * r;
+        var main = ComputeMain(cx, cz);
+        if (main == null) return Array.Empty<City>();
+        var list = new List<City> { main };
+        PlanHamlets(cx, cz, main, list);
+        return list.ToArray();
     }
 
-    private City? Compute(int cx, int cz)
+    /// <summary>Poblados satélite (aldeas pequeñas) alrededor de la ciudad, en terreno llano y dentro de su misma celda.</summary>
+    private void PlanHamlets(int cx, int cz, City main, List<City> list)
+    {
+        var o = _opt;
+        var rng = new SplitMixRandom(Hashing.Combine(_seed, cx, 0xC1A5, cz));
+        int want = main.Type.Name == "capital" ? rng.Next(2, 5) : main.Type.Name == "aldea" ? rng.Next(0, 2) : rng.Next(0, 4);
+        var type = CityTypes.All[0];   // aldea
+        int minGround = _climate.SeaLevel + _climate.Settings.BeachHeight + 1;
+
+        for (int i = 0; i < want; i++)
+        for (int attempt = 0; attempt < 8; attempt++)
+        {
+            int radius = Math.Max(24, (int)(rng.Next(o.MinRadius, o.MaxRadius + 1) * type.RadiusScale * (0.75 + 0.25 * rng.NextFloat())));
+            double ext = radius * (1 + type.Irregularity);
+            double dist = main.Extent + ext + 24 + rng.NextFloat() * 140, angle = rng.NextFloat() * Math.PI * 2;
+            int x = main.CenterX + (int)(Math.Cos(angle) * dist), z = main.CenterZ + (int)(Math.Sin(angle) * dist);
+            int m = (int)ext + o.ReserveMargin;
+            if (x < cx * o.CellSize + m || x >= (cx + 1) * o.CellSize - m || z < cz * o.CellSize + m || z >= (cz + 1) * o.CellSize - m) continue;   // dentro de su celda
+            if (list.Any(other => Math.Sqrt(Math.Pow(x - other.CenterX, 2) + Math.Pow(z - other.CenterZ, 2)) < other.Extent + ext + 16)) continue;   // sin solapes
+            if (TryLevel(x, z, radius, minGround, out int y) != Reject.None) continue;
+            int floors = Math.Min(Math.Min(o.MaxFloors, type.FloorsCap), (_worldHeight - 3 - y) / 4);
+            if (floors < 1) continue;
+
+            ushort biome = _climate.Classify(_climate.Sample(x, z));
+            var style = CityStyles.For(biome, new SplitMixRandom(Hashing.Combine(_seed, cx, 0xC175 + 1 + i, cz))) with { Walls = false };
+            var sr = new SplitMixRandom(Hashing.Combine(_seed, cx, 0xC1B0 + 1 + i, cz));
+            var shape = new CityShape(sr.NextFloat() * 6.2832, sr.NextFloat() * 6.2832, sr.NextFloat() * 6.2832);
+            var lr = new SplitMixRandom(Hashing.Combine(_seed, cx, 0xC1A7 + 1 + i, cz));
+            var layout = new CityLayout(lr.Next(18, 25), lr.Next(18, 25), lr.Next(3, 6), lr.Chance(0.3f) ? 0 : lr.Next(1, 4));
+            ulong h = Hashing.Combine(_seed, cx, 0xC17E1D + 1 + i, cz);
+            Interlocked.Increment(ref _hamlets);
+            if (o.Log) Console.WriteLine($"[poblado] celda ({cx},{cz}): centro x {x} z {z}, radio {radius}, suelo {y}, estilo {style.Name}");
+            list.Add(new City((int)(h ^ (h >> 32)), x, z, radius, y, floors, style, layout, type, shape, Hamlet: true));
+            break;
+        }
+    }
+
+    private City? ComputeMain(int cx, int cz)
     {
         var o = _opt;
         var rng = new SplitMixRandom(Hashing.Combine(_seed, cx, 0xC17E, cz));
         if (!rng.Chance(o.Chance)) { Interlocked.Increment(ref _noChance); return null; }
 
-        int radius = rng.Next(o.MinRadius, o.MaxRadius + 1);
-        int margin = o.MaxRadius + o.ReserveMargin;
+        var type = CityTypes.Pick(new SplitMixRandom(Hashing.Combine(_seed, cx, 0xC17F, cz)));
+        int radius = Math.Max(28, (int)(rng.Next(o.MinRadius, o.MaxRadius + 1) * type.RadiusScale));
+        int margin = (int)(o.MaxRadius * CityTypes.MaxRadiusScale * (1 + CityTypes.MaxIrregularity)) + o.ReserveMargin;
         int span = o.CellSize - 2 * margin;
         if (span <= 0) return null;
         int minGround = _climate.SeaLevel + _climate.Settings.BeachHeight + 1;
@@ -106,14 +183,21 @@ public sealed class CityPlanner
             var why = TryLevel(x, z, radius, minGround, out int y);
             if (why == Reject.None)
             {
-                int floors = Math.Min(o.MaxFloors, (_worldHeight - 3 - y) / 4);
+                int floors = Math.Min(Math.Min(o.MaxFloors, type.FloorsCap), (_worldHeight - 3 - y) / 4);
                 if (floors < 1) why = Reject.Height;
                 else
                 {
                     ulong h = Hashing.Combine(_seed, cx, 0xC17E1D, cz);
+                    ushort biome = _climate.Classify(_climate.Sample(x, z));
+                    var style = CityStyles.For(biome, new SplitMixRandom(Hashing.Combine(_seed, cx, 0xC175, cz)));
+                    style = style with { Walls = type.WallMode == 2 || (type.WallMode == 1 && style.Walls) };
+                    var sr = new SplitMixRandom(Hashing.Combine(_seed, cx, 0xC1B0, cz));
+                    var shape = new CityShape(sr.NextFloat() * 6.2832, sr.NextFloat() * 6.2832, sr.NextFloat() * 6.2832);
+                    var lr = new SplitMixRandom(Hashing.Combine(_seed, cx, 0xC1A7, cz));
+                    var layout = new CityLayout(lr.Next(18, 25), lr.Next(18, 25), lr.Next(3, 6), lr.Chance(0.3f) ? 0 : lr.Next(1, 4));
                     Interlocked.Increment(ref _found);
-                    if (o.Log) Console.WriteLine($"[ciudad] celda ({cx},{cz}): centro x {x} z {z}, radio {radius}, suelo {y}");
-                    return new City((int)(h ^ (h >> 32)), x, z, radius, y, floors);
+                    if (o.Log) Console.WriteLine($"[ciudad] celda ({cx},{cz}): centro x {x} z {z}, radio {radius}, suelo {y}, {type.Name}, estilo {style.Name}{(style.Walls ? " con muralla" : "")}, calles {layout.PitchX}x{layout.PitchZ}");
+                    return new City((int)(h ^ (h >> 32)), x, z, radius, y, floors, style, layout, type, shape);
                 }
             }
             if (why == Reject.Water) Interlocked.Increment(ref _rejWater);

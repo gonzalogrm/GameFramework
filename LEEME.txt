@@ -1,0 +1,4 @@
+PARCHE 14 - Poblados satelite
+Requiere los parches 1-13. Sobrescribe los ficheros. SIN cambios manuales. Universo nuevo.
+Cada ciudad tiene de 0 a 3 poblados (la capital de 2 a 4) a 24-160 bloques de su borde, en terreno llano y dentro de su misma celda.
+Los poblados son aldeas sin muralla ni mercader/alcalde: la mitad de aldeanos y como mucho 2 guardas. Salen en el mapa (M) y en la consola ([poblado] ...).

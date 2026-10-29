@@ -78,6 +78,22 @@
           "properties": { "leader": true },
           "equipment": { "hand": "club", "hand2": "club", "hand3": "iron_sword", "head": "iron_helmet" },
           "inventory": [ { "item": "health_potion", "count": 1 } ] }
-      ] }
+      ] },
+    // ======================= NPCs especiales de las ciudades (CitySpawner) =======================
+    // Estaticos (speed 0): se quedan delante de su edificio. Hablan con la tecla T (ver CityNpcs.cs).
+    { "name": "merchant", "parent": "villager", "title": "mercader", "speed": 0.0, "color": [210, 130, 40],
+      "properties": { "species": "Mercader", "hp": 10.0, "max_hp": 10.0 },
+      "inventory": [ { "item": "apple", "count": 5 }, { "item": "berries", "count": 8 }, { "item": "health_potion", "count": 2 } ] },
+    { "name": "blacksmith", "parent": "villager", "title": "herrero", "speed": 0.0, "color": [95, 95, 105],
+      "properties": { "species": "Herrero", "hp": 14.0, "max_hp": 14.0 },
+      "equipment": { "hand": "iron_sword" } },
+    { "name": "mayor", "parent": "villager", "title": "alcalde", "speed": 0.0, "color": [170, 50, 160],
+      "properties": { "species": "Alcalde", "hp": 12.0, "max_hp": 12.0 },
+      "equipment": { "head": "iron_helmet" } },
+    // Guarda de ciudad: patrulla cerca de su ciudad (su Tag "home:x:z") y ataca a los enemigos que se acercan (componente "city_guard", ver GuardAi.cs).
+    { "name": "guard", "parent": "creature", "title": "guarda", "speed": 4.2, "size": [0.6, 1.8], "color": [60, 90, 200], "inventorySize": 4,
+      "components": ["city_guard"],
+      "properties": { "species": "Guarda", "hp": 24.0, "max_hp": 24.0, "damage": 1.0, "attack_cooldown": 0.8, "aggro": 18.0 },
+      "equipment": { "hand": "iron_sword", "head": "iron_helmet", "chest": "leather_vest" } }
   ]
 }

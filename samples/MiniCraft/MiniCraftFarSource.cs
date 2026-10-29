@@ -31,10 +31,10 @@ public sealed class MiniCraftFarSource : IFarTerrainSource
     {
         wz = Math.Clamp(wz, 0, _zMax);   // más allá de los polos, el borde se repite
 
-        if (_cities?.CityAt(wx, wz) is { } city)
+        foreach (var city in _cities?.CitiesAt(wx, wz) ?? Array.Empty<City>())
         {
-            double dx = _scale.DeltaX(city.CenterX, wx), dz = wz - city.CenterZ;
-            if (dx * dx + dz * dz <= (double)city.Radius * city.Radius)
+            int dx = (int)Math.Round(_scale.DeltaX(city.CenterX, wx)), dz = wz - city.CenterZ;
+            if (city.Contains(dx, dz))
             {
                 height = city.GroundY;
                 color = new Color(150, 150, 140, 255);

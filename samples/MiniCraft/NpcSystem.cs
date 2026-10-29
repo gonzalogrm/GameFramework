@@ -43,9 +43,10 @@ public sealed class NpcSystem
     private readonly Random _rng;
     private readonly List<Entity> _scratch = new();
     private EnemyAi? _ai;
+	private GuardAi? _guards;
 
-    /// <summary>El jugador, objetivo de los enemigos. Asígnalo junto con Events para activar la IA de combate.</summary>
-    public PlayerState? Player { get; set; }
+	/// <summary>El jugador, objetivo de los enemigos. Asígnalo junto con Events para activar la IA de combate.</summary>
+	public PlayerState? Player { get; set; }
     public EventHub? Events { get; set; }
     private readonly List<Entity> _collisionScratch = new();
 
@@ -70,7 +71,8 @@ public sealed class NpcSystem
 
     private void OnArrived(Entity e)
     {
-        if (e.TypeId == EntityTypes.Caravan && TryPickLandDestination(e.Position, 8, out var dest))
+		if (GuardAi.IsGuard(e)) { _store.SetDestination(e, GuardAi.PatrolTarget(e, GroundY)); return; }
+		if (e.TypeId == EntityTypes.Caravan && TryPickLandDestination(e.Position, 8, out var dest))
             _store.SetDestination(e, dest);
         else
             _store.SetDestination(e, WanderTarget(e.Position));
@@ -170,7 +172,8 @@ public sealed class NpcSystem
     public void Update(float dt, Vec3d player)
     {
         _ai ??= new EnemyAi(_world);
-        _ai.BeginFrame();
+		_guards ??= new GuardAi(_store, _scale);
+		_ai.BeginFrame();
         _scratch.Clear();
         _scratch.AddRange(_store.Active);   // copia: Move/NotifyArrived pueden cambiar el conjunto
 
@@ -197,7 +200,8 @@ public sealed class NpcSystem
             float wishX = 0, wishZ = 0;
             // Enemigos: si el jugador está cerca los gobierna EnemyAi (A* y ataque); si no, vagan como el resto.
             bool engaged = Player != null && Events != null && _ai!.Think(e, state, local, player, Player, Events, dt, out wishX, out wishZ);
-            if (!engaged && e.Destination == null && e.Prototype?.Is(EntityTypes.EnemyProto) == true) _store.SetDestination(e, WanderTarget(e.Position));
+			if (!engaged && Events != null) engaged = _guards.Think(e, state, local, Events, dt, out wishX, out wishZ);
+			if (!engaged && e.Destination == null && e.Prototype?.Is(EntityTypes.EnemyProto) == true) _store.SetDestination(e, WanderTarget(e.Position));
             if (!engaged && e.Destination is { } d)
             {
                 double dx = _scale.DeltaX(local.X, d.X), dz = d.Z - local.Z;

@@ -63,8 +63,9 @@ public sealed class WorldSettings
     public float TreeDensityMultiplier { get; set; } = 1f;
     public float PropDensityMultiplier { get; set; } = 1f;    // hierba, flores y rocas (sprites)
 
-    // ----- Juego -----
-    public int FadeChunks { get; set; } = 2;                  // anchura (chunks) de la franja donde los bloques se disuelven sobre el terreno lejano; 0 = sin fundido
+	// ----- Juego -----
+	public CitySettings Cities { get; set; } = new();          // ciudades: frecuencia, tamano, guardas, NPC especiales
+	public int FadeChunks { get; set; } = 2;                  // anchura (chunks) de la franja donde los bloques se disuelven sobre el terreno lejano; 0 = sin fundido
     public float FadeInSeconds { get; set; } = 0.6f;          // un chunk recién construido tarda esto en aparecer (disolviéndose desde nada)
     public int FarCloseChunks { get; set; } = 0;              // el terreno lejano empieza a esta distancia (chunks); 0 = automático: ViewDistance
     public int FarDistanceChunks { get; set; } = 64;          // terreno lejano (LOD) hasta esta distancia, en chunks; 0 = desactivado
@@ -107,7 +108,10 @@ public sealed class WorldSettings
         SystemsPerGalaxy = other.SystemsPerGalaxy;
         MinPlanets = other.MinPlanets;
         MaxPlanets = other.MaxPlanets;
-    }
+		Cities.Villagers = other.Cities.Villagers;
+		Cities.Guards = other.Cities.Guards;
+		Cities.SpecialNpcs = other.Cities.SpecialNpcs;
+	}
 
     public WorldScale CreateScale() => new(MapWidth, MapHeight, RegionChunksX, RegionChunksZ, ChunkSize, ChunkSize);
 
@@ -235,6 +239,7 @@ public sealed class WorldSettings
         MaxPlanets = I(nameof(MaxPlanets), MaxPlanets, 1, 12);
         MapSamplesPerAxis = I(nameof(MapSamplesPerAxis), MapSamplesPerAxis, 1, 16);
         WorkerThreads = I(nameof(WorkerThreads), WorkerThreads, 0, 64);
-        return warnings;
+		Cities.Validate(warnings);
+		return warnings;
     }
 }
