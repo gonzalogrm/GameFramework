@@ -69,7 +69,7 @@
   "Cities": {
     "Chance": 0.8, // probabilidad de ciudad por celda de 1024 bloques (0..1)
     "MinRadius": 50, // radio minimo en bloques
-    "MaxRadius": 200, // radio maximo
+    "MaxRadius": 100, // radio maximo
     "MaxSlope": 8, // desnivel maximo del terreno donde se puede levantar una ciudad
     "MaxFloors": 6, // plantas maximas (las torres llegan a esta altura)
     "Villagers": 6, // aldeanos por ciudad

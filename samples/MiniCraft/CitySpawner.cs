@@ -52,10 +52,13 @@ public sealed class CitySpawner
         }
     }
 
+    /// <summary>Las ciudades grandes tienen más aldeanos; los poblados, la mitad.</summary>
+    private int VillagerCount(City city) => city.Hamlet ? Math.Max(1, _settings.Villagers / 2) : _settings.Villagers + city.Radius / 20;
+
     private void SpawnVillagers(City city, SplitMixRandom rng)
     {
         var def = EntityTypes.Registry.Get(EntityTypes.Villager);
-        for (int i = 0; i < (city.Hamlet ? Math.Max(1, _settings.Villagers / 2) : _settings.Villagers); i++)
+        for (int i = 0; i < VillagerCount(city); i++)
         {
             // En la plaza, alrededor de la fuente (entre 4 y 9 bloques del centro).
             double angle = rng.NextFloat() * Math.PI * 2, radius = 4 + rng.NextFloat() * 5;
@@ -95,7 +98,7 @@ public sealed class CitySpawner
     /// <summary>Guardas alrededor de la plaza. Su Tag recuerda a qué ciudad pertenecen: patrullan cerca de ella (ver GuardAi).</summary>
     private void SpawnGuards(City city, SplitMixRandom rng)
     {
-        int count = _settings.Guards >= 0 ? _settings.Guards : Math.Clamp(2 + city.Radius / 25, 2, 6);
+        int count = _settings.Guards >= 0 ? _settings.Guards : Math.Clamp(2 + city.Radius / 25, 2, 10);
         if (city.Hamlet) count = Math.Min(count, 2);
         for (int i = 0; i < count; i++)
         {

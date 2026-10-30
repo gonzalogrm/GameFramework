@@ -10,7 +10,8 @@ public sealed class CityOptions
     public int CellSize { get; set; } = 1024;     // debe ser múltiplo del tamaño de chunk (8, 16, 32)
     public int MinRadius { get; set; } = 52;
     public int MaxRadius { get; set; } = 80;
-    public int MaxSlope { get; set; } = 8;        // desnivel máximo (bloques) dentro de la ciudad
+    public float SizeFactor { get; set; } = 1.6f;   // multiplica el radio de las CIUDADES (los poblados no)
+    public int MaxSlope { get; set; } = 10;        // desnivel máximo (bloques) dentro de la ciudad
     public int Attempts { get; set; } = 16;       // posiciones candidatas por celda
     public int MaxFloors { get; set; } = 4;
     public int ReserveMargin { get; set; } = 6;   // margen sin árboles alrededor
@@ -26,6 +27,9 @@ public sealed record CityShape(double P1, double P2, double P3);
 public sealed record City(int Id, int CenterX, int CenterZ, int Radius, int GroundY, int MaxFloors, CityStyle Style, CityLayout Layout,
     CityType Type, CityShape Shape, bool Hamlet = false)
 {
+    /// <summary>Contenido ya decidido de los solares de esta ciudad (lo rellena CityStage al generar; es puro: se puede recalcular).</summary>
+    public ConcurrentDictionary<(int, int, int, int), object> Plots { get; } = new();
+
     public int PlazaHalf => Type.PlazaHalf;
 
     /// <summary>Mayor distancia al centro a la que puede haber ciudad (el contorno nunca la supera).</summary>
@@ -117,6 +121,13 @@ public sealed class CityPlanner
     /// <summary>¿Esta columna está dentro de una ciudad o poblado (más su margen)? Árboles y decoración no deben aparecer.</summary>
     public bool IsReserved(int wx, int wz) => CityAt(wx, wz) != null;
 
+    /// <summary>
+    /// Trazado de las calles: cuadrícula RECTA en la que la separación entre calles es distinta en cada una (pitch 24-28, desplazamiento de ±3 a ±6),
+    /// así que las manzanas salen de tamaños muy variados (de 7 a unos 37 bloques de lado).
+    /// </summary>
+    private static CityLayout MakeLayout(SplitMixRandom lr, CityType type) =>
+        new(lr.Next(24, 29), lr.Next(24, 29), lr.Next(3, 6), lr.Next(3, 7));
+
     private City[] Compute(int cx, int cz)
     {
         var main = ComputeMain(cx, cz);
@@ -138,7 +149,7 @@ public sealed class CityPlanner
         for (int i = 0; i < want; i++)
         for (int attempt = 0; attempt < 8; attempt++)
         {
-            int radius = Math.Max(24, (int)(rng.Next(o.MinRadius, o.MaxRadius + 1) * type.RadiusScale * (0.75 + 0.25 * rng.NextFloat())));
+            int radius = Math.Max(32, (int)(rng.Next(o.MinRadius, o.MaxRadius + 1) * type.RadiusScale * 1.4 * (0.8 + 0.2 * rng.NextFloat())));
             double ext = radius * (1 + type.Irregularity);
             double dist = main.Extent + ext + 24 + rng.NextFloat() * 140, angle = rng.NextFloat() * Math.PI * 2;
             int x = main.CenterX + (int)(Math.Cos(angle) * dist), z = main.CenterZ + (int)(Math.Sin(angle) * dist);
@@ -154,7 +165,7 @@ public sealed class CityPlanner
             var sr = new SplitMixRandom(Hashing.Combine(_seed, cx, 0xC1B0 + 1 + i, cz));
             var shape = new CityShape(sr.NextFloat() * 6.2832, sr.NextFloat() * 6.2832, sr.NextFloat() * 6.2832);
             var lr = new SplitMixRandom(Hashing.Combine(_seed, cx, 0xC1A7 + 1 + i, cz));
-            var layout = new CityLayout(lr.Next(18, 25), lr.Next(18, 25), lr.Next(3, 6), lr.Chance(0.3f) ? 0 : lr.Next(1, 4));
+            var layout = MakeLayout(lr, type);
             ulong h = Hashing.Combine(_seed, cx, 0xC17E1D + 1 + i, cz);
             Interlocked.Increment(ref _hamlets);
             if (o.Log) Console.WriteLine($"[poblado] celda ({cx},{cz}): centro x {x} z {z}, radio {radius}, suelo {y}, estilo {style.Name}");
@@ -170,8 +181,8 @@ public sealed class CityPlanner
         if (!rng.Chance(o.Chance)) { Interlocked.Increment(ref _noChance); return null; }
 
         var type = CityTypes.Pick(new SplitMixRandom(Hashing.Combine(_seed, cx, 0xC17F, cz)));
-        int radius = Math.Max(28, (int)(rng.Next(o.MinRadius, o.MaxRadius + 1) * type.RadiusScale));
-        int margin = (int)(o.MaxRadius * CityTypes.MaxRadiusScale * (1 + CityTypes.MaxIrregularity)) + o.ReserveMargin;
+        int radius = Math.Max(28, (int)(rng.Next(o.MinRadius, o.MaxRadius + 1) * type.RadiusScale * o.SizeFactor));
+        int margin = (int)(o.MaxRadius * CityTypes.MaxRadiusScale * o.SizeFactor * (1 + CityTypes.MaxIrregularity)) + o.ReserveMargin;
         int span = o.CellSize - 2 * margin;
         if (span <= 0) return null;
         int minGround = _climate.SeaLevel + _climate.Settings.BeachHeight + 1;
@@ -194,7 +205,7 @@ public sealed class CityPlanner
                     var sr = new SplitMixRandom(Hashing.Combine(_seed, cx, 0xC1B0, cz));
                     var shape = new CityShape(sr.NextFloat() * 6.2832, sr.NextFloat() * 6.2832, sr.NextFloat() * 6.2832);
                     var lr = new SplitMixRandom(Hashing.Combine(_seed, cx, 0xC1A7, cz));
-                    var layout = new CityLayout(lr.Next(18, 25), lr.Next(18, 25), lr.Next(3, 6), lr.Chance(0.3f) ? 0 : lr.Next(1, 4));
+                    var layout = MakeLayout(lr, type);
                     Interlocked.Increment(ref _found);
                     if (o.Log) Console.WriteLine($"[ciudad] celda ({cx},{cz}): centro x {x} z {z}, radio {radius}, suelo {y}, {type.Name}, estilo {style.Name}{(style.Walls ? " con muralla" : "")}, calles {layout.PitchX}x{layout.PitchZ}");
                     return new City((int)(h ^ (h >> 32)), x, z, radius, y, floors, style, layout, type, shape);

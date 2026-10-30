@@ -5,18 +5,22 @@ using GF.World.Map;
 namespace MiniCraft;
 
 /// <summary>
-/// Ciudades: nivela la zona y construye plaza con fuente, calles de trazado irregular, muralla opcional, edificios de distinto tamaño y, en las parcelas
-/// sin edificio, parques con árboles, jardines, estatuas y pozos. Cada columna se calcula de forma independiente a partir de (ciudad, coordenadas),
-/// así que no hay costuras entre chunks. Va DESPUÉS de TerrainStage.
+/// Ciudades: nivela la zona y construye plaza con fuente, calles (cuadrícula recta con manzanas de tamaños muy distintos), muralla opcional y edificios.
+/// Cada MANZANA (el espacio entre calles de la cuadrícula) se divide en solares (árbol binario determinista, sin calles entre ellos) y cada solar lleva un
+/// edificio (casa, torre, salón o taller, con la puerta hacia la calle) o, si no, UN solo elemento decorativo (parque, jardín, estatua, pozo, puesto, huerto).
+/// Un edificio solo se coloca si su planta cabe en el contorno y no pisa la plaza; si el centrado no cabe, se prueba pegado a cada lado del solar.
+/// Cada columna se calcula de forma independiente a partir de (ciudad, coordenadas), así que no hay costuras entre chunks. Va DESPUÉS de TerrainStage.
 /// </summary>
 public sealed class CityStage : IGenerationStage<ushort>
 {
-    private const int WallThickness = 2, WallHeight = 4;
+    private const int WallThickness = 2, WallHeight = 4, MinLeaf = 8;
 
-    private enum Kind { Open, House, Park, Garden, Statue, Well, Field }
+    private enum Kind { None, House, Park, Garden, Statue, Well, Field, Stall }
     private enum Build { House, Tower, Hall, Workshop }
-    private readonly record struct Lot(Kind Kind, Build Type, int Height, int Bw, int Bd, int Ox, int Oz, int Lw, int Ld, ulong Hash);
+    /// <summary>Un solar: origen (X0, Z0) relativo al centro de la ciudad, tamaño, qué lleva y, si es un edificio, su planta (Ox, Oz, Bw, Bd) y su puerta (0 -Z, 1 +Z, 2 -X, 3 +X).</summary>
+    private readonly record struct Lot(Kind Kind, Build Type, int Height, int Bw, int Bd, int Ox, int Oz, int Lw, int Ld, ulong Hash, int Door, int X0, int Z0);
     private readonly record struct Axis(bool Street, int Off, int Start, int End, int Index);
+    private readonly record struct Leaf(int X0, int Z0, int X1, int Z1, ulong H, int Bx0, int Bz0, int Bx1, int Bz1);
 
     private readonly CityPlanner _planner;
     private readonly WorldScale _scale;
@@ -88,7 +92,7 @@ public sealed class CityStage : IGenerationStage<ushort>
             else if (street)
             {
                 surface = st.Road;
-                // Pocas farolas: solo en la mitad de las calles, con la separación del tipo de ciudad (y nunca en los cruces).
+                // Pocas farolas: solo en la mitad de las calles de la cuadrícula, con la separación del tipo de ciudad (y nunca en los cruces).
                 int sp = city.Type.LampSpacing;
                 post = sp > 0 && !(ax.Street && az.Street) &&
                        ((ax.Street && ax.Off == 0 && (ax.Index & 1) == 0 && Mod(rz, sp) == 0) ||
@@ -102,8 +106,8 @@ public sealed class CityStage : IGenerationStage<ushort>
                 if (wall) extra = WallHeight;
                 else
                 {
-                    lot = GetLot(city, ax, az);
-                    lx = rx - ax.Start; lz = rz - az.Start;
+                    lot = LotAt(city, ax, az, rx, rz);
+                    lx = rx - lot.X0; lz = rz - lot.Z0;
                     extra = Extra(lot);
                     if (lot.Kind == Kind.Well && lx == lot.Lw / 2 && lz == lot.Ld / 2) surface = Blocks.Water;   // el agua del pozo
                     if (lot.Kind == Kind.Field && Mod(lz, 3) == 1) surface = Blocks.Dirt;                         // surcos del huerto
@@ -134,29 +138,89 @@ public sealed class CityStage : IGenerationStage<ushort>
 
     private static int Mod(int a, int b) => ((a % b) + b) % b;
 
-    // ------------------------------------------------------------------ trazado de calles
+    // ------------------------------------------------------------------ calles de la cuadrícula
 
-    /// <summary>Desplazamiento (±Jitter) de la calle k de un eje: las calles no forman una cuadrícula perfecta, y las parcelas salen de anchos distintos.</summary>
+    /// <summary>Desplazamiento (±Jitter) de la calle k de un eje: las calles no forman una cuadrícula perfecta, y las manzanas salen de anchos distintos.</summary>
     private static int Jitter(City c, int k, int salt) =>
         c.Layout.Jitter == 0 ? 0 : (int)(Hashing.Combine(c.Id, k, salt, 0x57E) % (ulong)(2 * c.Layout.Jitter + 1)) - c.Layout.Jitter;
 
+    private static int LineStart(City c, int k, int pitch, int salt) => k * pitch + Jitter(c, k, salt);
+
     /// <summary>
-    /// A lo largo de un eje (coordenada r relativa al centro): ¿es calle? y, si no, entre qué calles queda la parcela (Start inclusivo, End exclusivo).
+    /// A lo largo de un eje (coordenada r relativa al centro): ¿es calle? y, si no, entre qué calles queda la manzana (Start inclusivo, End exclusivo).
     /// La calle k empieza en k * pitch + Jitter(k) y mide StreetW; el desplazamiento nunca solapa dos calles.
     /// </summary>
     private static Axis AxisAt(City c, int r, int pitch, int salt)
     {
         int w = c.Layout.StreetW;
         int k = IntMath.FloorDiv(r, pitch);
-        int sk = k * pitch + Jitter(c, k, salt), s1 = (k + 1) * pitch + Jitter(c, k + 1, salt);
+        int sk = LineStart(c, k, pitch, salt), s1 = LineStart(c, k + 1, pitch, salt);
         if (r >= s1) return new Axis(true, r - s1, 0, 0, k + 1);
         if (r >= sk + w) return new Axis(false, 0, sk + w, s1, k);
         if (r >= sk) return new Axis(true, r - sk, 0, 0, k);
-        int sPrev = (k - 1) * pitch + Jitter(c, k - 1, salt);
+        int sPrev = LineStart(c, k - 1, pitch, salt);
         return new Axis(false, 0, sPrev + w, sk, k - 1);
     }
 
-    // ------------------------------------------------------------------ parcelas
+    // ------------------------------------------------------------------ manzanas y solares
+
+    /// <summary>
+    /// Divide una manzana en solares: un árbol binario determinista que parte por el lado largo (entre el 40 y el 60 %) mientras queden al menos 2 x MinLeaf,
+    /// y a veces se detiene antes (solares grandes). Los solares no tienen calles entre ellos.
+    /// </summary>
+    private static bool TrySplit(ulong h, int depth, int x0, int z0, int x1, int z1, out bool splitX, out int cut)
+    {
+        int w = x1 - x0, d = z1 - z0;
+        splitX = w >= d;
+        int len = splitX ? w : d;
+        cut = 0;
+        if (depth >= 3 || len < 2 * MinLeaf) return false;
+        ulong hh = Hashing.Mix(h + (ulong)depth * 0x9E3779B1UL);
+        if (len <= 20 && (hh >> 8) % 100UL < 55UL) return false;   // a veces el solar se queda entero
+        cut = Math.Clamp(len * (40 + (int)(hh % 21UL)) / 100, MinLeaf, len - MinLeaf);
+        return true;
+    }
+
+    private static ulong ChildHash(ulong h, bool right, int depth) =>
+        Hashing.Mix((h ^ (right ? 0xA5A5A5A5UL : 0x5A5A5A5AUL)) + (ulong)depth * 0x9E3779B97F4A7C15UL);
+
+    private static Leaf LeafAt(City c, Axis ax, Axis az, int rx, int rz)
+    {
+        int x0 = ax.Start, x1 = ax.End, z0 = az.Start, z1 = az.End;
+        ulong h = Hashing.Combine(c.Id, ax.Index, 0xB10C, az.Index);
+        int depth = 0;
+        while (TrySplit(h, depth, x0, z0, x1, z1, out bool splitX, out int cut))
+        {
+            bool right = splitX ? rx >= x0 + cut : rz >= z0 + cut;
+            if (splitX) { if (right) x0 += cut; else x1 = x0 + cut; }
+            else { if (right) z0 += cut; else z1 = z0 + cut; }
+            h = ChildHash(h, right, depth);
+            depth++;
+        }
+        return new Leaf(x0, z0, x1, z1, h, ax.Start, az.Start, ax.End, az.End);
+    }
+
+    private static void EnumLeaves(int x0, int z0, int x1, int z1, ulong h, int depth, int bx0, int bz0, int bx1, int bz1, List<Leaf> list)
+    {
+        if (!TrySplit(h, depth, x0, z0, x1, z1, out bool splitX, out int cut)) { list.Add(new Leaf(x0, z0, x1, z1, h, bx0, bz0, bx1, bz1)); return; }
+        if (splitX)
+        {
+            EnumLeaves(x0, z0, x0 + cut, z1, ChildHash(h, false, depth), depth + 1, bx0, bz0, bx1, bz1, list);
+            EnumLeaves(x0 + cut, z0, x1, z1, ChildHash(h, true, depth), depth + 1, bx0, bz0, bx1, bz1, list);
+        }
+        else
+        {
+            EnumLeaves(x0, z0, x1, z0 + cut, ChildHash(h, false, depth), depth + 1, bx0, bz0, bx1, bz1, list);
+            EnumLeaves(x0, z0 + cut, x1, z1, ChildHash(h, true, depth), depth + 1, bx0, bz0, bx1, bz1, list);
+        }
+    }
+
+    /// <summary>El solar de la columna (rx, rz). Su contenido se decide una vez y se guarda en la ciudad (es puro: da igual el hilo o el orden).</summary>
+    private static Lot LotAt(City c, Axis ax, Axis az, int rx, int rz)
+    {
+        var leaf = LeafAt(c, ax, az, rx, rz);
+        return (Lot)c.Plots.GetOrAdd((leaf.X0, leaf.Z0, leaf.X1, leaf.Z1), _ => (object)PlotOf(c, leaf));
+    }
 
     private static int Extra(Lot l) => l.Kind switch
     {
@@ -166,16 +230,142 @@ public sealed class CityStage : IGenerationStage<ushort>
         Kind.Statue => 7,
         Kind.Well => 5,
         Kind.Field => 2,
+        Kind.Stall => 4,
         _ => 0,
     };
 
+    private static bool Inside(City c, int rx, int rz, int margin) =>
+        Math.Sqrt((double)rx * rx + (double)rz * rz) + margin <= c.BoundaryRadius(rx, rz);
+
+    /// <summary>Lado de la manzana hacia el que mira la puerta: uno de los que dan a una calle.</summary>
+    private static int DoorSide(Leaf lf, ulong h)
+    {
+        Span<int> sides = stackalloc int[4];
+        int n = 0;
+        if (lf.Z0 == lf.Bz0) sides[n++] = 0;
+        if (lf.Z1 == lf.Bz1) sides[n++] = 1;
+        if (lf.X0 == lf.Bx0) sides[n++] = 2;
+        if (lf.X1 == lf.Bx1) sides[n++] = 3;
+        return n == 0 ? 0 : sides[(int)((h >> 48) % (ulong)n)];
+    }
+
     /// <summary>
-    /// Lugares notables (para colocar NPCs), en coordenadas relativas al centro: delante de la puerta de cada salón, taller, torre y casa. Recorre las
-    /// parcelas igual que Apply, así que coincide exactamente con lo construido.
+    /// Qué lleva un solar. Primero se intenta un EDIFICIO (la mayoría: casi todos en el núcleo, menos en la periferia); si la planta no cabe en el contorno
+    /// o por azar, lleva UN elemento decorativo. En desierto y nieve casi no hay decoración (solo pozos, estatuas, algún puesto).
+    /// </summary>
+    private static Lot PlotOf(City c, Leaf lf)
+    {
+        int lw = lf.X1 - lf.X0, ld = lf.Z1 - lf.Z0;
+        ulong h = lf.H;
+        Lot Make(Kind k, Build type = Build.House, int height = 0, int bw = 0, int bd = 0, int ox = 0, int oz = 0, int door = 0) =>
+            new(k, type, height, bw, bd, ox, oz, lw, ld, h, door, lf.X0, lf.Z0);
+
+        var t = c.Type;
+        var st = c.Style;
+        bool dry = st.Name is "desierto" or "nevada";
+        int ph = c.PlazaHalf, margin = st.Walls ? WallThickness + 2 : 2;
+        int midX = (lf.X0 + lf.X1) / 2, midZ = (lf.Z0 + lf.Z1) / 2;
+        double nd = Math.Sqrt((double)midX * midX + (double)midZ * midZ) / Math.Max(1.0, c.BoundaryRadius(midX, midZ));
+        int zone = nd < 0.40 ? 0 : nd < 0.70 ? 1 : 2;   // núcleo urbano, zona media, periferia
+
+        bool touchesPlaza = lf.X0 < ph + 1 && lf.X1 > -ph - 1 && lf.Z0 < ph + 1 && lf.Z1 > -ph - 1;
+
+        // ---- edificio
+        int buildPct = zone == 0 ? 97 : zone == 1 ? 88 : t.Name == "aldea" ? 55 : 70;   // el centro, casi todo edificios
+        if (t.Name == "fortaleza") buildPct += 8;
+        int maxW = lw - 2, maxD = ld - 2;   // deja 1 bloque de margen por lado
+        if ((int)(h % 100UL) < buildPct && maxW >= 5 && maxD >= 5)
+        {
+            int hall = t.HallPct, tower = t.TowerPct, work = t.WorkshopPct;
+            if (zone == 0) { hall = hall * 16 / 10; tower = tower * 16 / 10; }
+            else if (zone == 2) { hall = 0; tower = 0; work = work * 13 / 10; }
+
+            int pick = (int)((h >> 40) % 100UL);
+            var type = Build.House;
+            if (maxW >= 10 && maxD >= 10 && pick < hall) type = Build.Hall;
+            else if (c.MaxFloors >= 2 && pick >= hall && pick < hall + tower) type = Build.Tower;
+            else if (maxW >= 7 && maxD >= 6 && pick >= hall + tower && pick < hall + tower + work) type = Build.Workshop;
+
+            int bw, bd, height;
+            switch (type)
+            {
+                case Build.Hall:
+                    bw = Math.Max(10, maxW - (int)((h >> 16) % 3UL));
+                    bd = Math.Max(10, maxD - (int)((h >> 24) % 3UL));
+                    height = 6;
+                    break;
+                case Build.Tower:
+                    bw = bd = Math.Min(5 + (int)((h >> 16) % 3UL), Math.Min(maxW, maxD));
+                    height = c.MaxFloors * 4;
+                    break;
+                case Build.Workshop:
+                    bw = 7 + (int)((h >> 16) % (ulong)(Math.Min(maxW, 10) - 7 + 1));
+                    bd = 6 + (int)((h >> 24) % (ulong)(Math.Min(maxD, 8) - 6 + 1));
+                    height = 4;
+                    break;
+                default:
+                    // En el núcleo, edificios que llenan el solar; fuera, de tamaños más variados.
+                    bw = zone == 0 ? Math.Max(5, maxW - (int)((h >> 16) % 4UL)) : 5 + (int)((h >> 16) % (ulong)(maxW - 5 + 1));
+                    bd = zone == 0 ? Math.Max(5, maxD - (int)((h >> 24) % 4UL)) : 5 + (int)((h >> 24) % (ulong)(maxD - 5 + 1));
+                    // Núcleo: edificios altos; periferia: casas de 1 o 2 plantas.
+                    int fMax = zone == 2 ? Math.Min(2, c.MaxFloors) : c.MaxFloors;
+                    int fMin = zone == 0 ? Math.Min(c.MaxFloors, Math.Max(2, c.MaxFloors - 1)) : 1;
+                    height = (fMin + (int)((h >> 8) % (ulong)(fMax - fMin + 1))) * 4;
+                    break;
+            }
+
+            // Posiciones candidatas en el solar: centrado y pegado a cada lado (junto a la plaza o al contorno, el centrado puede no caber).
+            int[] oxs = { (lw - bw) / 2, 1, lw - bw - 1 }, ozs = { (ld - bd) / 2, 1, ld - bd - 1 };
+            foreach (int ox in oxs)
+            foreach (int oz in ozs)
+            {
+                int x0 = lf.X0 + ox, z0 = lf.Z0 + oz, x1 = x0 + bw - 1, z1 = z0 + bd - 1;
+                if (!(Inside(c, x0, z0, margin) && Inside(c, x1, z0, margin) && Inside(c, x0, z1, margin) && Inside(c, x1, z1, margin))) continue;
+                if (x0 < ph + 1 && x1 > -ph - 1 && z0 < ph + 1 && z1 > -ph - 1) continue;   // no pisa la plaza
+                return Make(Kind.House, type, height, bw, bd, ox, oz, DoorSide(lf, h));
+            }
+        }
+
+        // El solar toca la plaza y no cabe un edificio: jardín (en desierto y nieve, un puesto de mercado si cabe fuera de la plaza).
+        if (touchesPlaza)
+        {
+            if (!dry) return Make(Kind.Garden);
+            return Make(lw >= 6 && ld >= 5 && (Math.Abs(midX) > ph + 3 || Math.Abs(midZ) > ph + 3) ? Kind.Stall : Kind.None);
+        }
+
+        // ---- un elemento decorativo (pesos por tipo de ciudad; poco verde en el núcleo, huertos solo en la periferia)
+        int wPark = dry ? 0 : t.ParkPct, wGarden = dry ? 0 : t.GardenPct, wStatue = t.StatuePct + 2, wWell = t.WellPct + 3, wStall = 4;
+        int wField = zone == 2 && !dry ? t.FieldPct : 0, wNone = dry ? 40 : 0;
+        if (zone == 0) { wPark = wPark * 35 / 100; wGarden = wGarden * 35 / 100; wStatue += 4; }
+        int roll = (int)((h >> 8) % (ulong)(wPark + wGarden + wStatue + wWell + wStall + wField + wNone));
+        Kind kind;
+        if ((roll -= wPark) < 0) kind = Kind.Park;
+        else if ((roll -= wGarden) < 0) kind = Kind.Garden;
+        else if ((roll -= wStatue) < 0) kind = Kind.Statue;
+        else if ((roll -= wWell) < 0) kind = Kind.Well;
+        else if ((roll -= wStall) < 0) kind = Kind.Stall;
+        else if ((roll -= wField) < 0) kind = Kind.Field;
+        else kind = Kind.None;
+
+        if ((kind == Kind.Park || kind == Kind.Garden || kind == Kind.Field) && (lw < 5 || ld < 5)) kind = Kind.Statue;
+        if (kind == Kind.Field && (lw < 6 || ld < 6)) kind = Kind.Garden;
+        if (kind == Kind.Stall && (lw < 6 || ld < 5)) kind = Kind.Well;
+        // Estatuas y pozos necesitan su centro bien dentro del contorno y fuera de la plaza.
+        if ((kind == Kind.Statue || kind == Kind.Well) &&
+            !(lw >= 5 && ld >= 5 && Inside(c, midX, midZ, margin + 2) && (Math.Abs(midX) > ph + 3 || Math.Abs(midZ) > ph + 3))) kind = Kind.None;
+        return Make(kind);
+    }
+
+    // ------------------------------------------------------------------ lugares notables
+
+    /// <summary>
+    /// Lugares notables (para colocar NPCs), en coordenadas relativas al centro: delante de la puerta de cada salón, taller, torre y casa. Recorre
+    /// manzanas y solares igual que Apply, así que coincide exactamente con lo construido.
     /// </summary>
     public static List<CityLandmark> Landmarks(City c)
     {
         var list = new List<CityLandmark>();
+        var leaves = new List<Leaf>();
         int R = (int)Math.Ceiling(c.Extent);
         for (int rz = -R; rz <= R;)
         {
@@ -185,11 +375,24 @@ public sealed class CityStage : IGenerationStage<ushort>
             {
                 var ax = AxisAt(c, rx, c.Layout.PitchX, 0x11);
                 if (ax.Street) { rx++; continue; }
-                var lot = GetLot(c, ax, az);
-                if (lot.Kind == Kind.House)
+                leaves.Clear();
+                ulong h = Hashing.Combine(c.Id, ax.Index, 0xB10C, az.Index);
+                EnumLeaves(ax.Start, az.Start, ax.End, az.End, h, 0, ax.Start, az.Start, ax.End, az.End, leaves);
+                foreach (var lf in leaves)
                 {
+                    var leaf = lf;
+                    var lot = (Lot)c.Plots.GetOrAdd((leaf.X0, leaf.Z0, leaf.X1, leaf.Z1), _ => (object)PlotOf(c, leaf));
+                    if (lot.Kind != Kind.House) continue;
                     string role = lot.Type switch { Build.Hall => "hall", Build.Workshop => "workshop", Build.Tower => "tower", _ => "house" };
-                    list.Add(new CityLandmark(role, ax.Start + lot.Ox + lot.Bw / 2, az.Start + lot.Oz - 1));
+                    int x0 = lot.X0 + lot.Ox, z0 = lot.Z0 + lot.Oz;
+                    var (fx, fz) = lot.Door switch
+                    {
+                        1 => (x0 + lot.Bw - 1 - lot.Bw / 2, z0 + lot.Bd),
+                        2 => (x0 - 1, z0 + lot.Bd / 2),
+                        3 => (x0 + lot.Bw, z0 + lot.Bd / 2),
+                        _ => (x0 + lot.Bw / 2, z0 - 1),
+                    };
+                    list.Add(new CityLandmark(role, fx, fz));
                 }
                 rx = ax.End;
             }
@@ -198,90 +401,7 @@ public sealed class CityStage : IGenerationStage<ushort>
         return list;
     }
 
-    private static bool Inside(City c, int rx, int rz, int margin) =>
-        Math.Sqrt((double)rx * rx + (double)rz * rz) + margin <= c.BoundaryRadius(rx, rz);
-
-    private static Lot GetLot(City c, Axis ax, Axis az)
-    {
-        int sx = ax.Start, ex = ax.End, sz = az.Start, ez = az.End;
-        int lw = ex - sx, ld = ez - sz;
-        ulong h = Hashing.Combine(c.Id, ax.Index, 0xC17, az.Index);
-        Lot Make(Kind k, Build type = Build.House, int height = 0, int bw = 0, int bd = 0, int ox = 0, int oz = 0) => new(k, type, height, bw, bd, ox, oz, lw, ld, h);
-
-        // Las parcelas que tocan la plaza se quedan abiertas.
-        int ph = c.PlazaHalf;
-        if (sx < ph && ex > -ph && sz < ph && ez > -ph) return Make(Kind.Open);
-
-        // ¿Cabe entera dentro del contorno (y de la muralla)?
-        int margin = c.Style.Walls ? WallThickness + 2 : 2;
-        bool fits = Inside(c, sx, sz, margin) && Inside(c, ex - 1, sz, margin) && Inside(c, sx, ez - 1, margin) && Inside(c, ex - 1, ez - 1, margin);
-
-        // Zona de la parcela según su distancia al centro: núcleo urbano (denso y alto), zona media y periferia (casas bajas y huertos).
-        int midX = (sx + ex) / 2, midZ = (sz + ez) / 2;
-        double nd = Math.Sqrt((double)midX * midX + (double)midZ * midZ) / Math.Max(1.0, c.BoundaryRadius(midX, midZ));
-        int zone = nd < 0.40 ? 0 : nd < 0.70 ? 1 : 2;
-
-        // Qué hay en la parcela: porcentajes según el tipo de ciudad, ajustados por la zona.
-        var t = c.Type;
-        int park = t.ParkPct, garden = t.GardenPct, statue = t.StatuePct, well = t.WellPct, field = 0;
-        int hall = t.HallPct, tower = t.TowerPct, work = t.WorkshopPct;
-        if (zone == 0) { park = park * 35 / 100; garden = garden * 35 / 100; statue = statue > 0 ? statue + 4 : 0; hall = hall * 16 / 10; tower = tower * 16 / 10; }
-        else if (zone == 2) { park = park * 8 / 10; garden = garden * 8 / 10; statue = 0; field = t.FieldPct; hall = 0; tower = 0; work = work * 13 / 10; }
-
-        int roll = (int)(h % 100);
-        Kind kind;
-        if (!fits) kind = (roll & 1) == 0 && park > 0 ? Kind.Park : Kind.Garden;   // los bordes no se quedan pelados
-        else if (roll < park) kind = Kind.Park;
-        else if (roll < park + garden) kind = Kind.Garden;
-        else if (roll < park + garden + statue) kind = Kind.Statue;
-        else if (roll < park + garden + statue + well) kind = Kind.Well;
-        else if (roll < park + garden + statue + well + field) kind = Kind.Field;
-        else kind = Kind.House;
-        if (kind == Kind.Field && (lw < 6 || ld < 6 || c.Style.Name is "desierto" or "nevada")) kind = Kind.Garden;
-
-        if ((kind == Kind.Statue || kind == Kind.Well) && (lw < 5 || ld < 5)) kind = Kind.Garden;
-        if (kind == Kind.House)
-        {
-            int maxW = lw - 2, maxD = ld - 2;   // deja 1 bloque de margen por lado
-            if (maxW < 6 || maxD < 6) return Make(Kind.Park);
-
-            // Tipo de edificio según lo que quepa: salón grande, torre (la más alta que permite el mundo), taller o casa.
-            int pick = (int)((h >> 40) % 100);
-            var type = Build.House;
-            if (maxW >= 10 && maxD >= 10 && pick < hall) type = Build.Hall;
-            else if (c.MaxFloors >= 2 && pick >= hall && pick < hall + tower) type = Build.Tower;
-            else if (maxW >= 7 && pick >= hall + tower && pick < hall + tower + work) type = Build.Workshop;
-
-            int bw, bd, height;
-            switch (type)
-            {
-                case Build.Hall:
-                    bw = Math.Max(10, maxW - (int)((h >> 16) % 3));
-                    bd = Math.Max(10, maxD - (int)((h >> 24) % 3));
-                    height = 6;
-                    break;
-                case Build.Tower:
-                    bw = bd = Math.Min(5 + (int)((h >> 16) % 3), Math.Min(maxW, maxD));
-                    height = c.MaxFloors * 4;
-                    break;
-                case Build.Workshop:
-                    bw = 7 + (int)((h >> 16) % (ulong)(Math.Min(maxW, 10) - 7 + 1));
-                    bd = 6 + (int)((h >> 24) % (ulong)(Math.Min(maxD, 8) - 6 + 1));
-                    height = 4;
-                    break;
-                default:
-                    bw = 6 + (int)((h >> 16) % (ulong)(maxW - 6 + 1));
-                    bd = 6 + (int)((h >> 24) % (ulong)(maxD - 6 + 1));
-                    // Núcleo: edificios altos; periferia: casas de 1 o 2 plantas.
-                    int fMax = zone == 2 ? Math.Min(2, c.MaxFloors) : c.MaxFloors;
-                    int fMin = zone == 0 ? Math.Min(c.MaxFloors, Math.Max(2, c.MaxFloors - 1)) : 1;
-                    height = (fMin + (int)((h >> 8) % (ulong)(fMax - fMin + 1))) * 4;
-                    break;
-            }
-            return Make(Kind.House, type, height, bw, bd, (lw - bw) / 2, (ld - bd) / 2);
-        }
-        return Make(kind);
-    }
+    // ------------------------------------------------------------------ contenido de los solares
 
     private static ushort LotBlock(City c, Lot l, int lx, int lz, int r, int wx, int wz)
     {
@@ -292,28 +412,41 @@ public sealed class CityStage : IGenerationStage<ushort>
             case Kind.Park:
             {
                 var t = TreeBlock(l, lx, lz, r);
-                return t != Blocks.Air ? t : Ground(c, wx, wz, r, 0.14f);
+                return t != Blocks.Air ? t : Ground(c, wx, wz, r, 0.05f);
             }
-            case Kind.Garden: return Ground(c, wx, wz, r, 0.45f);
+            case Kind.Garden:
+            {
+                var hedge = HedgeBlock(l, lx, lz, r);
+                return hedge != Blocks.Air ? hedge : Ground(c, wx, wz, r, 0.18f);
+            }
             case Kind.Statue: return StatueBlock(l, lx, lz, r, st);
             case Kind.Well: return WellBlock(l, lx, lz, r, st);
             case Kind.Field: return FieldBlock(c, l, lx, lz, r, wx, wz);
+            case Kind.Stall: return StallBlock(l, lx, lz, r, st);
             default: return Blocks.Air;
         }
     }
 
-    /// <summary>Hierba, flores, matorrales o (en desierto y nieve) alguna roca sobre el suelo.</summary>
+    /// <summary>Hierba, flores o matorrales sueltos sobre el suelo (nada en desierto y nieve).</summary>
     private static ushort Ground(City c, int wx, int wz, int r, float density)
     {
-        if (r != 1) return Blocks.Air;
+        if (r != 1 || c.Style.Name is "desierto" or "nevada") return Blocks.Air;
         ulong ph = Hashing.Combine(c.Id, wx, 0xF10, wz);
         float u = (ph >> 40) * (1f / (1 << 24));
-        if (c.Style.Name is "desierto" or "nevada") return u < 0.03f ? Blocks.Rock : Blocks.Air;
         if (u < density * 0.5f) return Blocks.GrassTuft;
         if (u < density * 0.7f) return Blocks.TallGrass;
         if (u < density) return ((ph >> 4) & 1) == 0 ? Blocks.FlowerRed : Blocks.FlowerYellow;
-        if (u < density + 0.012f) return Blocks.Bush;
+        if (u < density + 0.006f) return Blocks.Bush;
         return Blocks.Air;
+    }
+
+    /// <summary>Seto de hojas alrededor de un jardín (con una entrada en la cara frontal).</summary>
+    private static ushort HedgeBlock(Lot l, int lx, int lz, int r)
+    {
+        if (r != 1 || l.Lw < 8 || l.Ld < 8) return Blocks.Air;
+        bool border = lx == 0 || lz == 0 || lx == l.Lw - 1 || lz == l.Ld - 1;
+        if (!border || (lz == 0 && Math.Abs(lx - l.Lw / 2) <= 1)) return Blocks.Air;
+        return Blocks.Leaves;
     }
 
     /// <summary>Huerto: franjas de cultivo (hierba alta) entre surcos de tierra, con un borde libre de un bloque.</summary>
@@ -322,6 +455,17 @@ public sealed class CityStage : IGenerationStage<ushort>
         if (r != 1 || lx < 1 || lz < 1 || lx >= l.Lw - 1 || lz >= l.Ld - 1 || Mod(lz, 3) == 1) return Blocks.Air;
         ulong ph = Hashing.Combine(c.Id, wx, 0xF1E, wz);
         return ((ph >> 40) * (1f / (1 << 24))) < 0.8f ? Blocks.TallGrass : Blocks.GrassTuft;
+    }
+
+    /// <summary>Puesto de mercado: 5 x 3, cuatro postes, mostrador delante, tejadillo y una lámpara.</summary>
+    private static ushort StallBlock(Lot l, int lx, int lz, int r, CityStyle st)
+    {
+        int dx = lx - l.Lw / 2, dz = lz - l.Ld / 2;
+        if (Math.Abs(dx) > 2 || Math.Abs(dz) > 1) return Blocks.Air;
+        bool post = Math.Abs(dx) == 2 && Math.Abs(dz) == 1;
+        if (r == 1) return post ? st.Pillar : dz == -1 ? st.Plaza : Blocks.Air;
+        if (r <= 3) return post ? st.Pillar : (r == 3 && dx == 0 && dz == 0 ? Blocks.LampWarm : Blocks.Air);
+        return r == 4 ? st.Roof : Blocks.Air;
     }
 
     private static ushort StatueBlock(Lot l, int lx, int lz, int r, CityStyle st)
@@ -351,18 +495,17 @@ public sealed class CityStage : IGenerationStage<ushort>
         int spanX = l.Lw - 6, spanZ = l.Ld - 6;
         int tx = spanX > 0 ? 3 + (int)(hh % (ulong)spanX) : l.Lw / 2;
         int tz = spanZ > 0 ? 3 + (int)((hh >> 16) % (ulong)spanZ) : l.Ld / 2;
-        return (tx, tz, 4 + (int)((hh >> 32) % 3));
+        return (tx, tz, 4 + (int)((hh >> 32) % 3UL));
     }
 
     private static ushort TreeBlock(Lot l, int lx, int lz, int r)
     {
-        var a = TreeSpot(l, 0);
-        ushort b = TreeAt(lx - a.X, lz - a.Z, r, a.Trunk);
-        if (b != Blocks.Air) return b;
-        if (l.Lw >= 12 && l.Ld >= 12)   // los parques grandes llevan un segundo árbol, separado del primero
+        int n = Math.Clamp(l.Lw * l.Ld / 150, 1, 6);
+        for (int i = 0; i < n; i++)
         {
-            var s = TreeSpot(l, 1);
-            if (Math.Abs(s.X - a.X) >= 5 || Math.Abs(s.Z - a.Z) >= 5) return TreeAt(lx - s.X, lz - s.Z, r, s.Trunk);
+            var a = TreeSpot(l, i);
+            ushort b = TreeAt(lx - a.X, lz - a.Z, r, a.Trunk);
+            if (b != Blocks.Air) return b;
         }
         return Blocks.Air;
     }
@@ -382,76 +525,83 @@ public sealed class CityStage : IGenerationStage<ushort>
 
     // ------------------------------------------------------------------ edificios
 
-    /// <summary>Bloque del edificio a altura relativa r (1 = justo sobre el suelo). px, pz: posición dentro de su planta.</summary>
+    /// <summary>
+    /// Bloque del edificio a altura relativa r (1 = justo sobre el suelo). px, pz: posición dentro de su planta. Los cuatro modelos se definen con la puerta
+    /// en la cara pz == 0; aquí se giran la planta según el lado de la puerta del solar.
+    /// </summary>
     private static ushort BuildingBlock(Lot l, int px, int pz, int r, CityStyle st)
     {
         if (px < 0 || px >= l.Bw || pz < 0 || pz >= l.Bd) return Blocks.Air;
-        bool edgeX = px == 0 || px == l.Bw - 1, edgeZ = pz == 0 || pz == l.Bd - 1;
+        int qx, qz, qw, qd;
+        switch (l.Door)
+        {
+            case 1: qx = l.Bw - 1 - px; qz = l.Bd - 1 - pz; qw = l.Bw; qd = l.Bd; break;
+            case 2: qx = pz; qz = px; qw = l.Bd; qd = l.Bw; break;
+            case 3: qx = pz; qz = l.Bw - 1 - px; qw = l.Bd; qd = l.Bw; break;
+            default: qx = px; qz = pz; qw = l.Bw; qd = l.Bd; break;
+        }
+        bool edgeX = qx == 0 || qx == qw - 1, edgeZ = qz == 0 || qz == qd - 1;
         return l.Type switch
         {
-            Build.Tower => TowerBlock(l, px, pz, r, st, edgeX, edgeZ),
-            Build.Hall => HallBlock(l, px, pz, r, st, edgeX, edgeZ),
-            Build.Workshop => WorkshopBlock(l, px, pz, r, st, edgeX, edgeZ),
-            _ => HouseBlock(l, px, pz, r, st, edgeX, edgeZ),
+            Build.Tower => TowerBlock(l.Height, qx, qz, qw, qd, r, st, edgeX, edgeZ),
+            Build.Hall => HallBlock(l.Height, qx, qz, qw, qd, r, st, edgeX, edgeZ),
+            Build.Workshop => WorkshopBlock(l.Height, qx, qz, qw, qd, r, st, edgeX, edgeZ),
+            _ => HouseBlock(l.Height, qx, qz, qw, qd, r, st, edgeX, edgeZ),
         };
     }
 
-    private static ushort HouseBlock(Lot l, int px, int pz, int r, CityStyle st, bool edgeX, bool edgeZ)
+    private static ushort HouseBlock(int height, int px, int pz, int bw, int bd, int r, CityStyle st, bool edgeX, bool edgeZ)
     {
-        int height = l.Height;
         if (r > height + 1) return Blocks.Air;
         if (r == height + 1) return st.Roof;   // tejado
 
-        if (!edgeX && !edgeZ) return r == height && px == l.Bw / 2 && pz == l.Bd / 2 ? Blocks.LampWarm : Blocks.Air;   // interior + lámpara
-        if (edgeX && edgeZ) return st.Pillar;                                                                          // esquinas
-        if (pz == 0 && px == l.Bw / 2 && r <= 2) return Blocks.Air;                                                    // puerta
+        if (!edgeX && !edgeZ) return r == height && px == bw / 2 && pz == bd / 2 ? Blocks.LampWarm : Blocks.Air;   // interior + lámpara
+        if (edgeX && edgeZ) return st.Pillar;                                                                      // esquinas
+        if (pz == 0 && px == bw / 2 && r <= 2) return Blocks.Air;                                                  // puerta
 
         bool window = (r % 4 == 2 || r % 4 == 3) && ((edgeX ? pz : px) & 1) == 1;
         return window ? Blocks.GlassBlue : st.Wall;
     }
 
     /// <summary>Torre: planta pequeña y muy alta, con troneras y almenas en la cima.</summary>
-    private static ushort TowerBlock(Lot l, int px, int pz, int r, CityStyle st, bool edgeX, bool edgeZ)
+    private static ushort TowerBlock(int height, int px, int pz, int bw, int bd, int r, CityStyle st, bool edgeX, bool edgeZ)
     {
-        int height = l.Height;
         if (r > height + 2) return Blocks.Air;
         if (r == height + 2) return (edgeX || edgeZ) && ((px + pz) & 1) == 0 ? st.Wall : Blocks.Air;   // almenas
         if (r == height + 1) return st.Roof;
 
-        if (!edgeX && !edgeZ) return r == height && px == l.Bw / 2 && pz == l.Bd / 2 ? Blocks.LampWarm : Blocks.Air;
+        if (!edgeX && !edgeZ) return r == height && px == bw / 2 && pz == bd / 2 ? Blocks.LampWarm : Blocks.Air;
         if (edgeX && edgeZ) return st.Pillar;
-        if (pz == 0 && px == l.Bw / 2 && r <= 2) return Blocks.Air;   // puerta
+        if (pz == 0 && px == bw / 2 && r <= 2) return Blocks.Air;   // puerta
 
-        bool slit = (r % 4 == 2 || r % 4 == 3) && (edgeX ? pz : px) == (edgeX ? l.Bd : l.Bw) / 2;   // tronera centrada en cada cara
+        bool slit = (r % 4 == 2 || r % 4 == 3) && (edgeX ? pz : px) == (edgeX ? bd : bw) / 2;   // tronera centrada en cada cara
         return slit ? Blocks.GlassBlue : st.Wall;
     }
 
     /// <summary>Salón grande: planta amplia y techo alto (6), doble puerta, ventanales y columnas interiores.</summary>
-    private static ushort HallBlock(Lot l, int px, int pz, int r, CityStyle st, bool edgeX, bool edgeZ)
+    private static ushort HallBlock(int height, int px, int pz, int bw, int bd, int r, CityStyle st, bool edgeX, bool edgeZ)
     {
-        int height = l.Height;
         if (r > height + 1) return Blocks.Air;
         if (r == height + 1) return st.Roof;
 
         if (!edgeX && !edgeZ)
         {
             if (px % 4 == 2 && pz % 4 == 2) return st.Pillar;   // columnas
-            bool lamp = r == height && pz == l.Bd / 2 && (px == l.Bw / 3 || px == 2 * l.Bw / 3);
+            bool lamp = r == height && pz == bd / 2 && (px == bw / 3 || px == 2 * bw / 3);
             return lamp ? Blocks.LampWarm : Blocks.Air;
         }
         if (edgeX && edgeZ) return st.Pillar;
-        if (pz == 0 && Math.Abs(px - l.Bw / 2) <= 1 && r <= 3) return Blocks.Air;   // puerta de 3 de ancho
+        if (pz == 0 && Math.Abs(px - bw / 2) <= 1 && r <= 3) return Blocks.Air;   // puerta de 3 de ancho
 
         bool window = r >= 2 && r <= 4 && ((edgeX ? pz : px) % 3) == 1;
         return window ? Blocks.GlassBlue : st.Wall;
     }
 
     /// <summary>Taller: fachada abierta con pilares, fragua con chimenea al fondo.</summary>
-    private static ushort WorkshopBlock(Lot l, int px, int pz, int r, CityStyle st, bool edgeX, bool edgeZ)
+    private static ushort WorkshopBlock(int height, int px, int pz, int bw, int bd, int r, CityStyle st, bool edgeX, bool edgeZ)
     {
-        int height = l.Height;
         // Fragua: base de piedra, fuego encima y chimenea que atraviesa el tejado.
-        if (px == l.Bw / 2 && pz == l.Bd - 2)
+        if (px == bw / 2 && pz == bd - 2)
         {
             if (r == 1) return Blocks.Stone;
             if (r == 2) return Blocks.LampWarm;
