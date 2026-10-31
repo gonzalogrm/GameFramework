@@ -33,10 +33,11 @@ public sealed class MiniCraftFarSource : IFarTerrainSource
 
         foreach (var city in _cities?.CitiesAt(wx, wz) ?? Array.Empty<City>())
         {
+            if (city.Abandoned) continue;   // las ruinas se ven con el terreno natural
             int dx = (int)Math.Round(_scale.DeltaX(city.CenterX, wx)), dz = wz - city.CenterZ;
             if (city.Contains(dx, dz))
             {
-                height = city.GroundY;
+                height = city.Target(dx, dz);
                 color = new Color(150, 150, 140, 255);
                 return;
             }

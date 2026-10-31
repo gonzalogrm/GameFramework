@@ -36,6 +36,7 @@ public sealed class CitySpawner
         int cx = _scale.WrapChunkX(c.X);
         foreach (var city in _planner.CitiesAt(cx * size + size / 2, c.Z * size + size / 2))
         {
+            if (city.Abandoned) continue;   // una ruina: nadie vive ahí
             if (city.CenterX < cx * size || city.CenterX >= (cx + 1) * size || city.CenterZ < c.Z * size || city.CenterZ >= (c.Z + 1) * size) continue;
 
             // ¿Ya hay aldeanos aquí (partida guardada)?

@@ -779,9 +779,9 @@ public sealed class PlayScene : UiScene
             yield return new MapMarker((float)e.Position.X, (float)e.Position.Z, new Color(def.R, def.G, def.B), 5f);
         }
 
-        foreach (var c in _cities.Known)
-            yield return new MapMarker(c.CenterX, c.CenterZ, Color.White, 9f);
-    }
+		foreach (var c in _cities.Known)
+			yield return new MapMarker(c.CenterX, c.CenterZ, c.Abandoned ? new Color(220, 150, 50) : Color.White, c.Abandoned ? 7f : 9f);
+	}
 
     private void UpdateDebug(GameTime gameTime)
     {

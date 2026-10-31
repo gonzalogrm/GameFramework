@@ -18,7 +18,7 @@ public sealed class CityStage : IGenerationStage<ushort>
     private enum Kind { None, House, Park, Garden, Statue, Well, Field, Stall }
     private enum Build { House, Tower, Hall, Workshop }
     /// <summary>Un solar: origen (X0, Z0) relativo al centro de la ciudad, tamaño, qué lleva y, si es un edificio, su planta (Ox, Oz, Bw, Bd) y su puerta (0 -Z, 1 +Z, 2 -X, 3 +X).</summary>
-    private readonly record struct Lot(Kind Kind, Build Type, int Height, int Bw, int Bd, int Ox, int Oz, int Lw, int Ld, ulong Hash, int Door, int X0, int Z0);
+    private readonly record struct Lot(Kind Kind, Build Type, int Height, int Bw, int Bd, int Ox, int Oz, int Lw, int Ld, ulong Hash, int Door, int X0, int Z0, int Base);
     private readonly record struct Axis(bool Street, int Off, int Start, int End, int Index);
     private readonly record struct Leaf(int X0, int Z0, int X1, int Z1, ulong H, int Bx0, int Bz0, int Bx1, int Bz1);
 
@@ -49,11 +49,13 @@ public sealed class CityStage : IGenerationStage<ushort>
         double cdx = _scale.DeltaX(city.CenterX, o.X + sx / 2.0), cdz = o.Z + sz / 2.0 - city.CenterZ;
         if (Math.Sqrt(cdx * cdx + cdz * cdz) > city.Extent + (sx + sz) * 0.5) return;
         var st = city.Style;
-        int top = city.GroundY + Math.Max(city.MaxFloors * 4 + 3, 9);
+        bool ruin = city.Abandoned;   // una ruina: la misma ciudad, deteriorada
+        int top = city.GroundY + 16 + Math.Max(city.MaxFloors * 4 + 3, 9);
         if (o.Y > top || o.Y + sy <= city.GroundY - 24) return;
 
         var cells = chunk.Cells;
         double extent2 = city.Extent * city.Extent;
+        int plazaY = city.Target(0, 0);   // la plaza es plana
         int ph = city.PlazaHalf;   // la plaza es un cuadrado de 2*ph de lado centrado en la ciudad
 
         for (int z = 0; z < sz; z++)
@@ -66,6 +68,7 @@ public sealed class CityStage : IGenerationStage<ushort>
             double dist = Math.Sqrt(d2);
             double bound = city.BoundaryRadius(rx, rz);   // el contorno es irregular
             if (dist > bound) continue;
+            double fade = city.FadeAt(dist, bound);       // 0 dentro, 1 en el contorno: el suelo se funde con el terreno original
 
             var ax = AxisAt(city, rx, city.Layout.PitchX, 0x11);
             var az = AxisAt(city, rz, city.Layout.PitchZ, 0x22);
@@ -76,7 +79,7 @@ public sealed class CityStage : IGenerationStage<ushort>
             bool water = fountain && rx >= -1 && rx <= 0 && rz >= -1 && rz <= 0;
             bool rim = fountain && !water;
             bool plazaSq = rx >= -ph && rx < ph && rz >= -ph && rz < ph;
-            bool plazaLamp = plazaSq && !fountain && city.Type.LampSpacing > 0 && (rx == -ph || rx == ph - 1) && (rz == -ph || rz == ph - 1);
+            bool plazaLamp = !ruin && plazaSq && !fountain && city.Type.LampSpacing > 0 && (rx == -ph || rx == ph - 1) && (rz == -ph || rz == ph - 1);
             bool wall = st.Walls && !street && !plazaSq && dist > bound - WallThickness;   // la muralla se abre donde llega una calle (puertas)
 
             Lot lot = default;
@@ -85,7 +88,7 @@ public sealed class CityStage : IGenerationStage<ushort>
             ushort surface;
             if (fountain)
             {
-                surface = water ? Blocks.Water : st.Plaza;
+                surface = water ? (ruin ? Blocks.Dirt : Blocks.Water) : st.Plaza;   // la fuente de una ruina está seca
                 extra = rim ? 1 : 0;
             }
             else if (plazaSq) { surface = st.Plaza; extra = plazaLamp ? 3 : 0; }
@@ -94,7 +97,7 @@ public sealed class CityStage : IGenerationStage<ushort>
                 surface = st.Road;
                 // Pocas farolas: solo en la mitad de las calles de la cuadrícula, con la separación del tipo de ciudad (y nunca en los cruces).
                 int sp = city.Type.LampSpacing;
-                post = sp > 0 && !(ax.Street && az.Street) &&
+                post = !ruin && sp > 0 && !(ax.Street && az.Street) &&
                        ((ax.Street && ax.Off == 0 && (ax.Index & 1) == 0 && Mod(rz, sp) == 0) ||
                         (az.Street && az.Off == 0 && (az.Index & 1) == 0 && Mod(rx, sp) == 0));
                 extra = post ? 3 : 0;
@@ -114,8 +117,39 @@ public sealed class CityStage : IGenerationStage<ushort>
                 }
             }
 
+            // Hacia el borde las calles se van deshaciendo: el firme da paso poco a poco al suelo natural (un camino de tierra).
+            if (street && !plazaSq && fade > 0.35)
+            {
+                ulong fh = Hashing.Combine(city.Id, wx, 0xFAD1, wz);
+                if ((fh >> 40) * (1f / (1 << 24)) < (fade - 0.35) / 0.65)
+                {
+                    ushort nt = Biomes.Surface[_columns.BiomeAt(wx, wz)];
+                    surface = nt == Blocks.Stone ? Blocks.Grass : nt;
+                }
+            }
+
+            // Ruinas: el firme está agrietado y por las grietas asoma el suelo natural y la tierra.
+            if (ruin && (street || plazaSq) && !water)
+            {
+                ulong ch = Hashing.Combine(city.Id, wx, 0xC4AC, wz);
+                if ((ch >> 40) * (1f / (1 << 24)) < city.Decay * 0.6)
+                {
+                    ushort nt2 = Biomes.Surface[_columns.BiomeAt(wx, wz)];
+                    surface = (ch & 1) == 0 ? (nt2 == Blocks.Stone ? Blocks.Grass : nt2) : Blocks.Dirt;
+                }
+            }
+
             int h = _columns.HeightAt(wx, wz);
-            int g = city.GroundY;
+            // Plaza plana; calles y muralla siguen el relieve suavizado y, hacia el borde, se funden con el terreno original; cada solar es una terraza a su
+            // propio nivel (ya fundido en PlotOf) y los solares sin nada conservan el terreno.
+            int g;
+            if (fountain || plazaSq) g = plazaY;
+            else if (street || wall)
+            {
+                int tgt = city.Target(rx, rz);
+                g = fade <= 0 ? tgt : (int)Math.Round(tgt + (h - tgt) * fade);
+            }
+            else g = lot.Kind == Kind.None ? h : lot.Base;
             int start = h >= g ? g : h + 1;                  // rellenar hasta g o reescribir la superficie
             int end = Math.Max(Math.Max(h, g), g + extra);   // lo que sobra del terreno se vacía; lo construido llega hasta g + extra
             int y0 = Math.Max(start, o.Y), y1 = Math.Min(end, o.Y + sy - 1);
@@ -131,9 +165,30 @@ public sealed class CityStage : IGenerationStage<ushort>
                 else if (street) id = post ? (r <= 2 ? st.Pillar : r == 3 ? Blocks.LampWarm : Blocks.Air) : Blocks.Air;
                 else if (wall) id = r < WallHeight || (r == WallHeight && ((rx + rz) & 1) == 0) ? st.WallBlock : Blocks.Air;   // almenas
                 else id = LotBlock(city, lot, lx, lz, r, wx, wz);
+                if (ruin && id != Blocks.Air && r > 0 && (wall || rim || lot.Kind is Kind.House or Kind.Statue or Kind.Well or Kind.Stall))
+                    id = RuinBlock(city, id, wx, wy, wz, r, wall ? WallHeight : extra, wall || rim ? 0UL : lot.Hash);
                 cells[((wy - o.Y) * sz + z) * sx + x] = id;
             }
         }
+    }
+
+    /// <summary>
+    /// Deterioro de una ruina: los bloques altos caen más que los bajos (los muros se desmoronan desde arriba), los cristales están rotos, las lámparas
+    /// apagadas y algunos edificios se han venido abajo casi enteros. Parte de lo que cae lo ocupa la maleza (hojas). 'top' es la altura de la estructura
+    /// en esa columna y 'plotHash' (0 si no es un edificio) decide si el solar se derrumbó.
+    /// </summary>
+    private static ushort RuinBlock(City c, ushort id, int wx, int wy, int wz, int r, int top, ulong plotHash)
+    {
+        if (id == Blocks.LampWarm) return Blocks.Air;
+        double d = c.Decay;
+        ulong h = Hashing.Combine(c.Id, wx, wy, wz);
+        double u = (h >> 40) * (1.0 / (1 << 24)), v = ((h >> 16) & 0xFFFFF) / (double)0x100000;
+        double rel = top <= 0 ? 0.0 : Math.Min(1.0, r / (double)top);
+        double p = d * (0.25 + 0.75 * rel);
+        if (plotHash != 0 && (plotHash >> 56) / 255.0 < d * 0.5 && rel > 0.3) p = 0.9;   // edificio derrumbado
+        if (id == Blocks.GlassBlue) p = Math.Max(p, 0.55 + 0.4 * d);                      // cristales rotos
+        if (u < p) return v < 0.15 ? Blocks.Leaves : Blocks.Air;
+        return id;
     }
 
     private static int Mod(int a, int b) => ((a % b) + b) % b;
@@ -237,6 +292,27 @@ public sealed class CityStage : IGenerationStage<ushort>
     private static bool Inside(City c, int rx, int rz, int margin) =>
         Math.Sqrt((double)rx * rx + (double)rz * rz) + margin <= c.BoundaryRadius(rx, rz);
 
+    /// <summary>
+    /// ¿Cabe el rectángulo [x0, x1] x [z0, z1] (relativo al centro) entero dentro del contorno, con 'margin' de holgura? Se comprueba TODO el perímetro
+    /// (cada 2 bloques), no solo las esquinas: el contorno es irregular y puede entrar entre dos esquinas.
+    /// </summary>
+    private static bool RectInside(City c, int x0, int z0, int x1, int z1, int margin)
+    {
+        for (int x = x0; ; x += 2)
+        {
+            if (x > x1) x = x1;
+            if (!Inside(c, x, z0, margin) || !Inside(c, x, z1, margin)) return false;
+            if (x == x1) break;
+        }
+        for (int z = z0; ; z += 2)
+        {
+            if (z > z1) z = z1;
+            if (!Inside(c, x0, z, margin) || !Inside(c, x1, z, margin)) return false;
+            if (z == z1) break;
+        }
+        return true;
+    }
+
     /// <summary>Lado de la manzana hacia el que mira la puerta: uno de los que dan a una calle.</summary>
     private static int DoorSide(Leaf lf, ulong h)
     {
@@ -257,8 +333,12 @@ public sealed class CityStage : IGenerationStage<ushort>
     {
         int lw = lf.X1 - lf.X0, ld = lf.Z1 - lf.Z0;
         ulong h = lf.H;
+        // El suelo del solar: una terraza al nivel del relieve suavizado, que hacia el borde de la ciudad se acerca al terreno original.
+        int baseY = c.Target((lf.X0 + lf.X1) / 2, (lf.Z0 + lf.Z1) / 2);
+        double baseFade = c.Fade((lf.X0 + lf.X1) / 2, (lf.Z0 + lf.Z1) / 2);
+        if (baseFade > 0) baseY = (int)Math.Round(baseY + (c.OriginalHeight(c.CenterX + (lf.X0 + lf.X1) / 2, c.CenterZ + (lf.Z0 + lf.Z1) / 2) - baseY) * baseFade);
         Lot Make(Kind k, Build type = Build.House, int height = 0, int bw = 0, int bd = 0, int ox = 0, int oz = 0, int door = 0) =>
-            new(k, type, height, bw, bd, ox, oz, lw, ld, h, door, lf.X0, lf.Z0);
+            new(k, type, height, bw, bd, ox, oz, lw, ld, h, door, lf.X0, lf.Z0, baseY);
 
         var t = c.Type;
         var st = c.Style;
@@ -273,6 +353,10 @@ public sealed class CityStage : IGenerationStage<ushort>
         // ---- edificio
         int buildPct = zone == 0 ? 97 : zone == 1 ? 88 : t.Name == "aldea" ? 55 : 70;   // el centro, casi todo edificios
         if (t.Name == "fortaleza") buildPct += 8;
+        // Hacia el contorno la edificación se aclara (hasta un 40 % de lo normal) y gana peso el campo abierto: la ciudad no acaba en seco.
+        double edge = Math.Clamp((nd - 0.85) / 0.15, 0.0, 1.0);
+        buildPct = (int)(buildPct * (1 - 0.6 * edge));
+        if (c.Decay > 0) buildPct = (int)(buildPct * (1 - 0.35 * c.Decay));   // en una ruina ya no quedan tantos edificios
         int maxW = lw - 2, maxD = ld - 2;   // deja 1 bloque de margen por lado
         if ((int)(h % 100UL) < buildPct && maxW >= 5 && maxD >= 5)
         {
@@ -316,11 +400,14 @@ public sealed class CityStage : IGenerationStage<ushort>
 
             // Posiciones candidatas en el solar: centrado y pegado a cada lado (junto a la plaza o al contorno, el centrado puede no caber).
             int[] oxs = { (lw - bw) / 2, 1, lw - bw - 1 }, ozs = { (ld - bd) / 2, 1, ld - bd - 1 };
+            // El edificio entero (con tejado, almenas o chimenea) tiene que caber bajo el techo del mundo: si no, quedaría sin terminar.
+            int needed = type == Build.Tower ? height + 2 : type == Build.Workshop ? height + 3 : height + 1;
+            if (c.WorldHeight <= 0 || needed <= c.WorldHeight - 1 - baseY)
             foreach (int ox in oxs)
             foreach (int oz in ozs)
             {
                 int x0 = lf.X0 + ox, z0 = lf.Z0 + oz, x1 = x0 + bw - 1, z1 = z0 + bd - 1;
-                if (!(Inside(c, x0, z0, margin) && Inside(c, x1, z0, margin) && Inside(c, x0, z1, margin) && Inside(c, x1, z1, margin))) continue;
+                if (!RectInside(c, x0, z0, x1, z1, margin)) continue;
                 if (x0 < ph + 1 && x1 > -ph - 1 && z0 < ph + 1 && z1 > -ph - 1) continue;   // no pisa la plaza
                 return Make(Kind.House, type, height, bw, bd, ox, oz, DoorSide(lf, h));
             }
@@ -336,6 +423,9 @@ public sealed class CityStage : IGenerationStage<ushort>
         // ---- un elemento decorativo (pesos por tipo de ciudad; poco verde en el núcleo, huertos solo en la periferia)
         int wPark = dry ? 0 : t.ParkPct, wGarden = dry ? 0 : t.GardenPct, wStatue = t.StatuePct + 2, wWell = t.WellPct + 3, wStall = 4;
         int wField = zone == 2 && !dry ? t.FieldPct : 0, wNone = dry ? 40 : 0;
+        wPark += dry ? 0 : (int)(edge * 10);
+        wNone += (int)(edge * 12);
+        if (c.Decay > 0) { wNone += (int)(c.Decay * 25); wPark += dry ? 0 : (int)(c.Decay * 15); }   // la naturaleza lo recupera
         if (zone == 0) { wPark = wPark * 35 / 100; wGarden = wGarden * 35 / 100; wStatue += 4; }
         int roll = (int)((h >> 8) % (ulong)(wPark + wGarden + wStatue + wWell + wStall + wField + wNone));
         Kind kind;
@@ -350,9 +440,13 @@ public sealed class CityStage : IGenerationStage<ushort>
         if ((kind == Kind.Park || kind == Kind.Garden || kind == Kind.Field) && (lw < 5 || ld < 5)) kind = Kind.Statue;
         if (kind == Kind.Field && (lw < 6 || ld < 6)) kind = Kind.Garden;
         if (kind == Kind.Stall && (lw < 6 || ld < 5)) kind = Kind.Well;
-        // Estatuas y pozos necesitan su centro bien dentro del contorno y fuera de la plaza.
+        // Lo que ocupa todo el solar (parque, jardín, huerto, puesto) tiene que caber ENTERO en el contorno (y bajo la muralla): si no, quedaría cortado.
+        int dm = st.Walls ? WallThickness + 1 : 1;
+        if ((kind == Kind.Park || kind == Kind.Garden || kind == Kind.Field || kind == Kind.Stall) &&
+            !RectInside(c, lf.X0, lf.Z0, lf.X1 - 1, lf.Z1 - 1, dm)) kind = Kind.Well;
+        // Estatuas y pozos: 7 x 7 centrados en el solar, dentro del contorno y fuera de la plaza.
         if ((kind == Kind.Statue || kind == Kind.Well) &&
-            !(lw >= 5 && ld >= 5 && Inside(c, midX, midZ, margin + 2) && (Math.Abs(midX) > ph + 3 || Math.Abs(midZ) > ph + 3))) kind = Kind.None;
+            !(lw >= 5 && ld >= 5 && RectInside(c, midX - 3, midZ - 3, midX + 3, midZ + 3, dm) && (Math.Abs(midX) > ph + 3 || Math.Abs(midZ) > ph + 3))) kind = Kind.None;
         return Make(kind);
     }
 
@@ -555,12 +649,65 @@ public sealed class CityStage : IGenerationStage<ushort>
         if (r > height + 1) return Blocks.Air;
         if (r == height + 1) return st.Roof;   // tejado
 
-        if (!edgeX && !edgeZ) return r == height && px == bw / 2 && pz == bd / 2 ? Blocks.LampWarm : Blocks.Air;   // interior + lámpara
+        if (!edgeX && !edgeZ) return InteriorBlock(height, px, pz, bw, bd, r, st);
         if (edgeX && edgeZ) return st.Pillar;                                                                      // esquinas
         if (pz == 0 && px == bw / 2 && r <= 2) return Blocks.Air;                                                  // puerta
 
         bool window = (r % 4 == 2 || r % 4 == 3) && ((edgeX ? pz : px) & 1) == 1;
         return window ? Blocks.GlassBlue : st.Wall;
+    }
+
+    /// <summary>
+    /// Posición de una celda del interior (ix, iz) en el anillo que recorre su perímetro (0 en la esquina (0,0), siguiendo +x, luego +z, -x y -z); -1 si no
+    /// está en el perímetro. Para un interior de w x d, el anillo tiene 2w + 2d - 4 celdas.
+    /// </summary>
+    private static int RingIndex(int ix, int iz, int w, int d)
+    {
+        if (iz == 0) return ix;
+        if (ix == w - 1) return (w - 1) + iz;
+        if (iz == d - 1) return (w - 1) + (d - 1) + (w - 1 - ix);
+        if (ix == 0) return 2 * (w - 1) + (d - 1) + (d - 1 - iz);
+        return -1;
+    }
+
+    /// <summary>
+    /// Interior de un edificio de varias plantas (plantas de 4 de alto: suelo en las filas 4, 8, ...). La escalera sube por el anillo del perímetro del
+    /// interior: 4 escalones de 1 bloque (alturas 1 a 4) y el último queda a ras del suelo de arriba; encima de los escalones 2 y 3 el suelo tiene un hueco
+    /// para pasar. Cada planta empieza su escalera en el lado opuesto a la de abajo y la primera queda lejos de la puerta. Hay que saltar los escalones.
+    /// Una lámpara cuelga del techo de cada planta.
+    /// </summary>
+    private static ushort InteriorBlock(int height, int px, int pz, int bw, int bd, int r, CityStyle st)
+    {
+        int ix = px - 1, iz = pz - 1, w = bw - 2, d = bd - 2;
+        int floors = height / 4;
+        if (floors >= 2 && w >= 3 && d >= 3 && r >= 1 && r <= height - 1)
+        {
+            int ring = 2 * w + 2 * d - 4;
+            int idx = RingIndex(ix, iz, w, d);
+
+            if (r % 4 == 0 && r <= height - 4)   // suelo de la planta de arriba
+            {
+                int k = r / 4 - 1;                        // la escalera que sube de la planta k a la k+1
+                int start = ((k + 1) * (ring / 2)) % ring;
+                if (idx >= 0)
+                {
+                    int rel = (idx - start + ring) % ring;
+                    if (rel == 1 || rel == 2) return Blocks.Air;   // hueco sobre los escalones 2 y 3
+                }
+                return st.Pillar;
+            }
+            if (idx >= 0)   // escalones
+            {
+                int k = (r - 1) / 4;
+                if (k <= floors - 2)
+                {
+                    int rel = (idx - ((k + 1) * (ring / 2)) % ring + ring) % ring;
+                    if (rel <= 3 && r <= 4 * k + 1 + rel) return st.Pillar;
+                }
+            }
+        }
+        bool lamp = px == bw / 2 && pz == bd / 2 && (r == height || (r % 4 == 3 && r < height));
+        return lamp ? Blocks.LampWarm : Blocks.Air;
     }
 
     /// <summary>Torre: planta pequeña y muy alta, con troneras y almenas en la cima.</summary>
@@ -570,7 +717,7 @@ public sealed class CityStage : IGenerationStage<ushort>
         if (r == height + 2) return (edgeX || edgeZ) && ((px + pz) & 1) == 0 ? st.Wall : Blocks.Air;   // almenas
         if (r == height + 1) return st.Roof;
 
-        if (!edgeX && !edgeZ) return r == height && px == bw / 2 && pz == bd / 2 ? Blocks.LampWarm : Blocks.Air;
+        if (!edgeX && !edgeZ) return InteriorBlock(height, px, pz, bw, bd, r, st);
         if (edgeX && edgeZ) return st.Pillar;
         if (pz == 0 && px == bw / 2 && r <= 2) return Blocks.Air;   // puerta
 
