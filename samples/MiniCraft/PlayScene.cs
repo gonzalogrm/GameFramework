@@ -68,7 +68,8 @@ public sealed class PlayScene : UiScene
     private Hotbar _hotbar = null!;
     private Label _debug = null!, _status = null!, _inspector = null!;
     private Entity? _entityTarget;
-    private bool _inspecting;
+	private RuinSpawner _ruinSpawner = null!;
+	private bool _inspecting;
     private float _inspectTimer;
     private Vec3d _pos = new(0, 64, 0);   // doble precisión: a 100.000 bloques del origen un float pierde 1/128 de bloque
     private Vector3 _vel;
@@ -257,6 +258,7 @@ public sealed class PlayScene : UiScene
         _npcs.Events = _events;
         _spawner = new EnemySpawner(_entities, _world, _climate, _scale, _npcs, _seed, _settings, () => _spawned ? (Vec3d?)_pos : null);
 		_citySpawner = new CitySpawner(_entities, _world, cities, _npcs, _scale, _settings.Cities);
+		_ruinSpawner = new RuinSpawner(_entities, _world, cities, _scale);
 
 		// Historia del mundo (sale de la semilla, no se guarda) y sus objetos legendarios: variantes de armas creadas en partida, con su héroe y su destino.
 		_history = WorldHistory.Generate((ulong)(uint)_seed);
@@ -780,7 +782,15 @@ public sealed class PlayScene : UiScene
         }
 
 		foreach (var c in _cities.Known)
-			yield return new MapMarker(c.CenterX, c.CenterZ, c.Abandoned ? new Color(220, 150, 50) : Color.White, c.Abandoned ? 7f : 9f);
+        {
+			Color mc = !c.Abandoned ? Color.White
+			    : c.Site == SiteKind.Temple ? new Color(180, 90, 220)      // templos: violeta
+			    : c.Site == SiteKind.Statues ? new Color(80, 200, 220)     // estatuas: cian
+				: c.Site == SiteKind.Tech ? new Color(150, 170, 255)      // instalaciones tecnologicas: azul claro
+				: new Color(220, 150, 50);                                 // ciudades abandonadas: naranja
+			yield return new MapMarker(c.CenterX, c.CenterZ, mc, c.Abandoned ? 7f : 9f);
+		}
+			
 	}
 
     private void UpdateDebug(GameTime gameTime)

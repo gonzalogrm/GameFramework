@@ -94,6 +94,60 @@
     { "name": "guard", "parent": "creature", "title": "guarda", "speed": 4.2, "size": [0.6, 1.8], "color": [60, 90, 200], "inventorySize": 4,
       "components": ["city_guard"],
       "properties": { "species": "Guarda", "hp": 24.0, "max_hp": 24.0, "damage": 1.0, "attack_cooldown": 0.8, "aggro": 18.0 },
-      "equipment": { "hand": "iron_sword", "head": "iron_helmet", "chest": "leather_vest" } }
+      "equipment": { "hand": "iron_sword", "head": "iron_helmet", "chest": "leather_vest" } },
+    // ======================= Ruinas: cofres, enemigos, NPCs y mojón (RuinSpawner) =======================
+    // Cofres: como el alijo (se abren golpeandolos y su contenido pasa al jugador); cada tipo lleva un botin distinto.
+    { "name": "chest_supplies", "parent": "relic_cache", "title": "cofre de provisiones", "color": [165, 115, 60], "inventorySize": 8,
+      "properties": { "species": "Cofre" },
+      "inventory": [ { "item": "apple", "count": 6 }, { "item": "berries", "count": 10 }, { "item": "health_potion", "count": 1 } ] },
+    { "name": "chest_potions", "parent": "relic_cache", "title": "cofre de pociones", "color": [90, 160, 205], "inventorySize": 8,
+      "properties": { "species": "Cofre" },
+      "inventory": [ { "item": "health_potion", "count": 3 }, { "item": "apple", "count": 2 } ] },
+    { "name": "chest_arms", "parent": "relic_cache", "title": "cofre de armas", "color": [125, 125, 135], "inventorySize": 8,
+      "properties": { "species": "Cofre" },
+      "inventory": [ { "item": "iron_sword", "count": 1 }, { "item": "club", "count": 1 }, { "item": "knife", "count": 1 } ] },
+    { "name": "chest_armor", "parent": "relic_cache", "title": "cofre de armaduras", "color": [150, 135, 90], "inventorySize": 8,
+      "properties": { "species": "Cofre" },
+      "inventory": [ { "item": "iron_helmet", "count": 1 }, { "item": "leather_vest", "count": 1 }, { "item": "leather_cap", "count": 1 } ] },
+    { "name": "chest_royal", "parent": "relic_cache", "title": "cofre del tesoro", "color": [235, 205, 65], "inventorySize": 8,
+      "properties": { "species": "Tesoro" },
+      "inventory": [ { "item": "iron_sword", "count": 1 }, { "item": "iron_helmet", "count": 1 }, { "item": "leather_vest", "count": 1 },
+                     { "item": "health_potion", "count": 4 }, { "item": "apple", "count": 6 } ] },
+
+    // Enemigos de las ruinas (no los crea el spawner normal: spawnWeight 0). Su botin es su inventario.
+    { "name": "bandit", "parent": "enemy", "title": "bandido", "speed": 3.6, "size": [0.6, 1.8], "color": [160, 95, 55], "inventorySize": 6,
+      "properties": { "species": "Bandido", "hp": 14.0, "max_hp": 14.0, "damage": 1.5, "aggro": 18.0 },
+      "equipment": { "hand": "club", "head": "leather_cap" },
+      "inventory": [ { "item": "apple", "count": 2 } ] },
+    { "name": "revenant", "parent": "enemy", "title": "aparecido", "speed": 3.1, "size": [0.6, 1.8], "color": [140, 150, 165], "inventorySize": 6,
+      "properties": { "species": "Aparecido", "hp": 18.0, "max_hp": 18.0, "damage": 1.5, "aggro": 16.0 },
+      "equipment": { "hand": "club" },
+      "inventory": [ { "item": "bone", "count": 2 } ] },
+    { "name": "temple_guardian", "parent": "enemy", "title": "guardian del templo", "speed": 2.0, "size": [0.9, 2.2], "color": [195, 175, 110], "inventorySize": 6,
+      "properties": { "species": "Guardian", "hp": 40.0, "max_hp": 40.0, "damage": 3.0, "aggro": 14.0 },
+      "equipment": { "hand": "iron_sword", "head": "iron_helmet" },
+      "inventory": [ { "item": "health_potion", "count": 1 } ] },
+    { "name": "sentinel", "parent": "enemy", "title": "centinela", "speed": 2.6, "size": [0.8, 1.9], "color": [85, 115, 170], "inventorySize": 6,
+      "properties": { "species": "Centinela", "hp": 28.0, "max_hp": 28.0, "damage": 2.0, "aggro": 16.0 },
+      "equipment": { "hand": "iron_sword", "head": "iron_helmet" },
+      "inventory": [ { "item": "health_potion", "count": 1 } ] },
+    { "name": "golem", "parent": "enemy", "title": "golem de piedra", "speed": 1.8, "size": [1.1, 2.4], "color": [125, 125, 130], "inventorySize": 6,
+      "properties": { "species": "Golem", "hp": 45.0, "max_hp": 45.0, "damage": 3.5, "aggro": 12.0 },
+      "inventory": [ { "item": "bone", "count": 3 } ] },
+
+    // NPCs especiales de las ruinas: estaticos, hablan con T (ver CityNpcs.cs)
+    { "name": "hermit", "parent": "villager", "title": "ermitano", "speed": 0.0, "color": [145, 125, 95],
+      "properties": { "species": "Ermitano", "hp": 10.0, "max_hp": 10.0 },
+      "inventory": [ { "item": "health_potion", "count": 2 }, { "item": "apple", "count": 3 } ] },
+    { "name": "archaeologist", "parent": "villager", "title": "arqueologo", "speed": 0.0, "color": [205, 165, 95],
+      "properties": { "species": "Arqueologo", "hp": 10.0, "max_hp": 10.0 },
+      "inventory": [ { "item": "health_potion", "count": 1 } ] },
+    { "name": "engineer", "parent": "villager", "title": "superviviente", "speed": 0.0, "color": [90, 175, 195],
+      "properties": { "species": "Superviviente", "hp": 12.0, "max_hp": 12.0 },
+      "inventory": [ { "item": "health_potion", "count": 1 }, { "item": "berries", "count": 4 } ] },
+
+    // Mojon que deja el RuinSpawner al poblar una ruina: asi no se repiten los cofres ni los NPC al volver (casi indestructible)
+    { "name": "ruin_marker", "parent": "creature", "title": "mojon", "speed": 0.0, "size": [0.4, 0.5], "color": [115, 115, 115],
+      "properties": { "species": "Mojon", "hp": 100000.0, "max_hp": 100000.0 } }
   ]
 }

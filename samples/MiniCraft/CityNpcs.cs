@@ -15,6 +15,9 @@ public static class CityNpcs
         On(hub, "blacksmith", BlacksmithTalks);
         On(hub, "mayor", MayorTalks);
         On(hub, "guard", GuardTalks);
+        On(hub, "hermit", HermitTalks);
+        On(hub, "archaeologist", ArchaeologistTalks);
+        On(hub, "engineer", EngineerTalks);
     }
 
     private static void On(EventHub hub, string type, Action<Entity, GameEvent, EventHub> handler)
@@ -35,6 +38,15 @@ public static class CityNpcs
 
     private static void MayorTalks(Entity e, GameEvent ev, EventHub hub) =>
         hub.Notify($"{e.Label}: Bienvenido a nuestra ciudad. Mientras los guardas vigilen, aquí estás a salvo.");
+
+    private static void HermitTalks(Entity e, GameEvent ev, EventHub hub) =>
+        hub.Notify($"{e.Label}: Esta ciudad cayó hace siglos. Los cofres siguen en las casas más grandes, pero los aparecidos y los bandidos no los sueltan sin pelea.");
+
+    private static void ArchaeologistTalks(Entity e, GameEvent ev, EventHub hub) =>
+        hub.Notify($"{e.Label}: Este templo guarda un tesoro sobre el altar. Cuidado con los guardianes: de piedra no son, pero casi.");
+
+    private static void EngineerTalks(Entity e, GameEvent ev, EventHub hub) =>
+        hub.Notify($"{e.Label}: Las centinelas siguen de ronda desde que se apagó todo. Lo valioso estaba en el hangar.");
 
     private static void GuardTalks(Entity e, GameEvent ev, EventHub hub) =>
         hub.Notify($"{e.Label}: " + (e.GetFloat("hp") < e.GetFloat("max_hp") ? "He tenido días mejores, pero sigo en mi puesto." : "Todo tranquilo. Vigilo la ciudad."));

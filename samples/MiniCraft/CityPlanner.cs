@@ -25,8 +25,11 @@ public sealed record CityLayout(int PitchX, int PitchZ, int StreetW, int Jitter)
 /// <summary>Fases del contorno irregular de una ciudad (salen de su celda: mismo mundo, mismo borde).</summary>
 public sealed record CityShape(double P1, double P2, double P3);
 
+/// <summary>Qué es un sitio: una ciudad (habitada o ruina), un templo abandonado, un campo de estatuas o una instalación tecnológica abandonada.</summary>
+public enum SiteKind { City, Temple, Statues, Tech }
+
 public sealed record City(int Id, int CenterX, int CenterZ, int Radius, int GroundY, int MaxFloors, CityStyle Style, CityLayout Layout,
-    CityType Type, CityShape Shape, bool Hamlet = false, int WorldHeight = 0, double Decay = 0)
+    CityType Type, CityShape Shape, bool Hamlet = false, int WorldHeight = 0, double Decay = 0, SiteKind Site = SiteKind.City, int Variant = 0)
 {
     /// <summary>Una ruina (ciudad abandonada) en vez de una ciudad habitada: Decay (0 a 1) es lo deteriorada que está.</summary>
     public bool Abandoned => Decay > 0;
@@ -224,9 +227,16 @@ public sealed class CityPlanner
         var rng = new SplitMixRandom(Hashing.Combine(_seed, cx, 0xDEAD, cz));
         if (!rng.Chance(list.Count == 0 ? o.RuinChance : o.RuinChance * 0.35f)) return;
 
+        int kindRoll = rng.Next(100);   // 40 % ciudad abandonada, 22 % templo, 18 % campo de estatuas, 20 % instalación tecnológica
+        var site = kindRoll < 40 ? SiteKind.City : kindRoll < 62 ? SiteKind.Temple : kindRoll < 80 ? SiteKind.Statues : SiteKind.Tech;
+        int variant = site == SiteKind.City ? 0 : rng.Next(RuinSites.VariantCount(site));   // variante dentro de la clase (ver RuinSites)
         int pick = rng.Next(100);
         var type = pick < 45 ? CityTypes.All[0] : pick < 75 ? CityTypes.All[1] : pick < 90 ? CityTypes.All[2] : CityTypes.All[4];   // aldea, pueblo, ciudad, fortaleza
+        if (site != SiteKind.City) type = CityTypes.Site;
         int radius = Math.Max(30, (int)(rng.Next(o.MinRadius, o.MaxRadius + 1) * type.RadiusScale * o.SizeFactor * 0.8));
+        if (site == SiteKind.Temple) radius = rng.Next(30, 47);
+        else if (site == SiteKind.Statues) radius = rng.Next(24, 36);
+        else if (site == SiteKind.Tech) radius = rng.Next(34, 51);
         double ext = radius * (1 + type.Irregularity);
         int m = (int)ext + o.ReserveMargin, span = o.CellSize - 2 * m;
         if (span <= 0) return;
@@ -236,9 +246,10 @@ public sealed class CityPlanner
         {
             int x = cx * o.CellSize + m + rng.Next(span), z = cz * o.CellSize + m + rng.Next(span);
             if (list.Any(other => Math.Sqrt(Math.Pow(x - other.CenterX, 2) + Math.Pow(z - other.CenterZ, 2)) < other.Extent + ext + 24)) continue;
-            if (TryLevel(x, z, radius, minGround, out int y, attempt < 8 ? o.MaxSlope : o.MaxSlope + 6) != Reject.None) continue;
+            if (TryLevel(x, z, site == SiteKind.City ? radius : (int)(radius * 0.8), minGround, out int y, attempt < 8 ? o.MaxSlope : o.MaxSlope + 6) != Reject.None) continue;
             int floors = Math.Min(Math.Min(o.MaxFloors, type.FloorsCap), (_worldHeight - 3 - y) / 4);
             if (floors < 1) continue;
+            if (site != SiteKind.City && y + RuinHeight(site) > _worldHeight - 1) continue;   // el templo o el coloso tienen que caber bajo el techo del mundo
 
             ushort biome = _climate.Classify(_climate.Sample(x, z));
             var style = CityStyles.For(biome, new SplitMixRandom(Hashing.Combine(_seed, cx, 0xDEA0, cz)));
@@ -249,14 +260,16 @@ public sealed class CityPlanner
             double decay = 0.25 + rng.NextFloat() * 0.65;
             ulong h = Hashing.Combine(_seed, cx, 0xDEA3, cz);
             Interlocked.Increment(ref _ruins);
-            if (o.Log) Console.WriteLine($"[ruina] celda ({cx},{cz}): centro x {x} z {z}, radio {radius}, {type.Name}, estado {(int)(decay * 100)} %, estilo {style.Name}");
-            list.Add(new City((int)(h ^ (h >> 32)), x, z, radius, y, floors, style, layout, type, shape, WorldHeight: _worldHeight, Decay: decay)
+            if (o.Log) Console.WriteLine($"[ruina] celda ({cx},{cz}): centro x {x} z {z}, radio {radius}, {(site == SiteKind.City ? type.Name : site == SiteKind.Temple ? "templo" : site == SiteKind.Statues ? "estatuas" : "instalación tecnológica")}{(site == SiteKind.City ? "" : " (" + RuinSites.VariantName(site, variant) + ")")}, estado {(int)(decay * 100)} %, estilo {style.Name}");
+            list.Add(new City((int)(h ^ (h >> 32)), x, z, radius, y, floors, style, layout, type, shape, WorldHeight: _worldHeight, Decay: decay, Site: site, Variant: variant)
             {
                 OriginalHeight = (px, pz) => _columns.HeightAt(px, pz),
             });
             return;
         }
     }
+
+    private static int RuinHeight(SiteKind site) => site == SiteKind.Temple ? 10 : site == SiteKind.Tech ? 15 : 13;   // lo mismo que RuinSites.Height
 
     /// <summary>Poblados satélite (aldeas pequeñas) alrededor de la ciudad, en terreno llano y dentro de su misma celda.</summary>
     private void PlanHamlets(int cx, int cz, City main, List<City> list)

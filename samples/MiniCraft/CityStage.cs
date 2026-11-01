@@ -15,6 +15,10 @@ public sealed class CityStage : IGenerationStage<ushort>
 {
     private const int WallThickness = 2, WallHeight = 4, MinLeaf = 8;
 
+    /// <summary>¿Llevan cristal las ventanas de las ciudades habitadas? Con false quedan como agujeros (en las ruinas siempre lo son).</summary>
+    private const bool GlassWindows = false;
+    private static readonly ushort WindowBlock = GlassWindows ? Blocks.GlassBlue : Blocks.Air;
+
     private enum Kind { None, House, Park, Garden, Statue, Well, Field, Stall }
     private enum Build { House, Tower, Hall, Workshop }
     /// <summary>Un solar: origen (X0, Z0) relativo al centro de la ciudad, tamaño, qué lleva y, si es un edificio, su planta (Ox, Oz, Bw, Bd) y su puerta (0 -Z, 1 +Z, 2 -X, 3 +X).</summary>
@@ -41,6 +45,8 @@ public sealed class CityStage : IGenerationStage<ushort>
 
     private void ApplyCity(Chunk<ushort> chunk, City city)
     {
+        if (city.Site != SiteKind.City) { ApplySite(chunk, city); return; }   // templo o campo de estatuas
+
         var shape = chunk.Shape;
         var o = shape.Origin(chunk.Coord);
         int sx = shape.SizeX, sy = shape.SizeY, sz = shape.SizeZ;
@@ -154,6 +160,10 @@ public sealed class CityStage : IGenerationStage<ushort>
             int end = Math.Max(Math.Max(h, g), g + extra);   // lo que sobra del terreno se vacía; lo construido llega hasta g + extra
             int y0 = Math.Max(start, o.Y), y1 = Math.Min(end, o.Y + sy - 1);
 
+            // Ruinas: qué filas de un edificio siguen en pie. Se cae todo lo que no se apoya hacia abajo (o, si es un suelo o un techo, en una pared a menos de 2 bloques).
+            bool[]? surv = ruin && !fountain && !plazaSq && !street && !wall && lot.Kind == Kind.House
+                ? BuildingSurvival(city, lot, lx - lot.Ox, lz - lot.Oz, wx, wz, st, 0) : null;
+
             for (int wy = y0; wy <= y1; wy++)
             {
                 int r = wy - g;
@@ -165,30 +175,164 @@ public sealed class CityStage : IGenerationStage<ushort>
                 else if (street) id = post ? (r <= 2 ? st.Pillar : r == 3 ? Blocks.LampWarm : Blocks.Air) : Blocks.Air;
                 else if (wall) id = r < WallHeight || (r == WallHeight && ((rx + rz) & 1) == 0) ? st.WallBlock : Blocks.Air;   // almenas
                 else id = LotBlock(city, lot, lx, lz, r, wx, wz);
-                if (ruin && id != Blocks.Air && r > 0 && (wall || rim || lot.Kind is Kind.House or Kind.Statue or Kind.Well or Kind.Stall))
-                    id = RuinBlock(city, id, wx, wy, wz, r, wall ? WallHeight : extra, wall || rim ? 0UL : lot.Hash);
+                if (ruin && r > 0)
+                {
+                    if (surv != null)
+                    {
+                        id = r < surv.Length && surv[r] ? IntactBlock(lot, lx - lot.Ox, lz - lot.Oz, r, st) : Blocks.Air;
+                        if (id == Blocks.Air && r == 1) id = Ground(city, wx, wz, 1, 0.12f);   // la maleza crece donde antes había suelo
+                    }
+                    else if (id != Blocks.Air && (wall || rim || lot.Kind is Kind.Statue or Kind.Well or Kind.Stall))
+                        id = RuinSimple(city, id, wx, wz, r, wall ? WallHeight : rim ? 3 : extra, wall || rim ? 0UL : lot.Hash,
+                                        !wall && !rim && (lot.Kind is Kind.Well or Kind.Stall) && r == 4);   // sin tejadillos de pozos y puestos
+                }
                 cells[((wy - o.Y) * sz + z) * sx + x] = id;
             }
         }
     }
 
     /// <summary>
-    /// Deterioro de una ruina: los bloques altos caen más que los bajos (los muros se desmoronan desde arriba), los cristales están rotos, las lámparas
-    /// apagadas y algunos edificios se han venido abajo casi enteros. Parte de lo que cae lo ocupa la maleza (hojas). 'top' es la altura de la estructura
-    /// en esa columna y 'plotHash' (0 si no es un edificio) decide si el solar se derrumbó.
+    /// Templos y campos de estatuas (ver RuinSites): se nivela el terreno bajo la plataforma o el empedrado (con 8 bloques de transición al terreno natural)
+    /// y se construye encima. Fuera de lo nivelado solo hay algo en la avenida de columnas del templo, que se apoya en el suelo natural.
     /// </summary>
-    private static ushort RuinBlock(City c, ushort id, int wx, int wy, int wz, int r, int top, ulong plotHash)
+    private void ApplySite(Chunk<ushort> chunk, City city)
     {
-        if (id == Blocks.LampWarm) return Blocks.Air;
-        double d = c.Decay;
-        ulong h = Hashing.Combine(c.Id, wx, wy, wz);
-        double u = (h >> 40) * (1.0 / (1 << 24)), v = ((h >> 16) & 0xFFFFF) / (double)0x100000;
-        double rel = top <= 0 ? 0.0 : Math.Min(1.0, r / (double)top);
-        double p = d * (0.25 + 0.75 * rel);
-        if (plotHash != 0 && (plotHash >> 56) / 255.0 < d * 0.5 && rel > 0.3) p = 0.9;   // edificio derrumbado
-        if (id == Blocks.GlassBlue) p = Math.Max(p, 0.55 + 0.4 * d);                      // cristales rotos
-        if (u < p) return v < 0.15 ? Blocks.Leaves : Blocks.Air;
-        return id;
+        var shape = chunk.Shape;
+        var o = shape.Origin(chunk.Coord);
+        int sx = shape.SizeX, sy = shape.SizeY, sz = shape.SizeZ;
+
+        double cdx = _scale.DeltaX(city.CenterX, o.X + sx / 2.0), cdz = o.Z + sz / 2.0 - city.CenterZ;
+        if (Math.Sqrt(cdx * cdx + cdz * cdz) > city.Radius + (sx + sz) * 0.5) return;
+        int height = RuinSites.Height(city);
+        if (o.Y > city.GroundY + 16 + height || o.Y + sy <= city.GroundY - 24) return;
+
+        var cells = chunk.Cells;
+        for (int z = 0; z < sz; z++)
+        for (int x = 0; x < sx; x++)
+        {
+            int wx = o.X + x, wz = o.Z + z;
+            int rx = (int)Math.Round(_scale.DeltaX(city.CenterX, wx)), rz = wz - city.CenterZ;
+            if (Math.Sqrt((double)rx * rx + (double)rz * rz) > city.Radius) continue;
+
+            double pad = RuinSites.Pad(city, rx, rz);
+            bool active = RuinSites.Active(city, rx, rz, pad);
+            if (pad > 8 && !active) continue;
+
+            int h = _columns.HeightAt(wx, wz);
+            int g;
+            if (pad <= 0) g = city.GroundY;
+            else if (pad < 8) { double u = pad / 8.0; g = (int)Math.Round(city.GroundY + (h - city.GroundY) * (u * u * (3 - 2 * u))); }
+            else g = h;   // la avenida de columnas se apoya en el suelo natural
+
+            ushort t = Biomes.Surface[_columns.BiomeAt(wx, wz)];
+            ushort natural = t == Blocks.Stone ? Blocks.Grass : t;
+            ushort surface = pad <= 0 ? RuinSites.Surface(city, wx, wz, natural) : natural;
+
+            bool[]? prof = active ? RuinSites.Profile(city, rx, rz, wx, wz) : null;   // filas que siguen en pie (sin bloques flotantes)
+            int start = h >= g ? g : h + 1;
+            int end = Math.Max(Math.Max(h, g), active ? g + height : g);
+            int y0 = Math.Max(start, o.Y), y1 = Math.Min(end, o.Y + sy - 1);
+            for (int wy = y0; wy <= y1; wy++)
+            {
+                int r = wy - g;
+                ushort id = r < 0 ? Blocks.Dirt : r == 0 ? surface : active ? RuinSites.Block(city, rx, rz, r, wx, wy, wz, prof) : Blocks.Air;
+                cells[((wy - o.Y) * sz + z) * sx + x] = id;
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ deterioro de las ruinas
+
+    private static double Un(City c, int a, int b, int salt)
+    {
+        ulong h = Hashing.Combine(c.Id, a, salt, b);
+        return (h >> 40) * (1.0 / (1 << 24));
+    }
+
+    /// <summary>El edificio tal como era, pero sin cristales (se rompieron: queda el hueco de la ventana) y sin lámparas.</summary>
+    private static ushort IntactBlock(Lot l, int px, int pz, int r, CityStyle st)
+    {
+        ushort b = BuildingBlock(l, px, pz, r, st);
+        return b == Blocks.GlassBlue || b == Blocks.LampWarm ? Blocks.Air : b;
+    }
+
+    /// <summary>
+    /// Altura hasta la que aguanta una columna de un edificio en ruinas. Se rompe de arriba abajo: cuanto más deterioro, más baja, con un relieve irregular
+    /// (ruido grueso y fino) como el de los muros romanos, y algunos edificios se derrumbaron casi enteros. Lo de abajo siempre se conserva mejor que lo de arriba.
+    /// </summary>
+    private static int ColumnCap(City c, Lot l, int wx, int wz)
+    {
+        double top = l.Height + (l.Type == Build.Tower ? 2 : l.Type == Build.Workshop ? 3 : 1);
+        double n = 0.65 * Un(c, wx >> 1, wz >> 1, 0xCA9) + 0.35 * Un(c, wx, wz, 0xCAA);
+        double cap = top * (1 - c.Decay * (0.15 + 0.85 * n));
+        if ((l.Hash >> 56) / 255.0 < c.Decay * 0.5) cap *= 0.25;   // edificio derrumbado
+        return (int)Math.Floor(cap);
+    }
+
+    /// <summary>
+    /// Qué filas (1..) de la columna (px, pz) del edificio siguen en pie. Un bloque aguanta si el de debajo aguanta y no supera la altura de la columna. Un suelo,
+    /// un techo o un dintel (con aire debajo) solo aguanta si el bloque contiguo hacia la pared más cercana, a su misma altura, aguanta; así todo está unido al
+    /// suelo y nunca hay bloques flotando. 'depth' limita esa cadena a 2 bloques de la pared.
+    /// </summary>
+    private static bool[] BuildingSurvival(City c, Lot l, int px, int pz, int wx, int wz, CityStyle st, int depth)
+    {
+        int rows = l.Height + 3;
+        var surv = new bool[rows + 1];
+        int cap = ColumnCap(c, l, wx, wz);
+        bool belowIntact = true, belowSurv = true;
+        for (int r = 1; r <= rows; r++)
+        {
+            bool air = IntactBlock(l, px, pz, r, st) == Blocks.Air;
+            if (!air)
+                surv[r] = r > 1 && !belowIntact
+                    ? depth <= 1 && HorizontalSurvives(c, l, px, pz, r, wx, wz, st, depth)
+                    : belowSurv && r <= cap;
+            belowIntact = !air;
+            belowSurv = surv[r];
+        }
+        return surv;
+    }
+
+    private static bool HorizontalSurvives(City c, Lot l, int px, int pz, int r, int wx, int wz, CityStyle st, int depth)
+    {
+        int ex = Math.Min(px, l.Bw - 1 - px), ez = Math.Min(pz, l.Bd - 1 - pz);
+        if (Math.Min(ex, ez) == 0)
+        {
+            // Perímetro: el dintel sobre una ventana o una puerta se apoya en las columnas de pared contiguas, a lo largo de la pared (las esquinas nunca flotan).
+            if (ex == 0 && ez == 0) return false;
+            bool supported = false;
+            for (int k = 0; k < 2 && !supported; k++)
+            {
+                int sdx = ex == 0 ? 0 : (k == 0 ? 1 : -1), sdz = ex == 0 ? (k == 0 ? 1 : -1) : 0;
+                var side = BuildingSurvival(c, l, px + sdx, pz + sdz, wx + sdx, wz + sdz, st, depth + 1);
+                supported = r < side.Length && side[r];
+            }
+            if (!supported) return false;
+            double nl = 0.7 * Un(c, wx >> 1, wz >> 1, 0xCAD + r) + 0.3 * Un(c, wx, wz, 0xCAE + r);
+            return nl < Math.Max(0.2, 1 - c.Decay * 0.7);
+        }
+        if (Math.Min(ex, ez) > 2) return false;   // lejos de las paredes no queda nada
+        int dx = 0, dz = 0;
+        if (ex <= ez) dx = px <= l.Bw - 1 - px ? -1 : 1; else dz = pz <= l.Bd - 1 - pz ? -1 : 1;
+        var next = BuildingSurvival(c, l, px + dx, pz + dz, wx + dx, wz + dz, st, depth + 1);
+        if (r >= next.Length || !next[r]) return false;
+        // Los techos casi no se conservan; los suelos, menos cuanto más arriba están. A parches, no uno a uno.
+        double keep = r == l.Height + 1 ? (1 - c.Decay) * 0.4 : Math.Max(0.0, 1.0 - c.Decay * (0.55 + 0.2 * (r / 4)));
+        double n = 0.7 * Un(c, wx >> 1, wz >> 1, 0xCAB + r) + 0.3 * Un(c, wx, wz, 0xCAC + r);
+        return n < keep;
+    }
+
+    /// <summary>
+    /// Deterioro de lo que es una sola columna (muralla, borde de la fuente, estatuas, pozos, puestos): se rompe de arriba abajo como los edificios.
+    /// Sin lámparas ni cristales, y sin el tejadillo de pozos y puestos (que quedaría flotando).
+    /// </summary>
+    private static ushort RuinSimple(City c, ushort id, int wx, int wz, int r, int top, ulong plotHash, bool dropRoof)
+    {
+        if (dropRoof || id == Blocks.LampWarm || id == Blocks.GlassBlue) return Blocks.Air;
+        double n = 0.65 * Un(c, wx >> 1, wz >> 1, 0xCA9) + 0.35 * Un(c, wx, wz, 0xCAA);
+        double cap = top * (1 - c.Decay * (0.15 + 0.85 * n));
+        if (plotHash != 0 && (plotHash >> 56) / 255.0 < c.Decay * 0.5) cap *= 0.25;
+        return r <= (int)Math.Floor(cap) ? id : Blocks.Air;
     }
 
     private static int Mod(int a, int b) => ((a % b) + b) % b;
@@ -486,7 +630,7 @@ public sealed class CityStage : IGenerationStage<ushort>
                         3 => (x0 + lot.Bw, z0 + lot.Bd / 2),
                         _ => (x0 + lot.Bw / 2, z0 - 1),
                     };
-                    list.Add(new CityLandmark(role, fx, fz));
+                    list.Add(new CityLandmark(role, fx, fz, x0 + lot.Bw / 2, z0 + lot.Bd / 2, lot.Base));
                 }
                 rx = ax.End;
             }
@@ -654,7 +798,7 @@ public sealed class CityStage : IGenerationStage<ushort>
         if (pz == 0 && px == bw / 2 && r <= 2) return Blocks.Air;                                                  // puerta
 
         bool window = (r % 4 == 2 || r % 4 == 3) && ((edgeX ? pz : px) & 1) == 1;
-        return window ? Blocks.GlassBlue : st.Wall;
+        return window ? WindowBlock : st.Wall;
     }
 
     /// <summary>
@@ -722,7 +866,7 @@ public sealed class CityStage : IGenerationStage<ushort>
         if (pz == 0 && px == bw / 2 && r <= 2) return Blocks.Air;   // puerta
 
         bool slit = (r % 4 == 2 || r % 4 == 3) && (edgeX ? pz : px) == (edgeX ? bd : bw) / 2;   // tronera centrada en cada cara
-        return slit ? Blocks.GlassBlue : st.Wall;
+        return slit ? WindowBlock : st.Wall;
     }
 
     /// <summary>Salón grande: planta amplia y techo alto (6), doble puerta, ventanales y columnas interiores.</summary>
@@ -741,7 +885,7 @@ public sealed class CityStage : IGenerationStage<ushort>
         if (pz == 0 && Math.Abs(px - bw / 2) <= 1 && r <= 3) return Blocks.Air;   // puerta de 3 de ancho
 
         bool window = r >= 2 && r <= 4 && ((edgeX ? pz : px) % 3) == 1;
-        return window ? Blocks.GlassBlue : st.Wall;
+        return window ? WindowBlock : st.Wall;
     }
 
     /// <summary>Taller: fachada abierta con pilares, fragua con chimenea al fondo.</summary>
@@ -763,9 +907,9 @@ public sealed class CityStage : IGenerationStage<ushort>
         if (!edgeX && !edgeZ) return Blocks.Air;
 
         bool window = (r == 2 || r == 3) && ((edgeX ? pz : px) & 1) == 1;
-        return window ? Blocks.GlassBlue : st.Wall;
+        return window ? WindowBlock : st.Wall;
     }
 }
 
-/// <summary>Un lugar notable de una ciudad (delante de la puerta de un edificio), relativo a su centro.</summary>
-public readonly record struct CityLandmark(string Role, int Rx, int Rz);
+/// <summary>Un lugar notable de una ciudad: delante de la puerta de un edificio (Rx, Rz), y el centro del edificio (Cx, Cz) con el nivel de su suelo (Base, absoluto). Relativos al centro de la ciudad.</summary>
+public readonly record struct CityLandmark(string Role, int Rx, int Rz, int Cx, int Cz, int Base);

@@ -24,6 +24,9 @@ public static class CityTypes
         new("fortaleza",  8, 0.70, 2, 0.10,  8,  0,  3,  0,  4, 0, 6,  15, 35, 20, 0),
     };
 
+    /// <summary>Tipo de los sitios que no son ciudades (templos, estatuas): sin irregularidad en el contorno, sin plaza ni calles.</summary>
+    public static readonly CityType Site = new("sitio", 0, 1.0, 0, 0.0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0);
+
     public static CityType Pick(SplitMixRandom rng)
     {
         int total = 0;
