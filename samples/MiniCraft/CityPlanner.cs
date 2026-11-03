@@ -15,7 +15,14 @@ public sealed class CityOptions
     public int Attempts { get; set; } = 16;       // posiciones candidatas por celda
     public int MaxFloors { get; set; } = 4;
     public int ReserveMargin { get; set; } = 16;
-    public float RuinChance { get; set; } = 0.45f;   // probabilidad de ruina en una celda sin ciudad (en una celda con ciudad, el 35 % de esto)   // margen sin árboles alrededor
+    public float RuinChance { get; set; } = 0.45f;                 // probabilidad de ruina en una celda sin ciudad (en una celda con ciudad, el 35 % de esto)
+    public int[] RuinWeights { get; set; } = { 40, 22, 18, 20 };   // ciudad abandonada, templo, campo de estatuas, instalación tecnológica
+    public int[]? TempleVariants { get; set; }                     // pesos por variante (null = todas por igual)
+    public int[]? StatuesVariants { get; set; }
+    public int[]? TechVariants { get; set; }
+    public double RuinMinDecay { get; set; } = 0.25;               // deterioro de las ruinas: de uno a otro
+    public double RuinMaxDecay { get; set; } = 0.9;
+    public double RuinSizeFactor { get; set; } = 1.0;              // multiplica el radio de las ruinas
     public bool Log { get; set; } = true;         // escribe cada ciudad encontrada en la consola
 }
 
@@ -221,22 +228,43 @@ public sealed class CityPlanner
     /// Ruinas: ciudades abandonadas de distintos tamaños y estados (Decay de 0,25 a 0,9). Aparecen sobre todo en celdas sin ciudad, en terreno llano o de meseta
     /// (las últimas pruebas aceptan terreno algo más movido), en cualquier bioma. Se construyen igual que una ciudad y luego CityStage las deteriora.
     /// </summary>
+    /// <summary>Variante dentro de la clase según los pesos de los ajustes (0 = nunca; null o más cortos que las variantes = 1).</summary>
+    private static int PickVariant(SplitMixRandom rng, SiteKind site, CityOptions o)
+    {
+        int count = RuinSites.VariantCount(site);
+        int[]? w = site == SiteKind.Temple ? o.TempleVariants : site == SiteKind.Statues ? o.StatuesVariants : o.TechVariants;
+        int Weight(int i) => w != null && i < w.Length ? Math.Max(0, w[i]) : 1;
+        int total = 0;
+        for (int i = 0; i < count; i++) total += Weight(i);
+        if (total <= 0) return rng.Next(count);
+        int roll = rng.Next(total);
+        for (int i = 0; i < count; i++)
+        {
+            roll -= Weight(i);
+            if (roll < 0) return i;
+        }
+        return 0;
+    }
+
     private void PlanRuins(int cx, int cz, List<City> list)
     {
         var o = _opt;
         var rng = new SplitMixRandom(Hashing.Combine(_seed, cx, 0xDEAD, cz));
         if (!rng.Chance(list.Count == 0 ? o.RuinChance : o.RuinChance * 0.35f)) return;
 
-        int kindRoll = rng.Next(100);   // 40 % ciudad abandonada, 22 % templo, 18 % campo de estatuas, 20 % instalación tecnológica
-        var site = kindRoll < 40 ? SiteKind.City : kindRoll < 62 ? SiteKind.Temple : kindRoll < 80 ? SiteKind.Statues : SiteKind.Tech;
-        int variant = site == SiteKind.City ? 0 : rng.Next(RuinSites.VariantCount(site));   // variante dentro de la clase (ver RuinSites)
+        // Clase de ruina según los pesos de los ajustes (por defecto 40 % ciudad abandonada, 22 % templo, 18 % estatuas, 20 % instalación) y variante según los suyos.
+        var wts = o.RuinWeights;
+        int wCity = Math.Max(0, wts[0]), wTemple = Math.Max(0, wts[1]), wStat = Math.Max(0, wts[2]), wTech = Math.Max(0, wts[3]), wTotal = wCity + wTemple + wStat + wTech;
+        int kindRoll = wTotal > 0 ? rng.Next(wTotal) : 0;
+        var site = wTotal == 0 || kindRoll < wCity ? SiteKind.City
+                 : kindRoll < wCity + wTemple ? SiteKind.Temple
+                 : kindRoll < wCity + wTemple + wStat ? SiteKind.Statues : SiteKind.Tech;
+        int variant = site == SiteKind.City ? 0 : PickVariant(rng, site, o);
         int pick = rng.Next(100);
         var type = pick < 45 ? CityTypes.All[0] : pick < 75 ? CityTypes.All[1] : pick < 90 ? CityTypes.All[2] : CityTypes.All[4];   // aldea, pueblo, ciudad, fortaleza
         if (site != SiteKind.City) type = CityTypes.Site;
-        int radius = Math.Max(30, (int)(rng.Next(o.MinRadius, o.MaxRadius + 1) * type.RadiusScale * o.SizeFactor * 0.8));
-        if (site == SiteKind.Temple) radius = rng.Next(30, 47);
-        else if (site == SiteKind.Statues) radius = rng.Next(24, 36);
-        else if (site == SiteKind.Tech) radius = rng.Next(34, 51);
+        int radius = Math.Max(30, (int)(rng.Next(o.MinRadius, o.MaxRadius + 1) * type.RadiusScale * o.SizeFactor * 0.8 * o.RuinSizeFactor));
+        if (site != SiteKind.City) { var rr = RuinSites.RadiusRange(site, variant); radius = (int)(rng.Next(rr.Min, rr.Max + 1) * o.RuinSizeFactor); }   // el tamaño depende de la clase y de la variante
         double ext = radius * (1 + type.Irregularity);
         int m = (int)ext + o.ReserveMargin, span = o.CellSize - 2 * m;
         if (span <= 0) return;
@@ -249,7 +277,7 @@ public sealed class CityPlanner
             if (TryLevel(x, z, site == SiteKind.City ? radius : (int)(radius * 0.8), minGround, out int y, attempt < 8 ? o.MaxSlope : o.MaxSlope + 6) != Reject.None) continue;
             int floors = Math.Min(Math.Min(o.MaxFloors, type.FloorsCap), (_worldHeight - 3 - y) / 4);
             if (floors < 1) continue;
-            if (site != SiteKind.City && y + RuinHeight(site) > _worldHeight - 1) continue;   // el templo o el coloso tienen que caber bajo el techo del mundo
+            if (site != SiteKind.City && y + RuinSites.HeightFor(site, variant) > _worldHeight - 1) continue;   // el templo o el coloso tienen que caber bajo el techo del mundo
 
             ushort biome = _climate.Classify(_climate.Sample(x, z));
             var style = CityStyles.For(biome, new SplitMixRandom(Hashing.Combine(_seed, cx, 0xDEA0, cz)));
@@ -257,7 +285,7 @@ public sealed class CityPlanner
             var sr = new SplitMixRandom(Hashing.Combine(_seed, cx, 0xDEA1, cz));
             var shape = new CityShape(sr.NextFloat() * 6.2832, sr.NextFloat() * 6.2832, sr.NextFloat() * 6.2832);
             var layout = MakeLayout(new SplitMixRandom(Hashing.Combine(_seed, cx, 0xDEA2, cz)), type);
-            double decay = 0.25 + rng.NextFloat() * 0.65;
+            double decay = o.RuinMinDecay + rng.NextFloat() * (o.RuinMaxDecay - o.RuinMinDecay);
             ulong h = Hashing.Combine(_seed, cx, 0xDEA3, cz);
             Interlocked.Increment(ref _ruins);
             if (o.Log) Console.WriteLine($"[ruina] celda ({cx},{cz}): centro x {x} z {z}, radio {radius}, {(site == SiteKind.City ? type.Name : site == SiteKind.Temple ? "templo" : site == SiteKind.Statues ? "estatuas" : "instalación tecnológica")}{(site == SiteKind.City ? "" : " (" + RuinSites.VariantName(site, variant) + ")")}, estado {(int)(decay * 100)} %, estilo {style.Name}");

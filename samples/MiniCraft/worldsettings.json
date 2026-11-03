@@ -75,5 +75,26 @@
     "Villagers": 6, // aldeanos por ciudad
     "Guards": -1, // guardas por ciudad (-1 segun tamano, 0 ninguno)
     "SpecialNpcs": true // mercader, alcalde y herreros
+  },
+  "Ruins": {
+    "Chance": 0.45, // ruina en una celda sin ciudad (0..1); en una celda con ciudad, el 35 % de esto
+    "CityWeight": 40, // peso de cada clase: ciudad abandonada, templo, campo de estatuas, instalacion tecnologica (0 = nunca)
+    "TempleWeight": 22,
+    "StatuesWeight": 18,
+    "TechWeight": 20,
+    "TempleVariants": [ 1, 1, 1, 1, 1 ], // pesos por variante: clasico, catedral, monasterio, ermita, calvario (0 = nunca)
+    "StatuesVariants": [ 1, 1, 1 ], // coloso y estatuas, avenida de reyes, columbario
+    "TechVariants": [ 1, 1, 1, 1, 1 ], // complejo de investigacion, planta nuclear, refineria, aeropuerto, cosmopuerto
+    "MinDecay": 0.25, // deterioro de las ruinas, de 0.05 a 0.95
+    "MaxDecay": 0.9,
+    "SizeFactor": 1.0, // multiplica el radio de las ruinas, de 1 a 1.5
+    "FieldChance": 0.55, // campo kilometrico por celda de 4096 bloques (0..1)
+    "FieldMinRadius": 350, // radio de los campos, de 100 a 1500
+    "FieldMaxRadius": 750,
+    "FieldDensity": 0.65, // probabilidad maxima de figura por punto de la malla de 16 x 16
+    "EnemyFactor": 1.0, // multiplica los enemigos de ruinas y campos (0 = ninguno, hasta 3)
+    "Chests": true, // cofres con tesoro
+    "Npcs": true, // NPC especiales
+    "FieldFindChance": 0.5 // hallazgos de los campos por celda de 192 x 192 (0..1)
   }
 }

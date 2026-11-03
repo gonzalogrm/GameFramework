@@ -12,18 +12,40 @@ internal static class RuinSites
     private const int Approach = 12;   // largo de la avenida de columnas del templo
 
     /// <summary>Cuántas variantes tiene cada clase de ruina (la variante sale de la celda, como el tipo de las ciudades).</summary>
-    public static int VariantCount(SiteKind site) => 1;
+    public static int VariantCount(SiteKind site) => site == SiteKind.Tech ? 5 : site == SiteKind.Temple ? 5 : site == SiteKind.Statues ? 3 : 1;
+
+    private static readonly string[] StatuesNames = { "coloso y estatuas", "avenida de reyes", "columbario" };
+
+    private static readonly string[] TempleNames = { "templo clásico", "catedral", "monasterio", "ermita", "calvario" };
+
+    private static readonly string[] TechNames = { "complejo de investigación", "planta nuclear", "refinería", "aeropuerto", "cosmopuerto" };
 
     public static string VariantName(SiteKind site, int variant) => site switch
     {
-        SiteKind.Temple => "templo clásico",
-        SiteKind.Statues => "coloso y estatuas",
-        SiteKind.Tech => "complejo de investigación",
+        SiteKind.Temple => TempleNames[Math.Clamp(variant, 0, TempleNames.Length - 1)],
+        SiteKind.Statues => StatuesNames[Math.Clamp(variant, 0, StatuesNames.Length - 1)],
+        SiteKind.Tech => TechNames[Math.Clamp(variant, 0, TechNames.Length - 1)],
         _ => "",
     };
 
+    /// <summary>Tamaño (radio mínimo y máximo) de cada clase y variante.</summary>
+    public static (int Min, int Max) RadiusRange(SiteKind site, int variant) => site switch
+    {
+        SiteKind.Temple => variant switch { 1 => (46, 62), 2 => (44, 58), 3 => (28, 38), 4 => (36, 50), _ => (30, 46) },
+        SiteKind.Statues => variant switch { 1 => (56, 76), 2 => (50, 66), _ => (24, 35) },
+        _ => variant switch { 1 => (46, 60), 2 => (40, 54), 3 => (58, 76), 4 => (54, 70), _ => (34, 50) },
+    };
+
     /// <summary>Altura máxima de lo construido sobre el suelo (para repartirlo por los chunks verticales).</summary>
-    public static int Height(City c) => c.Site == SiteKind.Temple ? 10 : c.Site == SiteKind.Tech ? 15 : 13;
+    public static int Height(City c) => HeightFor(c.Site, c.Variant);
+
+    public static int HeightFor(SiteKind site, int variant) => site switch
+    {
+        SiteKind.Temple => variant switch { 1 => 26, 2 => 22, 3 => 14, 4 => 14, _ => 10 },
+        SiteKind.Tech => variant switch { 1 => 22, 2 => 24, 3 => 18, 4 => 26, _ => 15 },
+        SiteKind.Statues => variant switch { 1 => 12, 2 => 12, _ => 13 },
+        _ => 13,
+    };
 
     private static int Mod(int a, int b) => ((a % b) + b) % b;
 
@@ -68,15 +90,23 @@ internal static class RuinSites
     public static bool Active(City c, int rx, int rz, double pad)
     {
         if (pad <= 0) return true;
-        if (c.Site != SiteKind.Temple) return false;
+        if (c.Site != SiteKind.Temple || c.Variant != 0) return false;   // solo el templo clásico tiene avenida de columnas fuera de la parte nivelada
         var q = Rot(c, rx, rz);
         int w = W(c);
         return Math.Abs(q.X) <= 3 && q.Z < -(w + 2) && q.Z >= -(w + 2 + Approach);   // la avenida de columnas
     }
 
     /// <summary>Suelo (r = 0) de la parte nivelada: piedra; en el campo de estatuas el empedrado está agrietado y asoma el suelo natural.</summary>
-    public static ushort Surface(City c, int wx, int wz, ushort natural)
+    public static ushort Surface(City c, int rx, int rz, int wx, int wz, ushort natural)
     {
+        if (c.Variant >= 1)
+        {
+            var (qx, qz) = Rot(c, rx, rz);
+            var special = c.Site == SiteKind.Tech ? TechSites.Surface(c, c.Variant, qx, qz, wx, wz, natural, W(c))
+                        : c.Site == SiteKind.Temple ? TempleSites.Surface(c, c.Variant, qx, qz, wx, wz, natural, W(c))
+                        : StatueSites.Surface(c, c.Variant, qx, qz, wx, wz, natural, c.Radius - 9);
+            if (special.HasValue) return special.Value;
+        }
         if ((c.Site == SiteKind.Statues || c.Site == SiteKind.Tech) && U(c, wx, wz, 0xC4AB) < c.Decay * 0.5) return U(c, wz, wx, 0xC4AC) < 0.5 ? natural : Blocks.Dirt;
         return c.Style.Plaza;
     }
@@ -84,9 +114,9 @@ internal static class RuinSites
     /// <summary>Bloque en la fila r. 'profile' (de Profile) dice qué filas de la columna siguen en pie; las plantas crecen donde no hay nada.</summary>
     public static ushort Block(City c, int rx, int rz, int r, int wx, int wy, int wz, bool[]? profile)
     {
-        if (c.Site == SiteKind.Temple || c.Site == SiteKind.Tech)
+        if (c.Site != SiteKind.Statues || c.Variant != 0)
         {
-            ushort raw = c.Site == SiteKind.Temple ? TempleBlock(c, rx, rz, r, wx, wz) : TechBlock(c, rx, rz, r, wx, wz);
+            ushort raw = RawBlock(c, rx, rz, r, wx, wz);
             if (IsPlant(raw)) return raw;
             if (raw == Blocks.Air) return Blocks.Air;
             return profile != null && r < profile.Length && profile[r] ? Intact(c, rx, rz, r, wx, wz) : Blocks.Air;
@@ -96,13 +126,20 @@ internal static class RuinSites
 
     /// <summary>Qué filas de la columna siguen en pie (null en los campos de estatuas, que no necesitan perfil).</summary>
     public static bool[]? Profile(City c, int rx, int rz, int wx, int wz) =>
-        c.Site == SiteKind.Statues ? null : SiteProfile(c, rx, rz, wx, wz, 0);
+        c.Site == SiteKind.Statues && c.Variant == 0 ? null : SiteProfile(c, rx, rz, wx, wz, 0);
 
     // ------------------------------------------------------------------ deterioro estructural (templos e instalaciones)
 
+    private static ushort RawBlock(City c, int rx, int rz, int r, int wx, int wz) => c.Site switch
+    {
+        SiteKind.Temple => TempleBlock(c, rx, rz, r, wx, wz),
+        SiteKind.Tech => TechBlock(c, rx, rz, r, wx, wz),
+        _ => StatuesBlock(c, rx, rz, r, wx, wz),
+    };
+
     private static ushort Intact(City c, int rx, int rz, int r, int wx, int wz)
     {
-        ushort id = c.Site == SiteKind.Temple ? TempleBlock(c, rx, rz, r, wx, wz) : TechBlock(c, rx, rz, r, wx, wz);
+        ushort id = RawBlock(c, rx, rz, r, wx, wz);
         if (id == c.Style.Plaza || id == Blocks.Air) return id;
         if (id == Blocks.GlassBlue) return Blocks.Air;                          // sin cristales: queda el hueco de la ventana
         if (id == Blocks.LampWarm || IsPlant(id)) return Blocks.Air;
@@ -112,7 +149,7 @@ internal static class RuinSites
     /// <summary>Filas de la plataforma del templo, que se conservan siempre (hace de suelo).</summary>
     private static int BaseRows(City c, int rx, int rz)
     {
-        if (c.Site != SiteKind.Temple) return 0;
+        if (c.Site != SiteKind.Temple || c.Variant != 0) return 0;   // la plataforma escalonada es del templo clásico
         var (qx, qz) = Rot(c, rx, rz);
         int d = W(c) - Math.Max(Math.Abs(qx), Math.Abs(qz));
         return d < 0 ? 0 : d < 2 ? 1 : d < 4 ? 2 : 3;
@@ -133,7 +170,7 @@ internal static class RuinSites
             if (intact[r] != Blocks.Air) top = r;
         }
         double n = 0.65 * U(c, wx >> 1, wz >> 1, 0xCA9) + 0.35 * U(c, wx, wz, 0xCAA);
-        int cap = Math.Max(BaseRows(c, rx, rz), (int)Math.Floor(top * (1 - c.Decay * (0.15 + 0.85 * n))));
+        int cap = Math.Max(BaseRows(c, rx, rz), (int)Math.Round(top * (1 - c.Decay * (0.15 + 0.85 * n))));   // redondeado: las cosas bajas (lápidas, brocales) no desaparecen todas);
         var surv = new bool[rows + 1];
         bool belowIntact = true, belowSurv = true;
         for (int r = 1; r <= rows; r++)
@@ -163,10 +200,10 @@ internal static class RuinSites
         return n < (1 - c.Decay) * 0.45;   // los techos y las tapas casi no se conservan
     }
 
-    private static bool IsPlant(ushort id) => id == Blocks.GrassTuft || id == Blocks.TallGrass || id == Blocks.FlowerRed || id == Blocks.FlowerYellow;
+    private static bool IsPlant(ushort id) => id == Blocks.GrassTuft || id == Blocks.TallGrass || id == Blocks.FlowerRed || id == Blocks.FlowerYellow || id == Blocks.Bush;
 
     /// <summary>Hierba, hierba alta o flores que han crecido sobre la piedra (nada en desierto y nieve).</summary>
-    private static ushort Plant(City c, int wx, int wz)
+    internal static ushort Plant(City c, int wx, int wz)
     {
         if (c.Style.Name is "desierto" or "nevada") return Blocks.Air;
         ulong h = Hashing.Combine(c.Id, wx, 0xF11, wz);
@@ -179,7 +216,15 @@ internal static class RuinSites
 
     // ------------------------------------------------------------------ templo
 
+    /// <summary>Templo: la variante 0 es el templo clásico (abajo); el resto, en TempleSites, dentro del mismo recinto cuadrado.</summary>
     private static ushort TempleBlock(City c, int rx, int rz, int r, int wx, int wz)
+    {
+        if (c.Variant == 0) return TempleClassic(c, rx, rz, r, wx, wz);
+        var (qx, qz) = Rot(c, rx, rz);
+        return TempleSites.Block(c, c.Variant, qx, qz, r, wx, wz, W(c));
+    }
+
+    private static ushort TempleClassic(City c, int rx, int rz, int r, int wx, int wz)
     {
         var st = c.Style;
         var (qx, qz) = Rot(c, rx, rz);
@@ -236,7 +281,18 @@ internal static class RuinSites
     /// filas de consolas con pantalla), una ANTENA en la esquina de atrás a la izquierda (base, mástil de 12 y travesaños), uno o dos DEPÓSITOS cilíndricos a la derecha
     /// y un campo de PANELES SOLARES a la izquierda. Se gira como el templo. El hormigón es piedra; las pantallas y los paneles, cristal.
     /// </summary>
+    /// <summary>Instalación tecnológica: la variante 0 es el complejo de investigación (abajo); el resto, en TechSites, dentro del mismo recinto y con la misma valla.</summary>
     private static ushort TechBlock(City c, int rx, int rz, int r, int wx, int wz)
+    {
+        if (c.Variant == 0) return TechComplex(c, rx, rz, r, wx, wz);
+        var (qx, qz) = Rot(c, rx, rz);
+        int s = W(c), m = Math.Max(Math.Abs(qx), Math.Abs(qz));
+        if (m > s) return Blocks.Air;
+        if (m == s) return qz == -s && Math.Abs(qx) <= 2 ? Blocks.Air : r <= 2 ? c.Style.Plaza : Blocks.Air;   // valla, con puerta
+        return TechSites.Block(c, c.Variant, qx, qz, r, wx, wz, s);
+    }
+
+    private static ushort TechComplex(City c, int rx, int rz, int r, int wx, int wz)
     {
         var st = c.Style;
         var (qx, qz) = Rot(c, rx, rz);
@@ -295,7 +351,16 @@ internal static class RuinSites
 
     // ------------------------------------------------------------------ campo de estatuas
 
+    /// <summary>Campo de estatuas: la variante 0 es el coloso con su círculo de estatuas (abajo); el resto, en StatueSites, dentro del mismo círculo nivelado.</summary>
     private static ushort StatuesBlock(City c, int rx, int rz, int r, int wx, int wz)
+    {
+        if (c.Variant == 0) return StatuesClassic(c, rx, rz, r, wx, wz);
+        var (qx, qz) = Rot(c, rx, rz);
+        ushort id = StatueSites.Block(c, c.Variant, qx, qz, r, c.Radius - 9);
+        return id != Blocks.Air || r != 1 ? id : Plant(c, wx, wz);
+    }
+
+    private static ushort StatuesClassic(City c, int rx, int rz, int r, int wx, int wz)
     {
         var st = c.Style;
         int n = 4 + (int)(Hashing.Mix((ulong)(uint)c.Id ^ 0x5747UL) % 5UL);   // 4 a 8 estatuas
@@ -321,40 +386,7 @@ internal static class RuinSites
         return u < p0 ? 0 : u < p0 + 0.25 ? 1 : u < p0 + 0.5 ? 2 : 3;
     }
 
-    private static ushort Statue(City c, int i, int dx, int dz, int r, CityStyle st)
-    {
-        int s = State(c, i, 0.55);
-        if (Math.Abs(dx) <= 1 && Math.Abs(dz) <= 1)
-        {
-            if (r == 1) return st.Plaza;                    // pedestal 3x3
-            if (s == 3) return Blocks.Air;                  // caída: solo queda el pedestal
-            bool center = dx == 0 && dz == 0;
-            if (center && r >= 2 && r <= (s == 2 ? 3 : 4)) return st.Plaza;   // cuerpo
-            if (s <= 1 && r == 5 && (center || (dz == 0 && Math.Abs(dx) == 1))) return st.Plaza;   // hombros y brazos
-            if (s == 0 && center && r == 6) return st.Plaza;                    // cabeza
-            if (s == 2 && Math.Abs(dx) == 1 && Math.Abs(dz) == 1 && r == 2) return st.Plaza;       // cascotes
-            return Blocks.Air;
-        }
-        if (s == 3 && dz == 0 && dx >= 2 && dx <= 5 && r == 1) return st.Plaza;   // la estatua caída yace sobre el suelo
-        return Blocks.Air;
-    }
+    internal static ushort Statue(City c, int i, int dx, int dz, int r, CityStyle st) => StatueShapes.Statue(State(c, i, 0.55), dx, dz, r, st.Plaza);
 
-    private static ushort Colossus(City c, int dx, int dz, int r, CityStyle st)
-    {
-        int s = State(c, 99, 0.4);
-        int ax = Math.Abs(dx), az = Math.Abs(dz);
-        if (ax <= 3 && az <= 3 && r == 1) return st.Plaza;       // pedestal de dos niveles
-        if (ax <= 2 && az <= 2 && r == 2) return st.Plaza;
-        if (s == 3)                                              // caído: yace hacia +Z (cuerpo y cabeza)
-            return dz >= 3 && dz <= 12 && ax <= 1 && r <= 2 ? st.Plaza : Blocks.Air;
-        if (ax <= 1 && az <= 1)
-        {
-            if (r >= 3 && r <= (s == 2 ? 5 : 8)) return st.Plaza;                       // cuerpo
-            if (s == 0 && (r == 9 || r == 10)) return st.Plaza;                         // cabeza
-            if (s == 0 && r == 11 && ax == 0 && az == 0) return st.Plaza;
-        }
-        if (s <= 1 && r == 8 && ax <= 3 && az <= 1) return st.Plaza;                    // brazos extendidos
-        if (s == 2 && r <= 2 && (ax >= 3 || az >= 3) && ax <= 5 && az <= 5 && U(c, dx, dz, 0x57D) < 0.3) return st.Plaza;   // cascotes
-        return Blocks.Air;
-    }
+    internal static ushort Colossus(City c, int dx, int dz, int r, CityStyle st) => StatueShapes.Colossus(State(c, 99, 0.4), dx, dz, r, st.Plaza, c.Id);
 }

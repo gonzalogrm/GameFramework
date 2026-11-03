@@ -65,6 +65,7 @@ public sealed class WorldSettings
 
 	// ----- Juego -----
 	public CitySettings Cities { get; set; } = new();          // ciudades: frecuencia, tamano, guardas, NPC especiales
+	public RuinSettings Ruins { get; set; } = new();     // ruinas y campos de estatuas: frecuencia, reparto, tamano, enemigos, cofres
 	public int FadeChunks { get; set; } = 2;                  // anchura (chunks) de la franja donde los bloques se disuelven sobre el terreno lejano; 0 = sin fundido
     public float FadeInSeconds { get; set; } = 0.6f;          // un chunk recién construido tarda esto en aparecer (disolviéndose desde nada)
     public int FarCloseChunks { get; set; } = 0;              // el terreno lejano empieza a esta distancia (chunks); 0 = automático: ViewDistance
@@ -111,6 +112,7 @@ public sealed class WorldSettings
 		Cities.Villagers = other.Cities.Villagers;
 		Cities.Guards = other.Cities.Guards;
 		Cities.SpecialNpcs = other.Cities.SpecialNpcs;
+		Ruins.ApplyView(other.Ruins);
 	}
 
     public WorldScale CreateScale() => new(MapWidth, MapHeight, RegionChunksX, RegionChunksZ, ChunkSize, ChunkSize);
@@ -240,6 +242,7 @@ public sealed class WorldSettings
         MapSamplesPerAxis = I(nameof(MapSamplesPerAxis), MapSamplesPerAxis, 1, 16);
         WorkerThreads = I(nameof(WorkerThreads), WorkerThreads, 0, 64);
 		Cities.Validate(warnings);
+		Ruins.Validate(warnings);
 		return warnings;
     }
 }

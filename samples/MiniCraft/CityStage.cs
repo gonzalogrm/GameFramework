@@ -226,7 +226,7 @@ public sealed class CityStage : IGenerationStage<ushort>
 
             ushort t = Biomes.Surface[_columns.BiomeAt(wx, wz)];
             ushort natural = t == Blocks.Stone ? Blocks.Grass : t;
-            ushort surface = pad <= 0 ? RuinSites.Surface(city, wx, wz, natural) : natural;
+            ushort surface = pad <= 0 ? RuinSites.Surface(city, rx, rz, wx, wz, natural) : natural;
 
             bool[]? prof = active ? RuinSites.Profile(city, rx, rz, wx, wz) : null;   // filas que siguen en pie (sin bloques flotantes)
             int start = h >= g ? g : h + 1;

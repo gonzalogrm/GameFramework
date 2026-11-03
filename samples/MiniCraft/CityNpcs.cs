@@ -18,6 +18,15 @@ public static class CityNpcs
         On(hub, "hermit", HermitTalks);
         On(hub, "archaeologist", ArchaeologistTalks);
         On(hub, "engineer", EngineerTalks);
+        On(hub, "reactor_tech", ReactorTechTalks);
+        On(hub, "foreman", ForemanTalks);
+        On(hub, "pilot", PilotTalks);
+        On(hub, "astronaut", AstronautTalks);
+        On(hub, "sacristan", SacristanTalks);
+        On(hub, "monk", MonkTalks);
+        On(hub, "pilgrim", PilgrimTalks);
+        On(hub, "historian", HistorianTalks);
+        On(hub, "gravekeeper", GravekeeperTalks);
     }
 
     private static void On(EventHub hub, string type, Action<Entity, GameEvent, EventHub> handler)
@@ -47,6 +56,33 @@ public static class CityNpcs
 
     private static void EngineerTalks(Entity e, GameEvent ev, EventHub hub) =>
         hub.Notify($"{e.Label}: Las centinelas siguen de ronda desde que se apagó todo. Lo valioso estaba en el hangar.");
+
+    private static void ReactorTechTalks(Entity e, GameEvent ev, EventHub hub) =>
+        hub.Notify($"{e.Label}: Dieron la orden de apagarlo y nadie quedó para cumplirla. Aléjate de la cúpula: el aire todavía quema.");
+
+    private static void ForemanTalks(Entity e, GameEvent ev, EventHub hub) =>
+        hub.Notify($"{e.Label}: Esto era una refinería. Las bombas siguen en su caseta, y los saqueadores la vigilan.");
+
+    private static void PilotTalks(Entity e, GameEvent ev, EventHub hub) =>
+        hub.Notify($"{e.Label}: El último vuelo no llegó a despegar. Lo único de valor es lo del terminal y el hangar.");
+
+    private static void AstronautTalks(Entity e, GameEvent ev, EventHub hub) =>
+        hub.Notify($"{e.Label}: Esperé el cohete diez años. Si buscas algo útil, prueba el búnker de control.");
+
+    private static void SacristanTalks(Entity e, GameEvent ev, EventHub hub) =>
+        hub.Notify($"{e.Label}: Las campanas no suenan desde hace siglos. La reliquia sigue en el altar, si te atreves.");
+
+    private static void MonkTalks(Entity e, GameEvent ev, EventHub hub) =>
+        hub.Notify($"{e.Label}: Los hermanos se fueron o se perdieron. Los bandidos duermen en el refectorio.");
+
+    private static void PilgrimTalks(Entity e, GameEvent ev, EventHub hub) =>
+        hub.Notify($"{e.Label}: Subo al calvario cada año. Las ofrendas al pie del camino son para quien las necesite.");
+
+    private static void HistorianTalks(Entity e, GameEvent ev, EventHub hub) =>
+        hub.Notify($"{e.Label}: Aquí reinaron treinta reyes, uno por estatua. Del último solo queda el coloso. Y su guardia aún no ha sido relevada.");
+
+    private static void GravekeeperTalks(Entity e, GameEvent ev, EventHub hub) =>
+        hub.Notify($"{e.Label}: Cada urna guarda un nombre. Si molestas a los muertos, los espectros de las urnas despiertan.");
 
     private static void GuardTalks(Entity e, GameEvent ev, EventHub hub) =>
         hub.Notify($"{e.Label}: " + (e.GetFloat("hp") < e.GetFloat("max_hp") ? "He tenido días mejores, pero sigo en mi puesto." : "Todo tranquilo. Vigilo la ciudad."));

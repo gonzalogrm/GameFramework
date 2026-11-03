@@ -69,6 +69,7 @@ public sealed class PlayScene : UiScene
     private Label _debug = null!, _status = null!, _inspector = null!;
     private Entity? _entityTarget;
 	private RuinSpawner _ruinSpawner = null!;
+    private FieldSpawner _fieldSpawner = null!;
 	private bool _inspecting;
     private float _inspectTimer;
     private Vec3d _pos = new(0, 64, 0);   // doble precisión: a 100.000 bloques del origen un float pierde 1/128 de bloque
@@ -146,15 +147,22 @@ public sealed class PlayScene : UiScene
 
         // El mismo modelo climático alimenta el terreno de los chunks y el mapamundi.
         _climate = new MiniCraftClimate(_seed, _settings, _scale);
-        // Altura y bioma de cada columna se calculan una sola vez y los comparten terreno, árboles y decoración.
-        var columns = new TerrainColumnCache(_climate, _scale);
-		var cities = new CityPlanner(_seed, _climate, _scale, columns, _settings.Cities.ToOptions());
+		StatueFields.Setup((x, z) => MiniCraftClimate.ToBlockHeight(_climate.Sample(x, z).Height), _climate.SeaLevel,
+						   _settings.Ruins.FieldChance, _settings.Ruins.FieldMinRadius, _settings.Ruins.FieldMaxRadius);
+
+		// Altura y bioma de cada columna se calculan una sola vez y los comparten terreno, árboles y decoración.
+		var columns = new TerrainColumnCache(_climate, _scale);
+		var cityOptions = _settings.Cities.ToOptions();
+		_settings.Ruins.Apply(cityOptions);
+		var cities = new CityPlanner(_seed, _climate, _scale, columns, cityOptions);
 		_cities = cities;
 		Task.Run(cities.PlanAll);
+		Task.Run(() => { foreach (var f in StatueFields.All(_scale, _seed)) Console.WriteLine($"[campo] centro x {f.X} z {f.Z}, radio {f.Radius}, {StatueFields.KindName(f.Kind)}"); });
 		var generator = new WorldGenerator<ushort>(_seed, _climate.Noise)
             .AddStage(new TerrainStage(_climate, columns))
             .AddStage(new CityStage(cities, _scale, columns))
-            .AddStage(new TreeStage(_climate, _scale, columns, cities))
+			.AddStage(new StatueFieldStage(_seed, cities, _scale, columns, _climate.SeaLevel, _settings.Ruins.FieldDensity))
+			.AddStage(new TreeStage(_climate, _scale, columns, cities))
             .AddStage(new DecorationStage(_climate, _scale, columns, cities));
 
         int cs = _settings.ChunkSize, layers = _settings.VerticalChunks, view = _settings.ViewDistance;
@@ -258,7 +266,8 @@ public sealed class PlayScene : UiScene
         _npcs.Events = _events;
         _spawner = new EnemySpawner(_entities, _world, _climate, _scale, _npcs, _seed, _settings, () => _spawned ? (Vec3d?)_pos : null);
 		_citySpawner = new CitySpawner(_entities, _world, cities, _npcs, _scale, _settings.Cities);
-		_ruinSpawner = new RuinSpawner(_entities, _world, cities, _scale);
+		_ruinSpawner = new RuinSpawner(_entities, _world, cities, _scale, _settings.Ruins);
+		_fieldSpawner = new FieldSpawner(_entities, _world, cities, _scale, columns, _seed, _climate.SeaLevel, _settings.Ruins); //hallazgos en campos kilometricos
 
 		// Historia del mundo (sale de la semilla, no se guarda) y sus objetos legendarios: variantes de armas creadas en partida, con su héroe y su destino.
 		_history = WorldHistory.Generate((ulong)(uint)_seed);
@@ -790,7 +799,10 @@ public sealed class PlayScene : UiScene
 				: new Color(220, 150, 50);                                 // ciudades abandonadas: naranja
 			yield return new MapMarker(c.CenterX, c.CenterZ, mc, c.Abandoned ? 7f : 9f);
 		}
-			
+
+		foreach (var f in StatueFields.All(_scale, _seed))
+			yield return new MapMarker(f.X, f.Z,
+				f.Kind == 1 ? new Color(200, 170, 120) : f.Kind == 0 ? new Color(80, 200, 220) : new Color(160, 200, 150), 14f);   // estatuas cian, urnas arena, mixto verde
 	}
 
     private void UpdateDebug(GameTime gameTime)

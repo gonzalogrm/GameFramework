@@ -15,15 +15,26 @@ public sealed class RuinSpawner
     private static readonly string[] HermitNames = { "Anselmo", "Berta", "Cirilo", "Dalia" };
     private static readonly string[] ArchaeologistNames = { "Irene", "Teodoro", "Wanda", "Xavi" };
     private static readonly string[] EngineerNames = { "Nora", "Olaf", "Petra", "Quim" };
+    private static readonly string[] ClericNames = { "Fray Benito", "Hermana Clara", "Padre Tomás", "Sor Inés" };
+
+    /// <summary>Nombres según el tipo de NPC: técnicos y pilotos, religiosos, estudiosos o ermitaños.</summary>
+    private static string[] NamesFor(string type) => type switch
+    {
+        "engineer" or "reactor_tech" or "foreman" or "pilot" or "astronaut" => EngineerNames,
+        "monk" or "sacristan" or "pilgrim" => ClericNames,
+        "archaeologist" or "historian" => ArchaeologistNames,
+        _ => HermitNames,
+    };
 
     private readonly EntityStore _store;
     private readonly CityPlanner _planner;
     private readonly WorldScale _scale;
+    private readonly RuinSettings _settings;
     private readonly List<Entity> _scratch = new();
 
-    public RuinSpawner(EntityStore store, World<ushort> world, CityPlanner planner, WorldScale scale)
+    public RuinSpawner(EntityStore store, World<ushort> world, CityPlanner planner, WorldScale scale, RuinSettings settings)
     {
-        _store = store; _planner = planner; _scale = scale;
+        _store = store; _planner = planner; _scale = scale; _settings = settings;
         world.ChunkLoaded += OnChunkLoaded;
     }
 
@@ -56,16 +67,17 @@ public sealed class RuinSpawner
         if (!marked)
         {
             Spawn("ruin_marker", plan.Marker, city, null, null);
-            foreach (var chest in plan.Chests) Spawn(chest.Type, chest.Spot, city, null, null);
-            if (plan.NpcType.Length > 0)
+            if (_settings.Chests) foreach (var chest in plan.Chests) Spawn(chest.Type, chest.Spot, city, null, null);
+            if (_settings.Npcs && plan.NpcType.Length > 0)
             {
-                var names = plan.NpcType == "archaeologist" ? ArchaeologistNames : plan.NpcType == "engineer" ? EngineerNames : HermitNames;
+                var names = NamesFor(plan.NpcType);
                 Spawn(plan.NpcType, plan.Npc, city, null, names[rng.Next(names.Length)]);
             }
         }
 
         // Los guardianes: se reponen hasta el número previsto, repartidos por la ruina.
-        for (int i = guards; i < plan.EnemyCount && plan.EnemyTypes.Length > 0; i++)
+        int target = (int)Math.Round(plan.EnemyCount * _settings.EnemyFactor);
+        for (int i = guards; i < target && plan.EnemyTypes.Length > 0; i++)
         {
             double angle = rng.NextFloat() * Math.PI * 2, dist = city.Radius * (0.25 + 0.6 * rng.NextFloat());
             var spot = new RuinPlan.Spot((int)(Math.Cos(angle) * dist), (int)(Math.Sin(angle) * dist), city.GroundY + 3);
