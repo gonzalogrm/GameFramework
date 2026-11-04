@@ -85,8 +85,8 @@
     "TempleVariants": [ 1, 1, 1, 1, 1 ], // pesos por variante: clasico, catedral, monasterio, ermita, calvario (0 = nunca)
     "StatuesVariants": [ 1, 1, 1 ], // coloso y estatuas, avenida de reyes, columbario
     "TechVariants": [ 1, 1, 1, 1, 1 ], // complejo de investigacion, planta nuclear, refineria, aeropuerto, cosmopuerto
-    "MinDecay": 0.25, // deterioro de las ruinas, de 0.05 a 0.95
-    "MaxDecay": 0.9,
+    "MinDecay": 0.20, // deterioro de las ruinas, de 0.05 a 0.95
+    "MaxDecay": 0.70,
     "SizeFactor": 1.0, // multiplica el radio de las ruinas, de 1 a 1.5
     "FieldChance": 0.55, // campo kilometrico por celda de 4096 bloques (0..1)
     "FieldMinRadius": 350, // radio de los campos, de 100 a 1500

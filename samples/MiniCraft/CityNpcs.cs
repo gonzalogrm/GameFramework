@@ -22,9 +22,10 @@ public static class CityNpcs
         On(hub, "foreman", ForemanTalks);
         On(hub, "pilot", PilotTalks);
         On(hub, "astronaut", AstronautTalks);
-        On(hub, "sacristan", SacristanTalks);
-        On(hub, "monk", MonkTalks);
-        On(hub, "pilgrim", PilgrimTalks);
+        On(hub, "astronomer", AstronomerTalks);
+        On(hub, "archivist", ArchivistTalks);
+        On(hub, "lighthouse_keeper", KeeperTalks);
+        On(hub, "wayfarer", WayfarerTalks);
         On(hub, "historian", HistorianTalks);
         On(hub, "gravekeeper", GravekeeperTalks);
     }
@@ -69,14 +70,17 @@ public static class CityNpcs
     private static void AstronautTalks(Entity e, GameEvent ev, EventHub hub) =>
         hub.Notify($"{e.Label}: Esperé el cohete diez años. Si buscas algo útil, prueba el búnker de control.");
 
-    private static void SacristanTalks(Entity e, GameEvent ev, EventHub hub) =>
-        hub.Notify($"{e.Label}: Las campanas no suenan desde hace siglos. La reliquia sigue en el altar, si te atreves.");
+    private static void AstronomerTalks(Entity e, GameEvent ev, EventHub hub) =>
+        hub.Notify($"{e.Label}: La Esfera marcaba las estaciones con la rendija de la cúpula. Lo que guardaba el observatorio sigue bajo ella, si pasas los espectros estelares.");
 
-    private static void MonkTalks(Entity e, GameEvent ev, EventHub hub) =>
-        hub.Notify($"{e.Label}: Los hermanos se fueron o se perdieron. Los bandidos duermen en el refectorio.");
+    private static void ArchivistTalks(Entity e, GameEvent ev, EventHub hub) =>
+        hub.Notify($"{e.Label}: Los archivos hablaban de un Ojo que lo registraba todo. Ahora solo quedan polvo y bandidos en las salas.");
 
-    private static void PilgrimTalks(Entity e, GameEvent ev, EventHub hub) =>
-        hub.Notify($"{e.Label}: Subo al calvario cada año. Las ofrendas al pie del camino son para quien las necesite.");
+    private static void KeeperTalks(Entity e, GameEvent ev, EventHub hub) =>
+        hub.Notify($"{e.Label}: El faro se apagó, pero sigo contando las noches. Los mojones del campo señalaban el camino a la costa.");
+
+    private static void WayfarerTalks(Entity e, GameEvent ev, EventHub hub) =>
+        hub.Notify($"{e.Label}: Subo la escalinata cada año a mirar los monolitos. Las ofrendas del camino son para quien las necesite.");
 
     private static void HistorianTalks(Entity e, GameEvent ev, EventHub hub) =>
         hub.Notify($"{e.Label}: Aquí reinaron treinta reyes, uno por estatua. Del último solo queda el coloso. Y su guardia aún no ha sido relevada.");

@@ -29,6 +29,12 @@ internal static class StatueSites
             paved = Dist(qx, qz, 0, 0) <= 7 || Math.Abs(qx) <= 1 || Math.Abs(qz) <= 1 ||
                     (Math.Abs(Math.Abs(qx) - 14) <= 2 && Math.Abs(Math.Abs(qz) - 14) <= 2);
         }
+        if (variant == 2 && Dist(qx, qz, 0, 0) <= 6.8)   // suelo de la rotonda: los tres anillos
+        {
+            double dd = Dist(qx, qz, 0, 0);
+            if (dd < 1.5) return Blocks.Sand;
+            if ((dd >= 2.5 && dd < 3.5) || (dd >= 4.5 && dd < 5.5)) return Blocks.Dirt;
+        }
         if (!paved) return natural;
         ulong h = Hashing.Combine(c.Id, wx, 0xC4AB, wz);
         if ((h >> 40) * (1.0 / (1 << 24)) < c.Decay * 0.5) return (h & 1) == 0 ? natural : Blocks.Dirt;
@@ -65,7 +71,7 @@ internal static class StatueSites
                     if (Math.Abs(dx) > 5) continue;
                     int ddx = side > 0 ? -dx : dx;   // las estatuas caídas yacen hacia la calzada
                     int s = State(c, 200 + 2 * i + (side > 0 ? 1 : 0), 0.55);
-                    ushort id = StatueShapes.Statue(s, ddx, dz, r, P);
+                    ushort id = StatueShapes.Statue(s, ddx, dz, r, P, (i + (side > 0 ? 1 : 0)) % 3);
                     if (id != Blocks.Air) return id;
                 }
         }

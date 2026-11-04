@@ -12,7 +12,7 @@ public sealed class RuinSettings
     public int TempleWeight { get; set; } = 22;
     public int StatuesWeight { get; set; } = 18;
     public int TechWeight { get; set; } = 20;
-    public int[] TempleVariants { get; set; } = { 1, 1, 1, 1, 1 };   // pesos por variante: clásico, catedral, monasterio, ermita, calvario (0 = nunca)
+    public int[] TempleVariants { get; set; } = { 1, 1, 1, 1, 1 };   // pesos por variante: templo de columnas, observatorio, academia, faro, escalinata de monolitos (0 = nunca)
     public int[] StatuesVariants { get; set; } = { 1, 1, 1 };         // coloso y estatuas, avenida de reyes, columbario
     public int[] TechVariants { get; set; } = { 1, 1, 1, 1, 1 };     // complejo de investigación, planta nuclear, refinería, aeropuerto, cosmopuerto
     public float MinDecay { get; set; } = 0.25f;      // deterioro de las ruinas: de MinDecay a MaxDecay (0,05 a 0,95)

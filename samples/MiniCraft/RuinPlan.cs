@@ -64,8 +64,8 @@ internal static class RuinPlan
     }
 
     /// <summary>
-    /// Templo: cada variante con su NPC (arqueólogo, sacristán, monje, ermitaño, peregrino), sus cofres (reliquias en los altares, ofrendas en el calvario, funerario en
-    /// el cementerio) y sus enemigos (guardianes, frailes espectrales, bandidos, aparecidos, gólems).
+    /// Templo: cada variante con su NPC (arqueólogo, astrónomo, archivista, farero, caminante), sus cofres (de archivo en el observatorio y la academia, ofrendas en la
+    /// escalinata) y sus enemigos (guardianes, espectros estelares, bandidos, aparecidos, gólems).
     /// </summary>
     private static void Temple(City c, Plan p, SplitMixRandom rng)
     {
@@ -76,36 +76,36 @@ internal static class RuinPlan
         p.EnemyCount = 4 + (int)(c.Decay * 2);
         switch (c.Variant)
         {
-            case 1:   // catedral: reliquia en el altar del ábside y cofre en el transepto
-                p.Chests.Add(new ChestSpot(At(0, w - 10, 4), "chest_relic"));
-                p.Chests.Add(new ChestSpot(At(-6, w - 15, 3), rng.Chance(0.5f) ? "chest_potions" : "chest_royal"));
+            case 1:   // observatorio: dentro del salón y al pie de una torre de señales
+                p.Chests.Add(new ChestSpot(At(3, 3, 3), "chest_archive"));
+                p.Chests.Add(new ChestSpot(At(12, -8, 3), rng.Chance(0.5f) ? "chest_potions" : "chest_royal"));
                 p.Npc = At(0, -(w - 2), 3);
-                p.NpcType = "sacristan";
-                p.EnemyTypes = new[] { "temple_guardian", "monk_ghost", "monk_ghost" };
+                p.NpcType = "astronomer";
+                p.EnemyTypes = new[] { "temple_guardian", "star_wraith", "star_wraith" };
                 p.EnemyCount += 2;
                 break;
-            case 2:   // monasterio: reliquia en la iglesia y víveres en el refectorio; los bandidos se han instalado
-                p.Chests.Add(new ChestSpot(At(0, w - 7, 3), "chest_relic"));
-                p.Chests.Add(new ChestSpot(At(-(w - 8), 0, 3), "chest_offering"));
+            case 2:   // academia: en la Sala de los Archivos y en el ala oeste del claustro
+                p.Chests.Add(new ChestSpot(At(0, w - 7, 3), "chest_archive"));
+                p.Chests.Add(new ChestSpot(At(-(w - 8), 0, 3), "chest_supplies"));
                 p.Npc = At(0, -(w - 3), 3);
-                p.NpcType = "monk";
-                p.EnemyTypes = new[] { "monk_ghost", "bandit", "bandit" };
+                p.NpcType = "archivist";
+                p.EnemyTypes = new[] { "star_wraith", "bandit", "bandit" };
                 break;
-            case 3:   // ermita: dentro de la capilla y en una esquina del cementerio
-                p.Chests.Add(new ChestSpot(At(0, 3, 3), "chest_potions"));
-                p.Chests.Add(new ChestSpot(At(-(w - 4), -(w - 4), 3), "chest_urn"));
-                p.Npc = At(0, -5, 3);
-                p.NpcType = "hermit";
-                p.EnemyTypes = new[] { "revenant", "urn_wraith" };
-                break;
-            case 4:   // calvario: tesoro en lo alto del montículo y ofrendas al pie del camino
-                p.Chests.Add(new ChestSpot(At(2, 2, 7), "chest_royal"));
-                p.Chests.Add(new ChestSpot(At(4, -(w - 4), 3), "chest_offering"));
-                p.Npc = At(-3, -(w - 3), 3);
-                p.NpcType = "pilgrim";
+            case 3:   // faro: en la caseta del farero y junto al campo de mojones
+                p.Chests.Add(new ChestSpot(At(-8, 2, 3), "chest_potions"));
+                p.Chests.Add(new ChestSpot(At(3, -4, 3), "chest_supplies"));
+                p.Npc = At(0, -6, 3);
+                p.NpcType = "lighthouse_keeper";
                 p.EnemyTypes = new[] { "revenant", "golem" };
                 break;
-            default:  // templo clásico: sobre el altar, entre las columnas, y el arqueólogo fuera de la entrada
+            case 4:   // escalinata de monolitos: en lo alto y al pie del camino
+                p.Chests.Add(new ChestSpot(At(2, 2, 7), "chest_royal"));
+                p.Chests.Add(new ChestSpot(At(4, -(w - 4), 3), "chest_offering"));
+                p.Npc = At(-5, -(w - 3), 3);
+                p.NpcType = "wayfarer";
+                p.EnemyTypes = new[] { "revenant", "golem" };
+                break;
+            default:  // templo de columnas: sobre el altar, entre las columnas, y el arqueólogo fuera de la entrada
             {
                 var altar = RuinSites.FromLocal(c, 0, 0);
                 var side = RuinSites.FromLocal(c, 3, -3);

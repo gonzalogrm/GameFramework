@@ -7,7 +7,7 @@ namespace MiniCraft;
 
 /// <summary>
 /// Hallazgos de los campos kilométricos de estatuas y urnas (ver StatueFields): en una malla de 192 x 192 hay, con una probabilidad que baja hacia el borde de la
-/// región, un punto de interés con un cofre (ofrenda en los campos de estatuas, funerario en los de urnas), unos guardianes y a veces un peregrino o un sepulturero.
+/// región, un punto de interés con un cofre (ofrenda en los campos de estatuas, funerario en los de urnas), unos guardianes y a veces un caminante o un sepulturero.
 /// Se crea al cargarse el chunk que lo contiene, una sola vez (un mojón lo marca). Sin estado propio.
 /// </summary>
 public sealed class FieldSpawner
@@ -75,7 +75,7 @@ public sealed class FieldSpawner
             double angle = rng.NextFloat() * Math.PI * 2, dist = 4 + rng.NextFloat() * 4;
             Spawn(guards[rng.Next(guards.Length)], px + (int)(Math.Cos(angle) * dist), g + 3, pz + (int)(Math.Sin(angle) * dist), "field", null);
         }
-        if (_settings.Npcs && rng.Chance(0.25f)) Spawn(kind == 1 ? "gravekeeper" : "pilgrim", px - 3, g + 3, pz + 2, null, Names[rng.Next(Names.Length)]);
+        if (_settings.Npcs && rng.Chance(0.25f)) Spawn(kind == 1 ? "gravekeeper" : "wayfarer", px - 3, g + 3, pz + 2, null, Names[rng.Next(Names.Length)]);
     }
 
     private void Spawn(string type, int x, int y, int z, string? tag, string? name)

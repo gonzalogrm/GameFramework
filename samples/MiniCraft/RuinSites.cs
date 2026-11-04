@@ -16,7 +16,7 @@ internal static class RuinSites
 
     private static readonly string[] StatuesNames = { "coloso y estatuas", "avenida de reyes", "columbario" };
 
-    private static readonly string[] TempleNames = { "templo clásico", "catedral", "monasterio", "ermita", "calvario" };
+    private static readonly string[] TempleNames = { "templo de columnas", "observatorio", "academia", "faro", "escalinata de monolitos" };
 
     private static readonly string[] TechNames = { "complejo de investigación", "planta nuclear", "refinería", "aeropuerto", "cosmopuerto" };
 
@@ -41,7 +41,7 @@ internal static class RuinSites
 
     public static int HeightFor(SiteKind site, int variant) => site switch
     {
-        SiteKind.Temple => variant switch { 1 => 26, 2 => 22, 3 => 14, 4 => 14, _ => 10 },
+        SiteKind.Temple => variant switch { 1 => 20, 2 => 24, 3 => 22, 4 => 12, _ => 10 },
         SiteKind.Tech => variant switch { 1 => 22, 2 => 24, 3 => 18, 4 => 26, _ => 15 },
         SiteKind.Statues => variant switch { 1 => 12, 2 => 12, _ => 13 },
         _ => 13,
@@ -386,7 +386,7 @@ internal static class RuinSites
         return u < p0 ? 0 : u < p0 + 0.25 ? 1 : u < p0 + 0.5 ? 2 : 3;
     }
 
-    internal static ushort Statue(City c, int i, int dx, int dz, int r, CityStyle st) => StatueShapes.Statue(State(c, i, 0.55), dx, dz, r, st.Plaza);
+    internal static ushort Statue(City c, int i, int dx, int dz, int r, CityStyle st) => StatueShapes.Statue(State(c, i, 0.55), dx, dz, r, st.Plaza, ((i % 3) + 3) % 3);
 
     internal static ushort Colossus(City c, int dx, int dz, int r, CityStyle st) => StatueShapes.Colossus(State(c, 99, 0.4), dx, dz, r, st.Plaza, c.Id);
 }

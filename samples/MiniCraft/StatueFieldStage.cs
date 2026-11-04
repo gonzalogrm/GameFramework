@@ -6,7 +6,7 @@ namespace MiniCraft;
 
 /// <summary>
 /// Campos de estatuas y urnas de varios kilómetros (ver StatueFields). Sobre una malla de 16 x 16 con desplazamiento al azar hay, con una probabilidad que baja hacia
-/// el borde de la región, una figura de piedra: estatua (entera, sin cabeza, rota o caída), obelisco, estela, grupo de urnas o mausoleo. Solo en terreno llano sobre
+/// el borde de la región, una figura de piedra: estatua (con su pose y su estado), aguja retorcida, tótem de bandas, grupo de urnas o mausoleo. Solo en terreno llano sobre
 /// el agua y fuera de ciudades y ruinas. Cada figura se calcula entera a partir de (semilla, celda de la malla), así que no hay costuras entre chunks. Va después de
 /// CityStage y antes de los árboles.
 /// </summary>
@@ -63,7 +63,7 @@ public sealed class StatueFieldStage : IGenerationStage<ushort>
 
             int kind = region.Kind == 2 ? (int)((h >> 36) & 1UL) : region.Kind;
             double tp = ((h >> 20) & 0xFFFF) / 65536.0;
-            // 0 estatua, 1 obelisco, 2 estela, 3 grupo de urnas, 4 mausoleo
+            // 0 estatua, 1 aguja retorcida, 2 tótem de bandas, 3 grupo de urnas, 4 mausoleo
             int type = kind == 0 ? (tp < 0.72 ? 0 : tp < 0.84 ? 1 : 2)
                                  : (tp < 0.70 ? 3 : tp < 0.85 ? 2 : tp < 0.95 ? 4 : 1);
             double u = ((h >> 44) & 0xFFFFF) / (double)0x100000;
@@ -86,7 +86,7 @@ public sealed class StatueFieldStage : IGenerationStage<ushort>
         int sx = shape.SizeX, sy = shape.SizeY, sz = shape.SizeZ;
         var cells = chunk.Cells;
         ushort P = Blocks.Stone;
-        int maxR = type == 1 ? 10 : type == 0 ? 6 : 4;
+        int maxR = type == 1 ? 10 : type == 0 ? 8 : type == 2 ? 5 : 4;
 
         for (int dz = -5; dz <= 5; dz++)
         for (int dx = -5; dx <= 5; dx++)
@@ -97,9 +97,9 @@ public sealed class StatueFieldStage : IGenerationStage<ushort>
             {
                 ushort id = type switch
                 {
-                    0 => StatueShapes.Statue(state, dx, dz, r, P),
-                    1 => StatueShapes.Obelisk(dx, dz, r, P),
-                    2 => StatueShapes.Stele(dx, dz, r, P),
+                    0 => StatueShapes.Statue(state, dx, dz, r, P, (int)((h >> 4) % 3UL)),
+                    1 => StatueShapes.Spire(dx, dz, r, P),
+                    2 => StatueShapes.Totem(dx, dz, r, P),
                     3 => UrnCluster(dx, dz, r, P, h),
                     _ => StatueShapes.Mausoleum(dx, dz, r, P),
                 };

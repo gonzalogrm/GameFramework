@@ -15,13 +15,13 @@ public sealed class RuinSpawner
     private static readonly string[] HermitNames = { "Anselmo", "Berta", "Cirilo", "Dalia" };
     private static readonly string[] ArchaeologistNames = { "Irene", "Teodoro", "Wanda", "Xavi" };
     private static readonly string[] EngineerNames = { "Nora", "Olaf", "Petra", "Quim" };
-    private static readonly string[] ClericNames = { "Fray Benito", "Hermana Clara", "Padre Tomás", "Sor Inés" };
+    private static readonly string[] SkyNames = { "Aldara", "Brisen", "Corvo", "Delmar" };
 
-    /// <summary>Nombres según el tipo de NPC: técnicos y pilotos, religiosos, estudiosos o ermitaños.</summary>
+    /// <summary>Nombres según el tipo de NPC: técnicos y pilotos, gente del cielo y los caminos, estudiosos o ermitaños.</summary>
     private static string[] NamesFor(string type) => type switch
     {
         "engineer" or "reactor_tech" or "foreman" or "pilot" or "astronaut" => EngineerNames,
-        "monk" or "sacristan" or "pilgrim" => ClericNames,
+        "astronomer" or "archivist" or "lighthouse_keeper" or "wayfarer" => SkyNames,
         "archaeologist" or "historian" => ArchaeologistNames,
         _ => HermitNames,
     };

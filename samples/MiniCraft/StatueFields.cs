@@ -6,7 +6,7 @@ namespace MiniCraft;
 
 /// <summary>
 /// Regiones de campos de estatuas y urnas: en cada celda de 4096 bloques puede haber un disco de 350 a 750 bloques de radio (hasta 1,5 km de diámetro) que cae
-/// en TIERRA (Setup) y donde el terreno llano se llena de estatuas, urnas, estelas, obeliscos y mausoleos. A diferencia del resto de ruinas no caben en una celda de
+/// en TIERRA (Setup) y donde el terreno llano se llena de estatuas, urnas, tótems, agujas retorcidas y mausoleos. A diferencia del resto de ruinas no caben en una celda de
 /// ciudad: se generan por regiones (StatueFieldStage) y son solo una definición determinista (semilla, celda).
 /// </summary>
 public static class StatueFields
