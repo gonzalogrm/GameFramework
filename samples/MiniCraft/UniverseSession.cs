@@ -1,4 +1,5 @@
 using System.Text;
+using GF.Engine;
 using GF.World.Cosmos;
 
 namespace MiniCraft;
@@ -54,6 +55,14 @@ public sealed class UniverseSession
     {
         if (!planet.Habitable) throw new ArgumentException("El planeta no es habitable.", nameof(planet));
         Current = planet.Address;
+        Biomes.ApplyPlanet(planet.Address.Seed);                           // materiales (suelo, roca, madera...) de este planeta
+        Flora.ApplyPlanet(planet.Address.Seed);                            // especies de árboles y arbustos de este planeta
+        PlanetPalette.Current = PlanetPalette.For(planet.Address.Seed);   // paleta alienígena de este planeta (atlas y terreno lejano)
+        Fauna.ApplyPlanet(planet.Address.Seed);                            // especies de animales de este planeta (se registran como tipos de entidad)
+        FloraSprites.ApplyPlanet(planet.Address.Seed);                     // qué sprites de flora crecen en cada bioma
+        SpriteLoader.PixelFilter = PlanetSprites.Recolor;                  // hierba, hierba alta y matorral toman el verde del planeta
+        long spriteSeed = unchecked((long)planet.Address.Seed);
+        SpriteLoader.Extras = builder => PlanetSprites.AddAll(builder, unchecked((ulong)spriteSeed));   // sprites de flora propios del planeta
         string dir = SaveSystem.PlanetDir(planet.Address);
         SaveSystem.UseDirectory(dir);
         SaveSystem.WriteUniverse(ToSave());

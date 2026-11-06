@@ -52,6 +52,11 @@
   "SnowPeakFraction": 0.80, // y cumbres nevadas (no menor que MountainFraction)
   "TreeDensityMultiplier": 0.5, // 0..5. Multiplica la densidad de arboles de todos los biomas
   "PropDensityMultiplier": 0.5, // 0..5. Multiplica la hierba, flores y rocas (sprites 2D). 0 = sin sprites
+  "VegetationDensity": 0.2, // 0..5. Cantidad de arboles y arbustos (bloques y sprites). Se aplica tambien al "Continuar"
+  "FloraSpriteShare": 0.2, // 0..1. Fraccion de arboles/arbustos que son sprites 2D (0 = todo bloques, 1 = todo sprites)
+  "FungusDensityMultiplier": 0.2, // 0..5. Setas (gigantes de bloques y sprites)
+  "CrystalDensityMultiplier": 0.2, // 0..5. Cristales (afloramientos y agujas de cristal)
+  "RockDensityMultiplier": 0.2, // 0..5. Formaciones rocosas (agujas de piedra y rocas sprite)
 
   // ---------- JUEGO ----------
   "ViewDistance": 12, // distancia de vision en chunks (2..24). Mucho mayor = muchisimo mas coste
@@ -64,8 +69,12 @@
   "Caravans": 60, // caravanas repartidas por el mundo
   "EnemiesPerChunk": 0.5, // zombis esperados por columna de chunks al cargarse (0 = sin enemigos). Aparecen lejos del jugador
   "EnemyLimit": 1000, // maximo de zombis en el mundo
+  "FaunaPerChunk": 1.0, // 0..4. Animales esperados por columna de chunks al cargarse (0 = sin fauna). Depende del bioma (sabana/jungla/llanura mas; desierto/cumbres menos)
+  "FaunaLimit": 400, // maximo de animales en el mundo
   "MapSamplesPerAxis": 3, // precision del mapamundi: muestras por region = n*n (1..16)
   "WorkerThreads": 0, // hilos de fondo para generar y mallar chunks (0 = automatico: nucleos - 2). Sube si te sobran nucleos
+  "CaveDensity": 2.0, // 0..2. Cuevas (tuneles y cavernas con cristales y hongos). 0 = sin cuevas
+  "MysteryDensity": 3.0, // 0..3. Lugares misteriosos (sumideros, circulos de monolitos, pilonos, arboledas de cristal). 0 = ninguno
   "Cities": {
     "Chance": 0.8, // probabilidad de ciudad por celda de 1024 bloques (0..1)
     "MinRadius": 50, // radio minimo en bloques

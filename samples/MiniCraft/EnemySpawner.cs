@@ -13,6 +13,7 @@ namespace MiniCraft;
 /// El tipo de enemigo sale de los que tienen "spawnWeight" en entitytypes.json (zombi, ogro...) y su VARIANTE se elige al azar con sus pesos; su inventario y equipamiento vienen de esa variante y
 /// al guardar solo se anota cuál es. Lo que lleve puesto le protege y, al morir a manos del jugador, todo pasa a él.
 /// Hay un tope global (EnemyLimit) para no acumular enemigos al explorar.
+/// Aquí también se crea el FaunaSpawner (animales del planeta), que comparte el mismo ciclo de vida.
 /// </summary>
 public sealed class EnemySpawner
 {
@@ -25,6 +26,7 @@ public sealed class EnemySpawner
     private readonly int _seed;
     private readonly WorldSettings _settings;
     private readonly Func<Vec3d?> _player;
+    private readonly FaunaSpawner _fauna;
     private readonly HashSet<(int X, int Z)> _populated = new();
     private readonly List<(ushort Id, int Weight)> _table = new();   // tipos que aparecen y su peso
     private readonly int _tableTotal;
@@ -42,9 +44,11 @@ public sealed class EnemySpawner
         }
         world.ChunkLoaded += OnChunkLoaded;
         store.Removed += e => { if (e.Def?.SpawnWeight > 0) _count--; };
+        _fauna = new FaunaSpawner(store, world, climate, scale, npcs, seed, settings, player);
     }
 
     public int EnemyCount => _count;
+    public int FaunaCount => _fauna.FaunaCount;
 
     /// <summary>Objetos legendarios del mundo: al generarse la columna donde están, se colocan (en un alijo o con un guardián).</summary>
     public LegendaryRegistry? Legendary { get; set; }

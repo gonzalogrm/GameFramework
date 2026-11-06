@@ -7,8 +7,9 @@ namespace MiniCraft;
 /// <summary>
 /// Terreno lejano de MiniCraft: sale directamente del modelo climático (la misma función que genera los chunks), sin necesidad de
 /// tener chunks cargados. Las alturas llegan filtradas según la separación entre muestras (SampleLod), así que montañas y valles
-/// se conservan a cualquier distancia y las colinas finas aparecen al acercarte. El color es el del bioma, como en el mapamundi.
-/// Las ciudades aparecen niveladas y en gris (sin edificios) para que no se vea el terreno original por debajo.
+/// se conservan a cualquier distancia y las colinas finas aparecen al acercarte.
+/// El COLOR es el color medio de la textura (ya con la paleta del planeta) del bloque de superficie del bioma (Biomes.Surface), así que coincide con
+/// lo que se ve al acercarse. Las ciudades aparecen niveladas y en gris (sin edificios) para que no se vea el terreno original por debajo.
 /// </summary>
 public sealed class MiniCraftFarSource : IFarTerrainSource
 {
@@ -26,6 +27,9 @@ public sealed class MiniCraftFarSource : IFarTerrainSource
         _zMax = scale.HeightBlocks - 1;
         _landRange = Math.Max(1f, climate.Settings.WorldHeight - climate.SeaLevel);
     }
+
+    private static Color Shade(Color c, float f) =>
+        new((int)Math.Min(255f, c.R * f), (int)Math.Min(255f, c.G * f), (int)Math.Min(255f, c.B * f), 255);
 
     public void Sample(int wx, int wz, int spacing, out float height, out Color color)
     {
@@ -48,16 +52,18 @@ public sealed class MiniCraftFarSource : IFarTerrainSource
 
         if (MiniCraftClimate.ToBlockHeight(s.Height) <= sea)
         {
-            // Agua: superficie plana, más oscura cuanto más profundo es el fondo.
+            // Agua: superficie plana, más oscura cuanto más profundo es el fondo; el color base es el del tile de agua.
             height = sea + 0.5f;
             float depth = Math.Clamp((sea - s.Height) / (sea * 0.7f + 1f), 0f, 1f);
-            color = Color.Lerp(new Color(58, 110, 195), new Color(18, 48, 130), depth);
+            var water = AtlasFactory.TileColor(Blocks.TileWater);
+            color = Color.Lerp(water, Shade(water, 0.5f), depth);
             return;
         }
 
         height = s.Height;
-        var biome = Biomes.Registry.Get(_climate.Classify(s));
-        float k = 0.88f + 0.22f * Math.Clamp((s.Height - sea) / _landRange, 0f, 1f);   // más claro cuanto más alto
-        color = new Color((int)Math.Min(255f, biome.R * k), (int)Math.Min(255f, biome.G * k), (int)Math.Min(255f, biome.B * k), 255);
+        ushort top = Biomes.Surface[_climate.Classify(s)];
+        var tile = Blocks.Registry.Get(top).FaceTiles[2];   // cara superior
+        float k = 0.95f + 0.1f * Math.Clamp((s.Height - sea) / _landRange, 0f, 1f);   // un poco más claro cuanto más alto
+        color = Shade(AtlasFactory.TileColor(tile), k);
     }
 }

@@ -8,6 +8,15 @@ namespace GF.Engine;
 public static class SpriteLoader
 {
     /// <summary>
+    /// Gancho opcional del juego: se llama al final de LoadContent con el constructor del atlas, para añadir sprites generados por código (p. ej. por
+    /// planeta). Los .png con el mismo nombre ya cargados se respetan si el gancho comprueba builder.Contains.
+    /// </summary>
+    public static Action<SpriteAtlasBuilder>? Extras { get; set; }
+
+    /// <summary>Gancho opcional: puede modificar los píxeles (nombre del sprite, colores) de cada sprite cargado antes de empaquetarlo (recoloreado).</summary>
+    public static Action<string, Color[]>? PixelFilter { get; set; }
+
+    /// <summary>
     /// Sprites desde el PIPELINE DE CONTENIDO de MonoGame (MGCB): cada textura compilada de una carpeta de contenido (Content/sprites/*.xnb)
     /// es un sprite, de cualquier tamaño, y su nombre es el del archivo. Después se leen los .png SUELTOS de 'looseFolder' (si existe,
     /// junto al ejecutable): sustituyen al compilado del mismo nombre o añaden sprites nuevos sin recompilar el contenido (útil para mods
@@ -46,6 +55,13 @@ public static class SpriteLoader
 
         // 2) Sueltos: mandan sobre los compilados.
         AddLooseFolder(device, builder, manifest, looseFolder, messages, replace: true);
+
+        // 3) Sprites generados por el juego.
+        try { Extras?.Invoke(builder); }
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException)
+        {
+            messages.Add("No se pudieron añadir los sprites generados: " + e.Message);
+        }
 
         ReportUnused(builder, manifest, messages);
         return builder.Build(device);
@@ -98,6 +114,7 @@ public static class SpriteLoader
     {
         var pixels = new Color[texture.Width * texture.Height];
         texture.GetData(pixels);
+        PixelFilter?.Invoke(name, pixels);
         var (w, h) = manifest.SizeOf(name, texture.Width, texture.Height);
         var size = new Vector2(w, h);
         if (replace) builder.AddOrReplace(name, texture.Width, texture.Height, pixels, size);

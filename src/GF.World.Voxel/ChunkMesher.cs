@@ -110,9 +110,11 @@ public static class ChunkMesher
             }
 
             bool water = def.Translucent;
-            // Un bloque emisor brilla por sí mismo, según SU emisión y color (la textura se tiñe con él): no toma la luz del cielo ni se oscurece
-            // por oclusión. Con emisión baja, brilla poco.
+            // Un bloque emisor RECIBE la luz como cualquier otro (cielo, bloques vecinos y oclusión: de día se ve a plena luz) y ADEMÁS brilla por sí mismo
+            // con su emisión y color: de noche (o enterrado) se ve al menos con ese brillo. Cuanto más emite, menos se nota la oclusión y el sombreado
+            // de cara: con emisión 15 queda plano, con emisión baja se ve como un bloque normal.
             bool emits = table.EmitRgb[id] != 0;
+            float emitK = table.Emission[id] / 15f;
             var self = emits ? ChunkLighting.EmitBrightness(table.EmitRgb[id]) : Vector3.Zero;
             var vl = water ? wverts : verts;
             var il = water ? widx : idx;
@@ -143,12 +145,12 @@ public static class ChunkMesher
                 int tile = def.FaceTiles[f];
                 for (int k = 0; k < 4; k++)
                 {
-                    float sa = (emits ? 1f : AoLevels[ao[k]]) * shade.R / 255f;   // sombreado de cara x oclusión (las caras son grises)
-                    var skyV = emits ? Vector3.Zero : lt[k];
+                    float shaded = AoLevels[ao[k]] * shade.R / 255f;   // sombreado de cara x oclusión (las caras son grises)
+                    float sa = emits ? shaded + (1f - shaded) * emitK * emitK : shaded;
                     var blockV = emits ? Vector3.Max(lb[k], self) : lb[k];
                     vl.Add(new VoxelVertex(
                         basePos + VoxelFaces.Corners[f][k],
-                        new Color(skyV.X, skyV.Y, skyV.Z, water ? WaterAlpha / 255f : 1f),
+                        new Color(lt[k].X, lt[k].Y, lt[k].Z, water ? WaterAlpha / 255f : 1f),
                         atlas.GetUV(tile, VoxelFaces.UVs[f][k]),
                         new Color(blockV.X, blockV.Y, blockV.Z, sa)));
                 }
