@@ -13,16 +13,16 @@
 
   // ---------- RELIEVE ----------
   "SeaLevelFraction": 0.1, // nivel del mar como fraccion de la altura (0.1..0.9)
-  "ContinentSize": 50000, // TAMANO DE LOS CONTINENTES (500..100000). Mayor = continentes mas grandes
-  "MountainSize": 8000, // anchura de las cordilleras (200..50000); la altura de sus crestas se reparte en varias octavas
+  "ContinentSize": 10000, // TAMANO DE LOS CONTINENTES (500..100000). Mayor = continentes mas grandes
+  "MountainSize": 6000, // anchura de las cordilleras (200..50000); la altura de sus crestas se reparte en varias octavas
   "DetailSize": 100, // tamano del detalle del suelo (10..2000)
   "ContinentAmplitude": 0.50, // profundidad de los mares (fraccion de la altura, 0..1)
-  "MountainAmplitude": 0.70, // altura de las cordilleras sobre la llanura (fraccion de la tierra emergida disponible, 0..1.5)
+  "MountainAmplitude": 0.80, // altura de las cordilleras sobre la llanura (fraccion de la tierra emergida disponible, 0..1.5)
   "DetailAmplitude": 0.10, // relieve fino del suelo (fraccion de la altura, 0..0.5). Poco: las llanuras deben ser llanas
   "LandBias": 0.00, // -0.5..0.5. Positivo = mas tierra, negativo = mas oceano
   "ContinentOctaves": 4, // capas de ruido (1..8). Mas capas = bordes mas irregulares, algo mas lento
-  "MountainOctaves": 4, // capas de las crestas: mas = aristas y picos mas finos
-  "DetailOctaves": 4,
+  "MountainOctaves": 5, // capas de las crestas: mas = aristas y picos mas finos
+  "DetailOctaves": 5,
   // ----- Relieve: llanuras, colinas, cordilleras subitas, mesetas, lagos, rios y valles -----
   "RangeCoverage": 0.15, // fraccion de la tierra cubierta por cordilleras (0..0.6). El resto: llanuras, colinas y mesetas
   "RangeSharpness": 0.30, // brusquedad del pie de las cordilleras (0.02..0.6). Menor = mas subito
@@ -50,8 +50,8 @@
   "BeachHeight": 1, // bloques de playa sobre el nivel del mar (0..6)
   "MountainFraction": 0.30, // a partir de que fraccion de la tierra emergida hay montanas
   "SnowPeakFraction": 0.80, // y cumbres nevadas (no menor que MountainFraction)
-  "TreeDensityMultiplier": 0.5, // 0..5. Multiplica la densidad de arboles de todos los biomas
-  "PropDensityMultiplier": 0.5, // 0..5. Multiplica la hierba, flores y rocas (sprites 2D). 0 = sin sprites
+  "TreeDensityMultiplier": 0.4, // 0..5. Multiplica la densidad de arboles de todos los biomas
+  "PropDensityMultiplier": 0.4, // 0..5. Multiplica la hierba, flores y rocas (sprites 2D). 0 = sin sprites
   "VegetationDensity": 0.2, // 0..5. Cantidad de arboles y arbustos (bloques y sprites). Se aplica tambien al "Continuar"
   "FloraSpriteShare": 0.2, // 0..1. Fraccion de arboles/arbustos que son sprites 2D (0 = todo bloques, 1 = todo sprites)
   "FungusDensityMultiplier": 0.2, // 0..5. Setas (gigantes de bloques y sprites)
@@ -64,17 +64,17 @@
   "FadeInSeconds": 0.5, // 0..3. Lo que tarda en aparecer, disolviendose, un chunk recien construido (0 = aparece de golpe)
   "FarCloseChunks": 10, // DISTANCIA CERCANA del terreno lejano, en chunks: por dentro de ella no hay malla lejana (0 = automatico: ViewDistance)
   "FarDistanceChunks": 36, // DISTANCIA LEJANA (LOD): el relieve aproximado se genera solo entre FarCloseChunks y esta distancia (0 = sin terreno lejano). 64 = 1024 bloques
-  "FarDetail": 2.0, // 0.8..4. Mas detalle en la distancia (y mas tiles que generar). Los chunks siguen mandando en su zona
+  "FarDetail": 4.0, // 0.8..4. Mas detalle en la distancia (y mas tiles que generar). Los chunks siguen mandando en su zona
   "Villagers": 20, // aldeanos iniciales alrededor del jugador
-  "Caravans": 60, // caravanas repartidas por el mundo
+  "Caravans": 50, // caravanas repartidas por el mundo
   "EnemiesPerChunk": 0.5, // zombis esperados por columna de chunks al cargarse (0 = sin enemigos). Aparecen lejos del jugador
-  "EnemyLimit": 1000, // maximo de zombis en el mundo
+  "EnemyLimit": 500, // maximo de zombis en el mundo
   "FaunaPerChunk": 1.0, // 0..4. Animales esperados por columna de chunks al cargarse (0 = sin fauna). Depende del bioma (sabana/jungla/llanura mas; desierto/cumbres menos)
-  "FaunaLimit": 400, // maximo de animales en el mundo
+  "FaunaLimit": 200, // maximo de animales en el mundo
   "MapSamplesPerAxis": 3, // precision del mapamundi: muestras por region = n*n (1..16)
   "WorkerThreads": 0, // hilos de fondo para generar y mallar chunks (0 = automatico: nucleos - 2). Sube si te sobran nucleos
   "CaveDensity": 2.0, // 0..2. Cuevas (tuneles y cavernas con cristales y hongos). 0 = sin cuevas
-  "MysteryDensity": 3.0, // 0..3. Lugares misteriosos (sumideros, circulos de monolitos, pilonos, arboledas de cristal). 0 = ninguno
+  "MysteryDensity": 1.0, // 0..3. Lugares misteriosos (sumideros, circulos de monolitos, pilonos, arboledas de cristal). 0 = ninguno
   "Cities": {
     "Chance": 0.8, // probabilidad de ciudad por celda de 1024 bloques (0..1)
     "MinRadius": 50, // radio minimo en bloques
@@ -91,19 +91,19 @@
     "TempleWeight": 22,
     "StatuesWeight": 18,
     "TechWeight": 20,
-    "TempleVariants": [ 1, 1, 1, 1, 1 ], // pesos por variante: clasico, catedral, monasterio, ermita, calvario (0 = nunca)
+    "TempleVariants": [ 1, 1, 1, 1, 1, 1, 1 ], // ... escalinata de monolitos, GRAN HIPOSTILO, ROTONDA DEL GRAN DOMO (0 = nunca)
     "StatuesVariants": [ 1, 1, 1 ], // coloso y estatuas, avenida de reyes, columbario
-    "TechVariants": [ 1, 1, 1, 1, 1 ], // complejo de investigacion, planta nuclear, refineria, aeropuerto, cosmopuerto
+    "TechVariants": [ 1, 1, 1, 1, 1, 1, 1 ], // ... cosmopuerto, ARCOLOGIA, GRAN RADIOTELESCOPIO
     "MinDecay": 0.20, // deterioro de las ruinas, de 0.05 a 0.95
     "MaxDecay": 0.70,
     "SizeFactor": 1.0, // multiplica el radio de las ruinas, de 1 a 1.5
     "FieldChance": 0.55, // campo kilometrico por celda de 4096 bloques (0..1)
-    "FieldMinRadius": 350, // radio de los campos, de 100 a 1500
-    "FieldMaxRadius": 750,
+    "FieldMinRadius": 100, // radio de los campos, de 100 a 1500
+    "FieldMaxRadius": 500,
     "FieldDensity": 0.65, // probabilidad maxima de figura por punto de la malla de 16 x 16
     "EnemyFactor": 1.0, // multiplica los enemigos de ruinas y campos (0 = ninguno, hasta 3)
     "Chests": true, // cofres con tesoro
     "Npcs": true, // NPC especiales
-    "FieldFindChance": 0.5 // hallazgos de los campos por celda de 192 x 192 (0..1)
+    "FieldFindChance": 1.0 // hallazgos de los campos por celda de 192 x 192 (0..1)
   }
 }

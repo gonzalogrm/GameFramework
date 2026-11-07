@@ -6,19 +6,20 @@ namespace MiniCraft;
 /// Ruinas que no son ciudades: INSTALACIONES TECNOLÓGICAS abandonadas (recinto vallado con un hangar, antena, depósitos y paneles solares), TEMPLOS abandonados (plataforma escalonada, peristilo de columnas, altar y una avenida de columnas rotas) y CAMPOS DE ESTATUAS
 /// (un coloso central y un círculo de estatuas, cada una en su estado). Como las ciudades, todo se calcula por columna a partir de (ciudad, coordenadas): sin
 /// costuras entre chunks. Coordenadas (rx, rz) relativas al centro; r = 1 es justo sobre el suelo del sitio.
+/// Las variantes 5 y 6 de templos (BigTemples) y de instalaciones (BigTech) son monumentales: hasta ~130 bloques de lado y 36 de alto.
 /// </summary>
 internal static class RuinSites
 {
     private const int Approach = 12;   // largo de la avenida de columnas del templo
 
     /// <summary>Cuántas variantes tiene cada clase de ruina (la variante sale de la celda, como el tipo de las ciudades).</summary>
-    public static int VariantCount(SiteKind site) => site == SiteKind.Tech ? 5 : site == SiteKind.Temple ? 5 : site == SiteKind.Statues ? 3 : 1;
+    public static int VariantCount(SiteKind site) => site == SiteKind.Tech ? 7 : site == SiteKind.Temple ? 7 : site == SiteKind.Statues ? 3 : 1;
 
     private static readonly string[] StatuesNames = { "coloso y estatuas", "avenida de reyes", "columbario" };
 
-    private static readonly string[] TempleNames = { "templo de columnas", "observatorio", "academia", "faro", "escalinata de monolitos" };
+    private static readonly string[] TempleNames = { "templo de columnas", "observatorio", "academia", "faro", "escalinata de monolitos", "gran hipóstilo de la esfera", "rotonda del gran domo" };
 
-    private static readonly string[] TechNames = { "complejo de investigación", "planta nuclear", "refinería", "aeropuerto", "cosmopuerto" };
+    private static readonly string[] TechNames = { "complejo de investigación", "planta nuclear", "refinería", "aeropuerto", "cosmopuerto", "arcología", "gran radiotelescopio" };
 
     public static string VariantName(SiteKind site, int variant) => site switch
     {
@@ -31,9 +32,9 @@ internal static class RuinSites
     /// <summary>Tamaño (radio mínimo y máximo) de cada clase y variante.</summary>
     public static (int Min, int Max) RadiusRange(SiteKind site, int variant) => site switch
     {
-        SiteKind.Temple => variant switch { 1 => (46, 62), 2 => (44, 58), 3 => (28, 38), 4 => (36, 50), _ => (30, 46) },
+        SiteKind.Temple => variant switch { 1 => (46, 62), 2 => (44, 58), 3 => (28, 38), 4 => (36, 50), 5 => (84, 100), 6 => (80, 94), _ => (30, 46) },
         SiteKind.Statues => variant switch { 1 => (56, 76), 2 => (50, 66), _ => (24, 35) },
-        _ => variant switch { 1 => (46, 60), 2 => (40, 54), 3 => (58, 76), 4 => (54, 70), _ => (34, 50) },
+        _ => variant switch { 1 => (46, 60), 2 => (40, 54), 3 => (58, 76), 4 => (54, 70), 5 => (92, 108), 6 => (84, 100), _ => (34, 50) },
     };
 
     /// <summary>Altura máxima de lo construido sobre el suelo (para repartirlo por los chunks verticales).</summary>
@@ -41,8 +42,8 @@ internal static class RuinSites
 
     public static int HeightFor(SiteKind site, int variant) => site switch
     {
-        SiteKind.Temple => variant switch { 1 => 20, 2 => 24, 3 => 22, 4 => 12, _ => 10 },
-        SiteKind.Tech => variant switch { 1 => 22, 2 => 24, 3 => 18, 4 => 26, _ => 15 },
+        SiteKind.Temple => variant switch { 1 => 20, 2 => 24, 3 => 22, 4 => 12, 5 => 32, 6 => 32, _ => 10 },
+        SiteKind.Tech => variant switch { 1 => 22, 2 => 24, 3 => 18, 4 => 26, 5 => 36, 6 => 28, _ => 15 },
         SiteKind.Statues => variant switch { 1 => 12, 2 => 12, _ => 13 },
         _ => 13,
     };
@@ -102,8 +103,8 @@ internal static class RuinSites
         if (c.Variant >= 1)
         {
             var (qx, qz) = Rot(c, rx, rz);
-            var special = c.Site == SiteKind.Tech ? TechSites.Surface(c, c.Variant, qx, qz, wx, wz, natural, W(c))
-                        : c.Site == SiteKind.Temple ? TempleSites.Surface(c, c.Variant, qx, qz, wx, wz, natural, W(c))
+            var special = c.Site == SiteKind.Tech ? (c.Variant >= 5 ? BigTech.Surface(c, c.Variant, qx, qz, wx, wz, natural, W(c)) : TechSites.Surface(c, c.Variant, qx, qz, wx, wz, natural, W(c)))
+                        : c.Site == SiteKind.Temple ? (c.Variant >= 5 ? BigTemples.Surface(c, c.Variant, qx, qz, wx, wz, natural, W(c)) : TempleSites.Surface(c, c.Variant, qx, qz, wx, wz, natural, W(c)))
                         : StatueSites.Surface(c, c.Variant, qx, qz, wx, wz, natural, c.Radius - 9);
             if (special.HasValue) return special.Value;
         }
@@ -216,12 +217,12 @@ internal static class RuinSites
 
     // ------------------------------------------------------------------ templo
 
-    /// <summary>Templo: la variante 0 es el templo clásico (abajo); el resto, en TempleSites, dentro del mismo recinto cuadrado.</summary>
+    /// <summary>Templo: la variante 0 es el templo clásico (abajo); 1..4 en TempleSites y 5..6 (monumentales) en BigTemples, dentro del mismo recinto cuadrado.</summary>
     private static ushort TempleBlock(City c, int rx, int rz, int r, int wx, int wz)
     {
         if (c.Variant == 0) return TempleClassic(c, rx, rz, r, wx, wz);
         var (qx, qz) = Rot(c, rx, rz);
-        return TempleSites.Block(c, c.Variant, qx, qz, r, wx, wz, W(c));
+        return c.Variant >= 5 ? BigTemples.Block(c, c.Variant, qx, qz, r, wx, wz, W(c)) : TempleSites.Block(c, c.Variant, qx, qz, r, wx, wz, W(c));
     }
 
     private static ushort TempleClassic(City c, int rx, int rz, int r, int wx, int wz)
@@ -277,11 +278,9 @@ internal static class RuinSites
     // ------------------------------------------------------------------ instalación tecnológica
 
     /// <summary>
-    /// Recinto cuadrado de semilado S con valla baja y una puerta en el lado -Z. Dentro: un HANGAR al fondo (muros con ventanas, portón, techo plano con tragaluces y
-    /// filas de consolas con pantalla), una ANTENA en la esquina de atrás a la izquierda (base, mástil de 12 y travesaños), uno o dos DEPÓSITOS cilíndricos a la derecha
-    /// y un campo de PANELES SOLARES a la izquierda. Se gira como el templo. El hormigón es piedra; las pantallas y los paneles, cristal.
+    /// Recinto cuadrado de semilado S con valla baja y una puerta en el lado -Z. La variante 0 es el complejo de investigación (hangar, antena, depósitos y paneles
+    /// solares); 1..4 en TechSites y 5..6 (monumentales) en BigTech, dentro del mismo recinto y con la misma valla. Se gira como el templo.
     /// </summary>
-    /// <summary>Instalación tecnológica: la variante 0 es el complejo de investigación (abajo); el resto, en TechSites, dentro del mismo recinto y con la misma valla.</summary>
     private static ushort TechBlock(City c, int rx, int rz, int r, int wx, int wz)
     {
         if (c.Variant == 0) return TechComplex(c, rx, rz, r, wx, wz);
@@ -289,7 +288,7 @@ internal static class RuinSites
         int s = W(c), m = Math.Max(Math.Abs(qx), Math.Abs(qz));
         if (m > s) return Blocks.Air;
         if (m == s) return qz == -s && Math.Abs(qx) <= 2 ? Blocks.Air : r <= 2 ? c.Style.Plaza : Blocks.Air;   // valla, con puerta
-        return TechSites.Block(c, c.Variant, qx, qz, r, wx, wz, s);
+        return c.Variant >= 5 ? BigTech.Block(c, c.Variant, qx, qz, r, wx, wz, s) : TechSites.Block(c, c.Variant, qx, qz, r, wx, wz, s);
     }
 
     private static ushort TechComplex(City c, int rx, int rz, int r, int wx, int wz)

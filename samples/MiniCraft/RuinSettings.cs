@@ -12,9 +12,9 @@ public sealed class RuinSettings
     public int TempleWeight { get; set; } = 22;
     public int StatuesWeight { get; set; } = 18;
     public int TechWeight { get; set; } = 20;
-    public int[] TempleVariants { get; set; } = { 1, 1, 1, 1, 1 };   // pesos por variante: templo de columnas, observatorio, academia, faro, escalinata de monolitos (0 = nunca)
+    public int[] TempleVariants { get; set; } = { 1, 1, 1, 1, 1, 1, 1 };   // pesos por variante: templo de columnas, observatorio, academia, faro, escalinata de monolitos, gran hipóstilo, rotonda del gran domo (0 = nunca)
     public int[] StatuesVariants { get; set; } = { 1, 1, 1 };         // coloso y estatuas, avenida de reyes, columbario
-    public int[] TechVariants { get; set; } = { 1, 1, 1, 1, 1 };     // complejo de investigación, planta nuclear, refinería, aeropuerto, cosmopuerto
+    public int[] TechVariants { get; set; } = { 1, 1, 1, 1, 1, 1, 1 };     // complejo de investigación, planta nuclear, refinería, aeropuerto, cosmopuerto, arcología, gran radiotelescopio
     public float MinDecay { get; set; } = 0.25f;      // deterioro de las ruinas: de MinDecay a MaxDecay (0,05 a 0,95)
     public float MaxDecay { get; set; } = 0.9f;
     public float SizeFactor { get; set; } = 1f;       // multiplica el radio de las ruinas (1 a 1,5: los diseños están pensados para su tamaño mínimo)
@@ -79,9 +79,9 @@ public sealed class RuinSettings
         StatuesWeight = I(nameof(StatuesWeight), StatuesWeight, 0, 1000);
         TechWeight = I(nameof(TechWeight), TechWeight, 0, 1000);
         if (CityWeight + TempleWeight + StatuesWeight + TechWeight == 0) { CityWeight = 40; warnings.Add("Ruins: todos los pesos de clase son 0; se usa CityWeight 40"); }
-        TempleVariants = W(nameof(TempleVariants), TempleVariants, 5);
+        TempleVariants = W(nameof(TempleVariants), TempleVariants, 7);
         StatuesVariants = W(nameof(StatuesVariants), StatuesVariants, 3);
-        TechVariants = W(nameof(TechVariants), TechVariants, 5);
+        TechVariants = W(nameof(TechVariants), TechVariants, 7);
         MinDecay = F(nameof(MinDecay), MinDecay, 0.05f, 0.95f);
         MaxDecay = F(nameof(MaxDecay), MaxDecay, 0.05f, 0.95f);
         if (MaxDecay < MinDecay) { MaxDecay = MinDecay; warnings.Add("Ruins.MaxDecay no puede ser menor que MinDecay; se iguala"); }
