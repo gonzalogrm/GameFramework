@@ -171,7 +171,7 @@ public static class AtlasFactory
         int Ring(int x, int y) => (int)MathF.Max(MathF.Abs(x - 7.5f), MathF.Abs(y - 7.5f));
         var dirtSide = new Color(120, 90, 70);
 
-        Fill(Blocks.TileCrystal, (x, y) => (x + y) % 8 < 2 ? J(new Color(225, 250, 255), 6) : (x - y + 16) % 6 < 1 ? J(new Color(60, 150, 190), 8) : J(new Color(110, 215, 230), 10));
+        Fill(Blocks.TileCrystal, (x, y) => Mottle(x, y, 10, new Color(196, 204, 216), new Color(224, 230, 238), new Color(246, 248, 252)));   // cuarzo
         Fill(Blocks.TileFungus, (x, y) => Mottle(x, y, 11, new Color(150,105,70), new Color(205,150,100), new Color(235,215,170)));
         Fill(Blocks.TileMetal, (x, y) =>
         {
@@ -188,7 +188,7 @@ public static class AtlasFactory
             return J(new Color(145, 162, 176), 5);
         });
         Fill(Blocks.TileSandRed, (x, y) => Mottle(x, y, 16, new Color(185,112,78), new Color(205,130,90), new Color(222,150,108)));
-        Fill(Blocks.TileSandBlack, (x, y) => Mottle(x, y, 17, new Color(150,140,120), new Color(168,158,138), new Color(190,180,160)));
+        Fill(Blocks.TileSandBlack, (x, y) => Mottle(x, y, 17, new Color(150, 112, 70), new Color(176, 136, 88), new Color(204, 164, 108)));   // arena ocre (nada de arena blanca)
         Fill(Blocks.TileClay, (x, y) => Mottle(x, y, 18, new Color(160,98,70), new Color(176,112,80), new Color(192,128,94)));
         Fill(Blocks.TileDarkSoil, (x, y) => Mottle(x, y, 19, new Color(98,74,52), new Color(112,86,62), new Color(128,100,74)));
         Fill(Blocks.TileMossTop, (x, y) => rnd.Next(6) == 0 ? J(new Color(95, 165, 95), 8) : J(new Color(58, 128, 72), 10));

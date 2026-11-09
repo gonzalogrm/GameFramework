@@ -177,29 +177,29 @@ public sealed class Flora
 
         // Materiales: a menudo los del planeta (Biomes.Trunk / Canopy), si no uno al azar. Las formas especiales usan los suyos.
         ushort trunk = rng.Chance(0.55f) ? Biomes.Trunk : One(rng, Blocks.Log, Blocks.StemWood, Blocks.Petrified);
-        ushort canopy = rng.Chance(0.55f) ? Biomes.Canopy : One(rng, Blocks.Leaves, Blocks.Fronds, Blocks.SporeCap);
+        ushort canopy = rng.Chance(0.55f) ? Biomes.Canopy : One(rng, Blocks.Leaves, Blocks.Fronds);   // sombreros y hongos solo en las setas
         switch (shape)
         {
             case FloraShape.Cactus:
-                trunk = One(rng, Blocks.Fronds, Blocks.SporeCap, Blocks.Fungus);
-                canopy = One(rng, Blocks.SporeCap, Blocks.Fungus, Blocks.Crystal, trunk);
+                trunk = One(rng, Blocks.Fronds, Blocks.Leaves);
+                canopy = trunk;
                 break;
             case FloraShape.Spire:
                 trunk = canopy = One(rng, Blocks.Crystal, Blocks.Petrified, Blocks.Chalk, Blocks.Basalt, Blocks.Salt, Blocks.Strata);
                 break;
             case FloraShape.Mushroom:
                 trunk = One(rng, Blocks.StemWood, Blocks.Chalk, Blocks.Fungus);
-                canopy = One(rng, Blocks.SporeCap, Blocks.Fungus, Blocks.Fronds);
+                canopy = One(rng, Blocks.SporeCap, Blocks.Fungus);
                 break;
             case FloraShape.Mound:
-                trunk = canopy = One(rng, Blocks.Moss, Blocks.Lichen, Blocks.Fronds, Blocks.SporeCap, Blocks.Fungus);
+                trunk = canopy = One(rng, Blocks.Moss, Blocks.Lichen, Blocks.Fronds, Blocks.Leaves);
                 break;
             case FloraShape.Dead:
                 trunk = canopy = One(rng, Blocks.Petrified, Blocks.Log, Blocks.StemWood);
                 break;
             case FloraShape.Thorn:
                 trunk = One(rng, Blocks.Petrified, Blocks.Log, Blocks.Basalt);
-                canopy = One(rng, Blocks.Fronds, Blocks.SporeCap, Blocks.Crystal, Blocks.Fungus);
+                canopy = One(rng, Blocks.Fronds, Blocks.Leaves);
                 break;
         }
 

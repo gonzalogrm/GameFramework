@@ -31,6 +31,35 @@ public sealed record MeshData(
 public static class ChunkMesher
 {
     private const int WaterAlpha = 150;
+
+    /// <summary>
+    /// Rompe el efecto de baldosa (como Minecraft, con la posición del bloque): a cada bloque un brillo y un tinte ligeros y a cada cara un giro (arriba y abajo)
+    /// o un espejo (lados). Todo sale de un hash de (x, y, z) al mallar: no cuesta nada al dibujar. No afecta al agua ni a los emisores.
+    /// </summary>
+    public static bool TextureVariation { get; set; } = true;
+
+    private static uint PositionHash(int x, int y, int z)
+    {
+        uint h = unchecked((uint)(x * 73856093 ^ y * 19349663 ^ z * 83492791));
+        h ^= h >> 13; h = unchecked(h * 0x5bd1e995u); h ^= h >> 15;
+        return h;
+    }
+
+    /// <summary>Gira (arriba/abajo: 0 a 3 cuartos de vuelta) y/o refleja las coordenadas locales de la textura de una cara, según los bits del hash del bloque.</summary>
+    private static Vector2 Variant(Vector2 uv, int face, uint bh)
+    {
+        if (face == 2 || face == 3)
+        {
+            switch ((int)((bh >> (face * 2)) & 3u))
+            {
+                case 1: uv = new Vector2(1f - uv.Y, uv.X); break;
+                case 2: uv = new Vector2(1f - uv.X, 1f - uv.Y); break;
+                case 3: uv = new Vector2(uv.Y, 1f - uv.X); break;
+            }
+        }
+        if (((bh >> (12 + face)) & 1u) != 0) uv.X = 1f - uv.X;
+        return uv;
+    }
     /// <summary>Brillo según oclusión del vértice: 0 = muy ocluido ... 3 = sin oclusión.</summary>
     private static readonly float[] AoLevels = { 0.45f, 0.65f, 0.82f, 1f };
 
@@ -119,6 +148,16 @@ public static class ChunkMesher
             var vl = water ? wverts : verts;
             var il = water ? widx : idx;
             bool interior = x > 0 && x < sx - 1 && y > 0 && y < sy - 1 && z > 0 && z < sz - 1;
+            bool vary = TextureVariation && !water && !emits;
+            uint bh = vary ? PositionHash(origin.X + x, origin.Y + y, origin.Z + z) : 0u;
+            float bright = 1f;
+            var tint = Vector3.One;
+            if (vary)
+            {
+                bright = 0.93f + ((bh >> 18) & 255u) * (0.14f / 255f);
+                uint th = unchecked(bh * 0x9E3779B1u);
+                tint = new Vector3(1f + (((th >> 8) & 7u) - 3.5f) * 0.012f, 1f + (((th >> 12) & 7u) - 3.5f) * 0.012f, 1f + (((th >> 16) & 7u) - 3.5f) * 0.012f);
+            }
 
             for (int f = 0; f < 6; f++)
             {
@@ -145,13 +184,13 @@ public static class ChunkMesher
                 int tile = def.FaceTiles[f];
                 for (int k = 0; k < 4; k++)
                 {
-                    float shaded = AoLevels[ao[k]] * shade.R / 255f;   // sombreado de cara x oclusión (las caras son grises)
+                    float shaded = AoLevels[ao[k]] * shade.R / 255f * bright;   // sombreado de cara x oclusión (las caras son grises)
                     float sa = emits ? shaded + (1f - shaded) * emitK * emitK : shaded;
                     var blockV = emits ? Vector3.Max(lb[k], self) : lb[k];
                     vl.Add(new VoxelVertex(
                         basePos + VoxelFaces.Corners[f][k],
-                        new Color(lt[k].X, lt[k].Y, lt[k].Z, water ? WaterAlpha / 255f : 1f),
-                        atlas.GetUV(tile, VoxelFaces.UVs[f][k]),
+                        new Color(lt[k].X * tint.X, lt[k].Y * tint.Y, lt[k].Z * tint.Z, water ? WaterAlpha / 255f : 1f),
+                        atlas.GetUV(tile, vary ? Variant(VoxelFaces.UVs[f][k], f, bh) : VoxelFaces.UVs[f][k]),
                         new Color(blockV.X, blockV.Y, blockV.Z, sa)));
                 }
 

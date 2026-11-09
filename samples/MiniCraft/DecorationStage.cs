@@ -5,10 +5,10 @@ using GF.World.Map;
 namespace MiniCraft;
 
 /// <summary>
-/// Hierba, hierba alta, flores, matorrales, rocas (bloques-sprite) y AFLORAMIENTOS DE CRISTAL (columnas de 1 a 3 bloques luminosos) sobre la superficie.
+/// Hierba, hierba alta, flores, matorrales, rocas (bloques-sprite) y AFLORAMIENTOS DE CRISTAL (columnas de 1 a 3 bloques) sobre la superficie.
 /// Igual que los árboles, la decisión depende solo de (semilla, x envuelta, z) y del bioma de la columna, así que no hay costuras entre chunks. Va después
-/// de los árboles: no pisa nada que ya ocupe la celda. Un sprite grande solo necesita su celda de anclaje libre.
-/// No aparece nada en las zonas reservadas a ciudades (CityPlanner).
+/// de los árboles: no pisa nada que ya ocupe la celda. Cada clase tiene su multiplicador en worldsettings.json (bloque "Vegetation").
+/// No aparece nada en las zonas reservadas a ciudades (CityPlanner) ni sobre las entradas de las cuevas.
 /// </summary>
 public sealed class DecorationStage : IGenerationStage<ushort>
 {
@@ -30,6 +30,7 @@ public sealed class DecorationStage : IGenerationStage<ushort>
         _scale = scale;
         _columns = columns;
         _planner = planner;
+        CaveCarver.Planner = planner;   // las cuevas no se excavan bajo ciudades ni ruinas
     }
 
     private static Props[] BuildDensity()
@@ -51,11 +52,14 @@ public sealed class DecorationStage : IGenerationStage<ushort>
     {
         var shape = chunk.Shape;
         var o = shape.Origin(chunk.Coord);
+        var settings = _climate.Settings;
+        var v = settings.Vegetation;
         MysterySites.Apply(chunk, ctx, _climate, _scale, _columns, _planner);   // sumideros, monolitos, pilonos y arboledas de cristal
-        float mult = _climate.Settings.PropDensityMultiplier;
+        float mult = settings.PropDensityMultiplier;
         if (mult <= 0f) return;
-        float crystalMult = _climate.Settings.CrystalDensityMultiplier, rockMult = _climate.Settings.RockDensityMultiplier;
-        float boost = Math.Max(1f, Math.Max(crystalMult, rockMult));
+        float grassM = v.Master * v.Grass, tallM = v.Master * v.TallGrass, flowerM = v.Master * v.Flowers, bushM = v.Master * v.Bushes;
+        float rockM = v.Rocks, crystalM = v.Crystals;
+        float boost = Math.Max(1f, Math.Max(Math.Max(grassM, tallM), Math.Max(Math.Max(flowerM, bushM), Math.Max(rockM, crystalM))));
         if (o.Y + shape.SizeY <= _climate.SeaLevel || o.Y > _climate.MaxHeightBlocks + 2) return;   // sin suelo donde poner plantas
 
         for (int z = 0; z < shape.SizeZ; z++)
@@ -70,16 +74,17 @@ public sealed class DecorationStage : IGenerationStage<ushort>
 
             int ground = _columns.HeightAt(wx, wz);
             if (ground <= _climate.SeaLevel) continue;   // bajo el agua no hay nada
+            if (CaveCarver.SurfaceOpen(ctx.Noise, ctx.Seed, settings.CaveDensity, wx, wz, ground, _climate.SeaLevel)) continue;   // entrada de cueva
 
             var d = Density[_columns.BiomeAt(wx, wz)];
-            float acc = d.Grass * mult;
+            float acc = d.Grass * mult * grassM;
             ushort id;
             if (u < acc) id = Blocks.GrassTuft;
-            else if (u < (acc += d.Tall * mult)) id = Blocks.TallGrass;
-            else if (u < (acc += d.Flower * mult)) id = ((h >> 4) & 1) == 0 ? Blocks.FlowerRed : Blocks.FlowerYellow;
-            else if (u < (acc += d.Bush * mult)) id = Blocks.Bush;
-            else if (u < (acc += d.Crystal * mult * crystalMult)) id = Blocks.Crystal;
-            else if (u < (acc += d.Rock * mult * rockMult)) id = Blocks.Rock;
+            else if (u < (acc += d.Tall * mult * tallM)) id = Blocks.TallGrass;
+            else if (u < (acc += d.Flower * mult * flowerM)) id = ((h >> 4) & 1) == 0 ? Blocks.FlowerRed : Blocks.FlowerYellow;
+            else if (u < (acc += d.Bush * mult * bushM)) id = Blocks.Bush;
+            else if (u < (acc += d.Crystal * mult * crystalM)) id = Blocks.Crystal;
+            else if (u < (acc += d.Rock * mult * rockM)) id = Blocks.Rock;
             else continue;
 
             int y = ground + 1 - o.Y;                                   // la celda justo encima del suelo

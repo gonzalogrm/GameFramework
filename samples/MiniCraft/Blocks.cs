@@ -60,8 +60,8 @@ public static class Blocks
 
         // ---- Bloques alienígenas (patch 2). Su color real lo pone la paleta del planeta (PlanetPalette) al recolorear el atlas.
         // Cristal y hongo emiten luz blanca: su color sale de la textura, que ya viene teñida por planeta.
-        Crystal = Registry.Register("crystal", BlockDef.Cube("crystal", TileCrystal) with { Props = BlockProto, Emission = 10 });
-        Fungus = Registry.Register("fungus", BlockDef.Cube("fungus", TileFungus) with { Props = BlockProto, Emission = 10 });
+        Crystal = Registry.Register("crystal", BlockDef.Cube("crystal", TileCrystal, solid: true, opaque: false, translucent: true) with { Props = BlockProto, Emission = 12 });   // cuarzo: blanquecino y parcialmente transparente
+        Fungus = Registry.Register("fungus", BlockDef.Cube("fungus", TileFungus) with { Props = BlockProto, Emission = 5 });
         RustMetal = Registry.Register("rust_metal", BlockDef.Cube("rust_metal", TileMetal) with { Props = BlockProto.Derive("metal").Float("durability", 4f) });
         Salt = Registry.Register("salt", BlockDef.Cube("salt", TileSalt) with { Props = BlockProto });
         Ash = Registry.Register("ash", BlockDef.Cube("ash", TileAsh) with { Props = BlockProto });
@@ -78,7 +78,7 @@ public static class Blocks
         StemWood = Registry.Register("stem_wood", BlockDef.TopSideBottom("stem_wood", TileStemTop, TileStemSide, TileStemTop) with { Props = TrunkProto.Derive("tallo").Float("durability", 2f) });
         Petrified = Registry.Register("petrified_wood", BlockDef.TopSideBottom("petrified_wood", TilePetrifiedTop, TilePetrifiedSide, TilePetrifiedTop) with { Props = TrunkProto.Derive("petrificada").Float("durability", 4f) });
         Fronds = Registry.Register("fronds", BlockDef.Cube("fronds", TileFronds) with { Props = LeafProto.Derive("fronda") });
-        SporeCap = Registry.Register("spore_cap", BlockDef.Cube("spore_cap", TileSporeCap) with { Props = LeafProto.Derive("sombrero"), Emission = 10 });
+        SporeCap = Registry.Register("spore_cap", BlockDef.Cube("spore_cap", TileSporeCap) with { Props = LeafProto.Derive("sombrero"), Emission = 3 });
         for (int i = 0; i < FloraSprites.Length; i++)   // sprites de flora: añadidos AL FINAL
             FloraSprites[i] = Registry.Register($"flora_sprite_{i}", BlockDef.Sprite($"flora_sprite_{i}", $"flora_{i}", BlockRender.Cross));
     }

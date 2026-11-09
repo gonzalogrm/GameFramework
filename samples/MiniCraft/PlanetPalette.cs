@@ -25,6 +25,7 @@ public sealed class PlanetPalette
     };
     private static readonly float[] WaterHues = { 222f, 210f, 200f, 190f, 182f };
     private static readonly float[] StoneHues = { 0f, 15f, 30f, 40f };
+    private static readonly float[] CrystalHues = { 35f, 45f, 200f, 215f, 330f };
     private static readonly float[] SnowHues = { 0f, 40f, 200f };
 
     private readonly Dictionary<PaletteRole, HueShift> _shifts;
@@ -56,7 +57,7 @@ public sealed class PlanetPalette
             [PaletteRole.Stone] = new(stoneHue, 1f, 1f + J(0.08f), 0.04f + rng.NextFloat() * 0.08f),
             [PaletteRole.Snow] = new(snowHue, 1f, 1f, 0.03f + rng.NextFloat() * 0.04f),
             [PaletteRole.Wood] = new(J(18f), 1f + J(0.2f), 1f + J(0.1f), 0f),
-            [PaletteRole.Crystal] = new(J(25f), 1f, 1f, 0f),   // cada planeta, su cristal y su hongo
+            [PaletteRole.Crystal] = new(CrystalHues[rng.Next(CrystalHues.Length)], 1f, 1f, 0.05f + rng.NextFloat() * 0.08f),   // cuarzo con un tinte tenue   // cada planeta, su cristal y su hongo
             [PaletteRole.Fungus] = new(J(20f), 1f, 1f, 0f),
         };
         return new PlanetPalette(s, $"flora {name}");

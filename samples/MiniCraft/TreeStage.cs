@@ -5,12 +5,12 @@ using GF.World.Map;
 namespace MiniCraft;
 
 /// <summary>
-/// Árboles y arbustos procedurales (ver Flora y FloraShapes) y sprites de flora del planeta (FloraSprites). La posición de cada planta depende solo de
-/// (semilla, x envuelta, z) y de su bioma, nunca del chunk: cada chunk examina las columnas de su zona ampliada por Flora.MaxReach y escribe únicamente las
-/// celdas que caen dentro de sí mismo, así no hay costuras entre chunks ni en la costura este-oeste.
-/// Ajustes (worldsettings.json): TreeDensityMultiplier y VegetationDensity (cantidad general), FloraSpriteShare (fracción de plantas que son sprites),
-/// FungusDensityMultiplier (setas), CrystalDensityMultiplier (cristales) y RockDensityMultiplier (formaciones rocosas).
-/// No aparecen plantas en las zonas reservadas a ciudades (CityPlanner).
+/// Árboles, arbustos, hongos y formaciones de roca/cristal procedurales (ver Flora y FloraShapes) y sprites de matorral del planeta (FloraSprites). La posición
+/// de cada planta depende solo de (semilla, x envuelta, z) y de su bioma, nunca del chunk: cada chunk examina las columnas de su zona ampliada por Flora.MaxReach
+/// y escribe únicamente las celdas que caen dentro de sí mismo, así no hay costuras entre chunks ni en la costura este-oeste.
+/// Cada clase tiene su multiplicador (worldsettings.json, bloque "Vegetation"): árboles (Trees) y arbustos (Shrubs) con Master; hongos (Fungi), rocas (Rocks) y
+/// cristales (Crystals) por separado. Solo los ARBUSTOS pueden ser sprites (SpriteShare); los árboles son siempre de bloques.
+/// No aparecen plantas en las zonas reservadas a ciudades (CityPlanner) ni sobre las entradas de las cuevas.
 /// </summary>
 public sealed class TreeStage : IGenerationStage<ushort>
 {
@@ -33,10 +33,11 @@ public sealed class TreeStage : IGenerationStage<ushort>
         var o = shape.Origin(chunk.Coord);
         var flora = Flora.Current;
         var settings = _climate.Settings;
-        float mult = settings.TreeDensityMultiplier * settings.VegetationDensity;
-        float spriteShare = Math.Clamp(settings.FloraSpriteShare, 0f, 1f);
-        float fungusMult = settings.FungusDensityMultiplier, rockMult = settings.RockDensityMultiplier, crystalMult = settings.CrystalDensityMultiplier;
-        float boost = Math.Max(1f, Math.Max(fungusMult, Math.Max(rockMult, crystalMult)));   // las categorías por encima de 1 necesitan más candidatas
+        var v = settings.Vegetation;
+        float baseMult = settings.TreeDensityMultiplier;   // clima del planeta (se guarda con el mundo)
+        float treeM = baseMult * v.Master * v.Trees, shrubM = baseMult * v.Master * v.Shrubs;
+        float fungiM = baseMult * v.Fungi, rockM = baseMult * v.Rocks, crystalM = baseMult * v.Crystals;
+        float spriteShare = Math.Clamp(v.SpriteShare, 0f, 1f);
         int minGround = _climate.SeaLevel + settings.BeachHeight;
         int worldHeight = settings.WorldHeight;
         ushort fungusSprite = Blocks.FloraSprites[13];
@@ -45,7 +46,8 @@ public sealed class TreeStage : IGenerationStage<ushort>
         // Sin suelo posible en este chunk: todo por debajo del nivel mínimo, o por encima de la cima más la planta más alta.
         if (o.Y + shape.SizeY <= minGround || o.Y > _climate.MaxHeightBlocks + 28) return;
 
-        float maxTree = flora.MaxTreeDensity * mult * boost, maxShrub = flora.MaxShrubDensity * mult * boost;
+        float maxTree = flora.MaxTreeDensity * Math.Max(Math.Max(treeM, fungiM), Math.Max(rockM, crystalM));
+        float maxShrub = flora.MaxShrubDensity * Math.Max(shrubM, fungiM);
         FloraWriter? writer = null;
 
         for (int wz = o.Z - Reach; wz < o.Z + shape.SizeZ + Reach; wz++)
@@ -64,6 +66,7 @@ public sealed class TreeStage : IGenerationStage<ushort>
 
             int ground = _columns.HeightAt(wx, wz);
             if (ground <= minGround) continue;
+            if (CaveCarver.SurfaceOpen(ctx.Noise, ctx.Seed, settings.CaveDensity, wx, wz, ground, _climate.SeaLevel)) continue;   // entrada de cueva
             ushort biome = _columns.BiomeAt(wx, wz);
 
             // Primero se intenta un árbol; si no, un arbusto (cada uno con su tirada y su densidad).
@@ -73,15 +76,15 @@ public sealed class TreeStage : IGenerationStage<ushort>
                 if (!(shrub ? shrubCandidate : treeCandidate)) continue;
                 ulong h = shrub ? hs : ht;
                 float u = shrub ? us : ut;
-                float density = (shrub ? flora.ShrubDensity(biome) : flora.TreeDensity(biome)) * mult;
+                float density = shrub ? flora.ShrubDensity(biome) : flora.TreeDensity(biome);
 
                 float roll = ((h >> 24) & 0xFFFF) / 65536f;
-                if (roll < spriteShare)   // sprite 2D del planeta
+                if (shrub && roll < spriteShare)   // sprite 2D de matorral del planeta
                 {
-                    ushort spriteBlock = FloraSprites.Current.Pick(biome, shrub, h);
+                    ushort spriteBlock = FloraSprites.Current.Pick(biome, true, h);
                     if (spriteBlock != 0)
                     {
-                        if (u >= density * (spriteBlock == fungusSprite ? fungusMult : 1f)) continue;
+                        if (u >= density * (spriteBlock == fungusSprite ? fungiM : shrubM)) continue;
                         writer ??= new FloraWriter(chunk, o);
                         writer.SetBase(wx, ground + 1, wz);
                         writer.Put(0, 0, 0, spriteBlock, false);
@@ -93,9 +96,9 @@ public sealed class TreeStage : IGenerationStage<ushort>
                 if (species == null) continue;
                 float category = species.Shape switch
                 {
-                    FloraShape.Mushroom => fungusMult,
-                    FloraShape.Spire => species.Trunk == Blocks.Crystal ? crystalMult : rockMult,
-                    _ => 1f,
+                    FloraShape.Mushroom => fungiM,
+                    FloraShape.Spire => species.Trunk == Blocks.Crystal ? crystalM : rockM,
+                    _ => shrub ? shrubM : treeM,
                 };
                 if (u >= density * category) continue;
                 if (ground + 1 + species.MaxH + 4 > worldHeight - 1) continue;   // no cabe bajo el techo del mundo

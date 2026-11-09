@@ -38,7 +38,7 @@ public sealed class TerrainStage : IGenerationStage<ushort>
         if (oy + sy - 1 <= col.MinHeight - 4)
         {
             Array.Fill(cells, deep);
-            CaveCarver.Carve(chunk, ctx.Noise, ctx.Seed, col.Height, sea, settings.CaveDensity, settings.CrystalDensityMultiplier, settings.FungusDensityMultiplier, deep);
+            CaveCarver.Carve(chunk, ctx.Noise, ctx.Seed, col.Height, sea, settings.CaveDensity, settings.Vegetation.CaveCrystals, settings.Vegetation.CaveFungi, deep);
             return;
         }
 
@@ -62,6 +62,6 @@ public sealed class TerrainStage : IGenerationStage<ushort>
                 cells[(y * sz + z) * sx + x] = id;
             }
         }
-        CaveCarver.Carve(chunk, ctx.Noise, ctx.Seed, col.Height, sea, settings.CaveDensity, settings.CrystalDensityMultiplier, settings.FungusDensityMultiplier, deep);
+        CaveCarver.Carve(chunk, ctx.Noise, ctx.Seed, col.Height, sea, settings.CaveDensity, settings.Vegetation.CaveCrystals, settings.Vegetation.CaveFungi, deep);
     }
 }

@@ -62,13 +62,9 @@ public sealed class WorldSettings
     public float SnowPeakFraction { get; set; } = 0.62f;      // y cumbres nevadas
     public float TreeDensityMultiplier { get; set; } = 1f;    // se guarda con el mundo (cada planeta lo modifica según su clima)
     public float PropDensityMultiplier { get; set; } = 1f;    // hierba, flores y rocas (sprites)
+    public VegetationSettings Vegetation { get; set; } = new();   // multiplicadores por separado de árboles, arbustos, hierbas, hongos, rocas y cristales (se aplican siempre)
 
     // ----- Vegetación y formaciones (se aplican SIEMPRE con el worldsettings.json actual, también al continuar un mundo: no cambian el terreno) -----
-    public float VegetationDensity { get; set; } = 1f;            // 0..5: multiplica la cantidad de árboles y arbustos (bloques y sprites), sobre TreeDensityMultiplier
-    public float FloraSpriteShare { get; set; } = 0.5f;           // 0..1: fracción de árboles y arbustos que son sprites 2D (el resto, bloques)
-    public float FungusDensityMultiplier { get; set; } = 1f;      // 0..5: setas (gigantes de bloques y sprites)
-    public float CrystalDensityMultiplier { get; set; } = 1f;     // 0..5: cristales (afloramientos y agujas de cristal)
-    public float RockDensityMultiplier { get; set; } = 1f;        // 0..5: formaciones rocosas (agujas de piedra y rocas sprite)
     public float FaunaPerChunk { get; set; } = 1f;                // 0..4: animales esperados por columna de chunks al cargarse (0 = sin fauna); depende del bioma
     public int FaunaLimit { get; set; } = 400;                    // máximo de animales en el mundo
     public float CaveDensity { get; set; } = 1f;                  // 0..2: cuevas (túneles y cavernas subterráneas, con cristales y hongos); 0 = sin cuevas
@@ -121,11 +117,6 @@ public sealed class WorldSettings
         MinPlanets = other.MinPlanets;
         MaxPlanets = other.MaxPlanets;
         PropDensityMultiplier = other.PropDensityMultiplier;
-        VegetationDensity = other.VegetationDensity;
-        FloraSpriteShare = other.FloraSpriteShare;
-        FungusDensityMultiplier = other.FungusDensityMultiplier;
-        CrystalDensityMultiplier = other.CrystalDensityMultiplier;
-        RockDensityMultiplier = other.RockDensityMultiplier;
         FaunaPerChunk = other.FaunaPerChunk;
         FaunaLimit = other.FaunaLimit;
         CaveDensity = other.CaveDensity;
@@ -134,6 +125,7 @@ public sealed class WorldSettings
         Cities.Guards = other.Cities.Guards;
         Cities.SpecialNpcs = other.Cities.SpecialNpcs;
         Ruins.ApplyView(other.Ruins);
+        Vegetation.CopyFrom(other.Vegetation);
     }
 
     public WorldScale CreateScale() => new(MapWidth, MapHeight, RegionChunksX, RegionChunksZ, ChunkSize, ChunkSize);
@@ -245,11 +237,6 @@ public sealed class WorldSettings
         }
         TreeDensityMultiplier = F(nameof(TreeDensityMultiplier), TreeDensityMultiplier, 0f, 5f);
         PropDensityMultiplier = F(nameof(PropDensityMultiplier), PropDensityMultiplier, 0f, 5f);
-        VegetationDensity = F(nameof(VegetationDensity), VegetationDensity, 0f, 5f);
-        FloraSpriteShare = F(nameof(FloraSpriteShare), FloraSpriteShare, 0f, 1f);
-        FungusDensityMultiplier = F(nameof(FungusDensityMultiplier), FungusDensityMultiplier, 0f, 5f);
-        CrystalDensityMultiplier = F(nameof(CrystalDensityMultiplier), CrystalDensityMultiplier, 0f, 5f);
-        RockDensityMultiplier = F(nameof(RockDensityMultiplier), RockDensityMultiplier, 0f, 5f);
         FaunaPerChunk = F(nameof(FaunaPerChunk), FaunaPerChunk, 0f, 4f);
         FaunaLimit = I(nameof(FaunaLimit), FaunaLimit, 0, 5000);
         CaveDensity = F(nameof(CaveDensity), CaveDensity, 0f, 2f);
@@ -273,6 +260,7 @@ public sealed class WorldSettings
         WorkerThreads = I(nameof(WorkerThreads), WorkerThreads, 0, 64);
         Cities.Validate(warnings);
         Ruins.Validate(warnings);
+        Vegetation.Validate(warnings);
         return warnings;
     }
 }

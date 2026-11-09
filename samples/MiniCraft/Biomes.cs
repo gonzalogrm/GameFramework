@@ -44,11 +44,11 @@ public static class Biomes
         ushort wild = rng.Chance(0.5f) ? grass : Blocks.Moss;
         ushort soil = Pick(rng, Blocks.Dirt, Blocks.Clay, Blocks.DarkSoil);
         ushort sand = Pick(rng, Blocks.Sand, Blocks.SandRed, Blocks.SandBlack);
-        ushort desert = rng.Chance(0.3f) ? Blocks.Salt : Pick(rng, Blocks.Sand, Blocks.SandRed, Blocks.SandBlack);
+        ushort desert = Pick(rng, Blocks.Sand, Blocks.SandRed, Blocks.SandBlack);   // nada de arena blanca: tonos tierra
         ushort rock = Pick(rng, Blocks.Stone, Blocks.Basalt, Blocks.Strata);
         ushort cold = Pick(rng, Blocks.Snow, Blocks.Ash, Blocks.Chalk);
         ushort trunk = Pick(rng, Blocks.Log, Blocks.StemWood, Blocks.Petrified);
-        ushort canopy = Pick(rng, Blocks.Leaves, Blocks.Fronds, Blocks.SporeCap);
+        ushort canopy = Pick(rng, Blocks.Leaves, Blocks.Fronds);   // las setas son otra cosa: solo se ven en los hongos
         Build(grass, wild, soil, sand, desert, rock, cold, trunk, canopy);
     }
 

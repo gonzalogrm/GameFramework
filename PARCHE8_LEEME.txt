@@ -1,9 +1,0 @@
-Variantes nuevas (en samples/MiniCraft/worldsettings.json, bloque "Ruins"; ahora son 7 pesos por lista):
-
-  "TempleVariants": [ 1, 1, 1, 1, 1, 1, 1 ], // ... escalinata de monolitos, GRAN HIPOSTILO, ROTONDA DEL GRAN DOMO (0 = nunca)
-  "TechVariants": [ 1, 1, 1, 1, 1, 1, 1 ],   // ... cosmopuerto, ARCOLOGIA, GRAN RADIOTELESCOPIO
-
-Las variantes monumentales miden unos 100-130 bloques de lado y hasta 36 de alto; necesitan terreno llano y que el suelo no este muy alto (el techo del mundo debe
-dejar sitio). Si las quieres mas frecuentes sube su peso (p. ej. 3) o baja los de las demas.
-Sin tocar el json, las listas de 5 pesos se completan con 1 y el menu avisa.
-Solo aparecen en chunks nuevos: usa un planeta nuevo. Las ruinas se deterioran como el resto (Decay).

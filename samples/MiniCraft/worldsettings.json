@@ -17,7 +17,7 @@
   "MountainSize": 6000, // anchura de las cordilleras (200..50000); la altura de sus crestas se reparte en varias octavas
   "DetailSize": 100, // tamano del detalle del suelo (10..2000)
   "ContinentAmplitude": 0.50, // profundidad de los mares (fraccion de la altura, 0..1)
-  "MountainAmplitude": 0.80, // altura de las cordilleras sobre la llanura (fraccion de la tierra emergida disponible, 0..1.5)
+  "MountainAmplitude": 0.70, // altura de las cordilleras sobre la llanura (fraccion de la tierra emergida disponible, 0..1.5)
   "DetailAmplitude": 0.10, // relieve fino del suelo (fraccion de la altura, 0..0.5). Poco: las llanuras deben ser llanas
   "LandBias": 0.00, // -0.5..0.5. Positivo = mas tierra, negativo = mas oceano
   "ContinentOctaves": 4, // capas de ruido (1..8). Mas capas = bordes mas irregulares, algo mas lento
@@ -50,13 +50,24 @@
   "BeachHeight": 1, // bloques de playa sobre el nivel del mar (0..6)
   "MountainFraction": 0.30, // a partir de que fraccion de la tierra emergida hay montanas
   "SnowPeakFraction": 0.80, // y cumbres nevadas (no menor que MountainFraction)
-  "TreeDensityMultiplier": 0.4, // 0..5. Multiplica la densidad de arboles de todos los biomas
-  "PropDensityMultiplier": 0.4, // 0..5. Multiplica la hierba, flores y rocas (sprites 2D). 0 = sin sprites
-  "VegetationDensity": 0.2, // 0..5. Cantidad de arboles y arbustos (bloques y sprites). Se aplica tambien al "Continuar"
-  "FloraSpriteShare": 0.2, // 0..1. Fraccion de arboles/arbustos que son sprites 2D (0 = todo bloques, 1 = todo sprites)
-  "FungusDensityMultiplier": 0.2, // 0..5. Setas (gigantes de bloques y sprites)
-  "CrystalDensityMultiplier": 0.2, // 0..5. Cristales (afloramientos y agujas de cristal)
-  "RockDensityMultiplier": 0.2, // 0..5. Formaciones rocosas (agujas de piedra y rocas sprite)
+  "TreeDensityMultiplier": 0.5, // 0..5. Multiplica la densidad de arboles de todos los biomas
+  "PropDensityMultiplier": 0.5, // 0..5. Multiplica la hierba, flores y rocas (sprites 2D). 0 = sin sprites
+  "Vegetation": {
+    "Master": 1.0, // multiplica a la vez arboles, arbustos, hierbas, hierba alta, flores y matorrales (NO hongos, rocas ni cristales)
+    "Trees": 1.0, // arboles (siempre de bloques)
+    "Shrubs": 1.0, // arbustos y matorrales (bloques y sprites)
+    "SpriteShare": 0.5, // fraccion de arbustos que son sprites 2D (0 = todos de bloques, 1 = todos sprites)
+    "Grass": 1.0, // hierba baja
+    "TallGrass": 1.0, // hierba alta
+    "Flowers": 1.0, // flores
+    "Bushes": 1.0, // matorral grande decorativo
+    "Fungi": 0.2, // setas gigantes de bloques y setas sprite (0 = ningun hongo en superficie)
+    "Rocks": 0.5, // rocas sprite y agujas de piedra
+    "Crystals": 0.3, // afloramientos y agujas de cristal en superficie
+    "CaveDensity": 2.0, // 0..2. Cuevas (tuneles y cavernas con cristales y hongos). 0 = sin cuevas
+    "CaveFungi": 0.5, // hongos dentro de las cuevas
+    "CaveCrystals": 0.8 // cristales dentro de las cuevas
+  },
 
   // ---------- JUEGO ----------
   "ViewDistance": 12, // distancia de vision en chunks (2..24). Mucho mayor = muchisimo mas coste
@@ -72,8 +83,7 @@
   "FaunaPerChunk": 1.0, // 0..4. Animales esperados por columna de chunks al cargarse (0 = sin fauna). Depende del bioma (sabana/jungla/llanura mas; desierto/cumbres menos)
   "FaunaLimit": 200, // maximo de animales en el mundo
   "MapSamplesPerAxis": 3, // precision del mapamundi: muestras por region = n*n (1..16)
-  "WorkerThreads": 0, // hilos de fondo para generar y mallar chunks (0 = automatico: nucleos - 2). Sube si te sobran nucleos
-  "CaveDensity": 2.0, // 0..2. Cuevas (tuneles y cavernas con cristales y hongos). 0 = sin cuevas
+  "WorkerThreads": 0, // hilos de fondo para generar y mallar chunks (0 = automatico: nucleos - 2). Sube si te sobran nucleos  
   "MysteryDensity": 1.0, // 0..3. Lugares misteriosos (sumideros, circulos de monolitos, pilonos, arboledas de cristal). 0 = ninguno
   "Cities": {
     "Chance": 0.8, // probabilidad de ciudad por celda de 1024 bloques (0..1)
