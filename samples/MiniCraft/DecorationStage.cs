@@ -74,7 +74,6 @@ public sealed class DecorationStage : IGenerationStage<ushort>
 
             int ground = _columns.HeightAt(wx, wz);
             if (ground <= _climate.SeaLevel) continue;   // bajo el agua no hay nada
-            if (CaveCarver.SurfaceOpen(ctx.Noise, ctx.Seed, settings.CaveDensity, wx, wz, ground, _climate.SeaLevel)) continue;   // entrada de cueva
 
             var d = Density[_columns.BiomeAt(wx, wz)];
             float acc = d.Grass * mult * grassM;
@@ -91,6 +90,7 @@ public sealed class DecorationStage : IGenerationStage<ushort>
             if ((uint)y >= (uint)shape.SizeY) continue;                 // pertenece a otro chunk (el de arriba)
             if (chunk[x, y, z] != Blocks.Air) continue;                 // un árbol u otra cosa ya la ocupa
             if (y > 0 && chunk[x, y - 1, z] == Blocks.Air) continue;    // sin plantas flotando sobre un hueco (sumideros)
+            if (CaveCarver.SurfaceOpen(ctx.Noise, ctx.Seed, settings.CaveDensity, wx, wz, ground, _climate.SeaLevel)) continue;   // entrada de cueva
             chunk[x, y, z] = id;
 
             if (id == Blocks.Crystal)                                   // aflora como una columna de 1 a 3 bloques

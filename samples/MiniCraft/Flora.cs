@@ -80,7 +80,7 @@ public sealed class Flora
             new[] { (FloraShape.Bush, 5), (FloraShape.Mound, 2), (FloraShape.Thorn, 1) }, 0.035f, 0.050f),
         new BiomeFlora(Biomes.Jungle,
             new[] { (FloraShape.Palm, 4), (FloraShape.Umbrella, 4), (FloraShape.Weeping, 3), (FloraShape.Mushroom, 3), (FloraShape.Round, 2), (FloraShape.Twisted, 2) },
-            new[] { (FloraShape.Bush, 4), (FloraShape.Thorn, 3), (FloraShape.Mound, 2) }, 0.060f, 0.080f),
+            new[] { (FloraShape.Bush, 4), (FloraShape.Thorn, 3), (FloraShape.Mound, 2) }, 0.045f, 0.080f),   // selva: un 25 % menos de árboles
         new BiomeFlora(Biomes.Taiga,
             new[] { (FloraShape.Conifer, 6), (FloraShape.Spire, 2), (FloraShape.Dead, 2), (FloraShape.Mushroom, 2), (FloraShape.Twisted, 1) },
             new[] { (FloraShape.Mound, 4), (FloraShape.Bush, 3), (FloraShape.Thorn, 2) }, 0.030f, 0.030f),

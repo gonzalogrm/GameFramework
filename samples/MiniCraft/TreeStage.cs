@@ -66,7 +66,6 @@ public sealed class TreeStage : IGenerationStage<ushort>
 
             int ground = _columns.HeightAt(wx, wz);
             if (ground <= minGround) continue;
-            if (CaveCarver.SurfaceOpen(ctx.Noise, ctx.Seed, settings.CaveDensity, wx, wz, ground, _climate.SeaLevel)) continue;   // entrada de cueva
             ushort biome = _columns.BiomeAt(wx, wz);
 
             // Primero se intenta un árbol; si no, un arbusto (cada uno con su tirada y su densidad).
@@ -85,6 +84,7 @@ public sealed class TreeStage : IGenerationStage<ushort>
                     if (spriteBlock != 0)
                     {
                         if (u >= density * (spriteBlock == fungusSprite ? fungiM : shrubM)) continue;
+                        if (CaveCarver.SurfaceOpen(ctx.Noise, ctx.Seed, settings.CaveDensity, wx, wz, ground, _climate.SeaLevel)) break;   // entrada de cueva
                         writer ??= new FloraWriter(chunk, o);
                         writer.SetBase(wx, ground + 1, wz);
                         writer.Put(0, 0, 0, spriteBlock, false);
@@ -102,6 +102,7 @@ public sealed class TreeStage : IGenerationStage<ushort>
                 };
                 if (u >= density * category) continue;
                 if (ground + 1 + species.MaxH + 4 > worldHeight - 1) continue;   // no cabe bajo el techo del mundo
+                if (CaveCarver.SurfaceOpen(ctx.Noise, ctx.Seed, settings.CaveDensity, wx, wz, ground, _climate.SeaLevel)) break;   // entrada de cueva
 
                 int height = species.MinH + (int)((h >> 8) % (ulong)(species.MaxH - species.MinH + 1));
                 int radius = species.MinR + (int)((h >> 12) % (ulong)(species.MaxR - species.MinR + 1));

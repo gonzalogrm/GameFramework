@@ -56,15 +56,15 @@
     "Master": 1.0, // multiplica a la vez arboles, arbustos, hierbas, hierba alta, flores y matorrales (NO hongos, rocas ni cristales)
     "Trees": 1.0, // arboles (siempre de bloques)
     "Shrubs": 1.0, // arbustos y matorrales (bloques y sprites)
-    "SpriteShare": 0.5, // fraccion de arbustos que son sprites 2D (0 = todos de bloques, 1 = todos sprites)
+    "SpriteShare": 0.6, // fraccion de arbustos que son sprites 2D (0 = todos de bloques, 1 = todos sprites)
     "Grass": 1.0, // hierba baja
     "TallGrass": 1.0, // hierba alta
     "Flowers": 1.0, // flores
-    "Bushes": 1.0, // matorral grande decorativo
+    "Bushes": 0.5, // matorral grande decorativo
     "Fungi": 0.2, // setas gigantes de bloques y setas sprite (0 = ningun hongo en superficie)
-    "Rocks": 0.5, // rocas sprite y agujas de piedra
+    "Rocks": 0.3, // rocas sprite y agujas de piedra
     "Crystals": 0.3, // afloramientos y agujas de cristal en superficie
-    "CaveDensity": 2.0, // 0..2. Cuevas (tuneles y cavernas con cristales y hongos). 0 = sin cuevas
+    "CaveDensity": 1.5, // 0..2. Cuevas (tuneles y cavernas con cristales y hongos). 0 = sin cuevas
     "CaveFungi": 0.5, // hongos dentro de las cuevas
     "CaveCrystals": 0.8 // cristales dentro de las cuevas
   },
@@ -84,7 +84,7 @@
   "FaunaLimit": 200, // maximo de animales en el mundo
   "MapSamplesPerAxis": 3, // precision del mapamundi: muestras por region = n*n (1..16)
   "WorkerThreads": 0, // hilos de fondo para generar y mallar chunks (0 = automatico: nucleos - 2). Sube si te sobran nucleos  
-  "MysteryDensity": 1.0, // 0..3. Lugares misteriosos (sumideros, circulos de monolitos, pilonos, arboledas de cristal). 0 = ninguno
+  "MysteryDensity": 0.5, // 0..3. Lugares misteriosos (sumideros, circulos de monolitos, pilonos, arboledas de cristal). 0 = ninguno
   "Cities": {
     "Chance": 0.8, // probabilidad de ciudad por celda de 1024 bloques (0..1)
     "MinRadius": 50, // radio minimo en bloques

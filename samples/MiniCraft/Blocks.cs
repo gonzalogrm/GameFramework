@@ -38,7 +38,7 @@ public static class Blocks
         Sand = Registry.Register("sand", BlockDef.Cube("sand", TileSand) with { Props = BlockProto });
         Water = Registry.Register("water", BlockDef.Cube("water", TileWater, solid: false, opaque: false, translucent: true));
         Log = Registry.Register("log", BlockDef.TopSideBottom("log", TileLogTop, TileLogSide, TileLogTop) with { Props = TrunkProto });
-        Leaves = Registry.Register("leaves", BlockDef.Cube("leaves", TileLeaves) with { Props = LeafProto });
+        Leaves = Registry.Register("leaves", BlockDef.Cube("leaves", TileLeaves, solid: true, opaque: false) with { Props = LeafProto, LightFilter = new Color(150, 150, 150) });   // con huecos: se ve a través, y dan sombra a medias
         Snow = Registry.Register("snow", BlockDef.Cube("snow", TileSnow) with { Props = BlockProto });
 
         // Sprites 2D importados de samples/MiniCraft/sprites/*.png. El segundo nombre es el del archivo, sin extensión.
@@ -77,7 +77,7 @@ public static class Blocks
         Chalk = Registry.Register("chalk", BlockDef.Cube("chalk", TileChalk) with { Props = BlockProto.Derive("piedra").Float("durability", 2f) });
         StemWood = Registry.Register("stem_wood", BlockDef.TopSideBottom("stem_wood", TileStemTop, TileStemSide, TileStemTop) with { Props = TrunkProto.Derive("tallo").Float("durability", 2f) });
         Petrified = Registry.Register("petrified_wood", BlockDef.TopSideBottom("petrified_wood", TilePetrifiedTop, TilePetrifiedSide, TilePetrifiedTop) with { Props = TrunkProto.Derive("petrificada").Float("durability", 4f) });
-        Fronds = Registry.Register("fronds", BlockDef.Cube("fronds", TileFronds) with { Props = LeafProto.Derive("fronda") });
+        Fronds = Registry.Register("fronds", BlockDef.Cube("fronds", TileFronds, solid: true, opaque: false) with { Props = LeafProto.Derive("fronda"), LightFilter = new Color(150, 150, 150) });
         SporeCap = Registry.Register("spore_cap", BlockDef.Cube("spore_cap", TileSporeCap) with { Props = LeafProto.Derive("sombrero"), Emission = 3 });
         for (int i = 0; i < FloraSprites.Length; i++)   // sprites de flora: añadidos AL FINAL
             FloraSprites[i] = Registry.Register($"flora_sprite_{i}", BlockDef.Sprite($"flora_sprite_{i}", $"flora_{i}", BlockRender.Cross));

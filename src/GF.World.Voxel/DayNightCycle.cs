@@ -7,28 +7,47 @@ namespace GF.World.Voxel;
 /// ambiente mínima y el color del horizonte (fondo y niebla). Es solo la curva: no toca el mundo. El renderer aplica SkyLight y
 /// AmbientLight como parámetros del shader en cada frame, así que cambiar la hora NO remalla nada.
 ///   0 = medianoche, 0.25 = amanecer, 0.5 = mediodía, 0.75 = ocaso.
+/// SkyTint (estático, lo fija el juego antes de crear el ciclo) desplaza el cielo de día de un planeta: -1 turquesa, 0 estándar, 1 rojizo.
 /// </summary>
 public sealed class DayNightCycle
 {
     private readonly record struct Key(float T, Vector3 Sky, Vector3 Ambient, Color Horizon);
 
+    /// <summary>-1 = cielo turquesa, 0 = el estándar (azul), 1 = rojizo. Se aplica al crear el ciclo.</summary>
+    public static float SkyTint { get; set; }
+
     private static readonly Vector3 NightSky = new(0.07f, 0.09f, 0.20f), NightAmbient = new(0.035f, 0.04f, 0.07f);
-    private static readonly Vector3 DaySky = Vector3.One, DayAmbient = new(0.12f);
-    private static readonly Color NightHorizon = new(8, 12, 28), DayHorizon = new(135, 180, 235);
+    private static readonly Vector3 DayAmbient = new(0.12f);
+    private static readonly Color NightHorizon = new(8, 12, 28), DayHorizonStandard = new(135, 180, 235);
+    private static readonly Color TurquoiseHorizon = new(100, 205, 215), RedHorizon = new(228, 148, 120);
 
-    private static readonly Key[] Keys =
+    private readonly Key[] _keys;
+
+    private static Key[] BuildKeys(float tint)
     {
-        new(0.00f, NightSky, NightAmbient, NightHorizon),
-        new(0.20f, NightSky, NightAmbient, NightHorizon),
-        new(0.27f, new Vector3(0.95f, 0.60f, 0.45f), new Vector3(0.09f, 0.08f, 0.08f), new Color(235, 150, 110)),   // amanecer
-        new(0.35f, DaySky, DayAmbient, DayHorizon),
-        new(0.65f, DaySky, DayAmbient, DayHorizon),
-        new(0.73f, new Vector3(0.95f, 0.50f, 0.40f), new Vector3(0.09f, 0.08f, 0.08f), new Color(225, 115, 85)),    // ocaso
-        new(0.80f, NightSky, NightAmbient, NightHorizon),
-        new(1.00f, NightSky, NightAmbient, NightHorizon),
-    };
+        tint = Math.Clamp(tint, -1f, 1f);
+        float k = MathF.Abs(tint);
+        var dayHorizon = Color.Lerp(DayHorizonStandard, tint < 0f ? TurquoiseHorizon : RedHorizon, k * 0.8f);
+        // La luz del sol también se tiñe un poco (más cálida o más fría), sin llegar a cambiar el color de los bloques.
+        var daySky = Vector3.Lerp(Vector3.One, tint < 0f ? new Vector3(0.92f, 1f, 1f) : new Vector3(1f, 0.94f, 0.88f), k);
+        return new Key[]
+        {
+            new(0.00f, NightSky, NightAmbient, NightHorizon),
+            new(0.20f, NightSky, NightAmbient, NightHorizon),
+            new(0.27f, new Vector3(0.95f, 0.60f, 0.45f), new Vector3(0.09f, 0.08f, 0.08f), new Color(235, 150, 110)),   // amanecer
+            new(0.35f, daySky, DayAmbient, dayHorizon),
+            new(0.65f, daySky, DayAmbient, dayHorizon),
+            new(0.73f, new Vector3(0.95f, 0.50f, 0.40f), new Vector3(0.09f, 0.08f, 0.08f), new Color(225, 115, 85)),    // ocaso
+            new(0.80f, NightSky, NightAmbient, NightHorizon),
+            new(1.00f, NightSky, NightAmbient, NightHorizon),
+        };
+    }
 
-    public DayNightCycle() => Evaluate();
+    public DayNightCycle()
+    {
+        _keys = BuildKeys(SkyTint);
+        Evaluate();
+    }
 
     /// <summary>Duración de un día completo, en segundos reales.</summary>
     public double DayLengthSeconds { get; set; } = 600;
@@ -70,8 +89,8 @@ public sealed class DayNightCycle
     {
         float t = (float)(Time - Math.Floor(Time));
         int i = 0;
-        while (i < Keys.Length - 2 && t >= Keys[i + 1].T) i++;
-        var a = Keys[i]; var b = Keys[i + 1];
+        while (i < _keys.Length - 2 && t >= _keys[i + 1].T) i++;
+        var a = _keys[i]; var b = _keys[i + 1];
         float f = Math.Clamp((t - a.T) / (b.T - a.T), 0f, 1f);
         f = f * f * (3f - 2f * f);
 

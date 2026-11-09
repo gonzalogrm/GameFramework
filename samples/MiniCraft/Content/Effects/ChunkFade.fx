@@ -8,6 +8,7 @@
 //     - distancia: 1 cerca, 0 en FadeEnd (distancia horizontal "de cuadrado" desde la cámara, que coincide con el agujero cuadrado del LOD)
 //     - aparición: ChunkFade sube de 0 a 1 tras construirse la malla del chunk (lo fija el código, por chunk)
 //
+// Los píxeles del atlas con alfa < 0.5 siempre se descartan (hojas con huecos). Los de los sprites, con AlphaCutoff.
 // Las posiciones llegan RELATIVAS A LA CÁMARA (origen flotante): World es una traslación pequeña y precisa.
 
 #if OPENGL
@@ -91,7 +92,7 @@ float Dither(float2 pixel)
 float4 MainPS(VSOutput input) : COLOR0
 {
 	float4 tex = tex2D(AtlasSampler, input.TexCoord);
-	clip(tex.a - AlphaCutoff);
+	clip(tex.a - max(AlphaCutoff, 0.5));
 
 	float fade = (1.0 - smoothstep(FadeStart, FadeEnd, input.Distance)) * ChunkFade;
 

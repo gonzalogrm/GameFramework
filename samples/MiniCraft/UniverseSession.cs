@@ -1,6 +1,8 @@
 using System.Text;
 using GF.Engine;
+using GF.Core;
 using GF.World.Cosmos;
+using GF.World.Voxel;
 
 namespace MiniCraft;
 
@@ -55,6 +57,7 @@ public sealed class UniverseSession
     {
         if (!planet.Habitable) throw new ArgumentException("El planeta no es habitable.", nameof(planet));
         Current = planet.Address;
+        DayNightCycle.SkyTint = new SplitMixRandom(Hashing.Mix(planet.Address.Seed ^ 0x5CA1E5UL)).NextFloat() * 2f - 1f;   // cielo de este planeta: turquesa (-1) .. estándar (0) .. rojizo (1)
         Biomes.ApplyPlanet(planet.Address.Seed);                           // materiales (suelo, roca, madera...) de este planeta
         Flora.ApplyPlanet(planet.Address.Seed);                            // especies de árboles y arbustos de este planeta
         PlanetPalette.Current = PlanetPalette.For(planet.Address.Seed);   // paleta alienígena de este planeta (atlas y terreno lejano)

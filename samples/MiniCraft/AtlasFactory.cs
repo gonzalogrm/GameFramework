@@ -91,9 +91,26 @@ public static class AtlasFactory
                 data[(dy + y) * size + dx + x] = old[(sy + y) * ow + sx + x];
         }
         PaintAlien(data, size);
+        PunchHoles(data, size, Blocks.TileLeaves, 41, 0.30f);    // hojas: un 30 % de píxeles transparentes
+        PunchHoles(data, size, Blocks.TileFronds, 43, 0.30f);
         var tex = new Texture2D(device, size, size);
         tex.SetData(data);
         return tex;
+    }
+
+    /// <summary>Hace transparente (alfa 0) la fracción 'fraction' de los píxeles de un tile, en manchas pequeñas: las hojas dejan ver lo que hay detrás.</summary>
+    private static void PunchHoles(Color[] data, int width, int tile, int salt, float fraction)
+    {
+        int ox = (tile % NewN) * T, oy = (tile / NewN) * T;
+        var scores = new float[T * T];
+        for (int y = 0; y < T; y++)
+        for (int x = 0; x < T; x++) scores[y * T + x] = Vn(x, y, salt, 2) * 0.55f + Hash01(x, y, salt + 7) * 0.45f;
+        var sorted = (float[])scores.Clone();
+        Array.Sort(sorted);
+        float threshold = sorted[Math.Clamp((int)((1f - fraction) * sorted.Length), 0, sorted.Length - 1)];
+        for (int y = 0; y < T; y++)
+        for (int x = 0; x < T; x++)
+            if (scores[y * T + x] >= threshold) data[(oy + y) * width + ox + x] = new Color(0, 0, 0, 0);
     }
 
     private static float Hash01(int ix, int iy, int salt)
