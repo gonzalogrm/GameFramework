@@ -23,6 +23,7 @@ public sealed class BoxRenderer : IDisposable
     private readonly GraphicsDevice _device;
     private readonly WorldScale _scale;
     private readonly AlphaTestEffect _effect;
+    private readonly SkyRenderer _sky;   // el cielo (cúpula, estrellas y nubes) se dibuja aquí: es el último paso tras el terreno y los chunks
     private readonly Dictionary<(int, int), Entry> _sprites = new();
     private readonly VertexPositionTexture[] _quad = new VertexPositionTexture[4];
     private readonly short[] _idx = { 0, 1, 2, 0, 2, 3 };
@@ -37,6 +38,7 @@ public sealed class BoxRenderer : IDisposable
     {
         _device = device;
         _scale = scale;
+        _sky = new SkyRenderer(device);
         _effect = new AlphaTestEffect(device)
         {
             VertexColorEnabled = false,
@@ -58,6 +60,8 @@ public sealed class BoxRenderer : IDisposable
 
     public void Draw(ICamera3D camera, IEnumerable<EntityBox> boxes)
     {
+        _sky.Draw(camera, FogColor, FogStart, FogEnd);
+
         var origin = camera.Position;
         var view = camera.ViewRelativeTo(origin);
         // Los ejes de la cámara en el mundo son las columnas de la matriz de vista: el billboard gira solo alrededor del eje vertical.
@@ -107,6 +111,7 @@ public sealed class BoxRenderer : IDisposable
     {
         foreach (var e in _sprites.Values) e.Texture.Dispose();
         _sprites.Clear();
+        _sky.Dispose();
         _effect.Dispose();
     }
 }

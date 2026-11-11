@@ -68,6 +68,13 @@
     "CaveFungi": 0.5, // hongos dentro de las cuevas
     "CaveCrystals": 0.8 // cristales dentro de las cuevas
   },
+  "Weather": {
+    "CloudCoverage": -1, // 0..1 (0 = cielo despejado). -1 = segun el planeta (entre 0.25 y 0.75)
+    "CloudSpeed": 1.0, // 0..5. Velocidad de las nubes
+    "CloudAltitude": 150, // 60..400. Altura de las nubes en bloques
+    "Stars": true, // estrellas de noche
+    "SkyGradient": true // degradado del cielo (cenit mas oscuro que el horizonte)
+  },
 
   // ---------- JUEGO ----------
   "ViewDistance": 12, // distancia de vision en chunks (2..24). Mucho mayor = muchisimo mas coste

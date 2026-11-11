@@ -45,6 +45,15 @@ float3 SkyLight;          // color de la luz de cielo ahora (día = 1,1,1; noche
 float3 AmbientLight;      // brillo mínimo por canal
 float2 ViewportSize;      // tamaño de la pantalla en píxeles (para el patrón de tramado)
 
+// ---- Niebla a nivel de suelo y bruma (constantes: ajústalas aquí; GroundFogMax = 0 y HazeMax = 0 las quitan).
+// La niebla de suelo es más espesa cuanto más por debajo de los ojos está lo que se ve (valles y llanuras vistos desde una loma) y solo en un anillo de
+// distancias medias: más lejos manda la niebla de distancia normal, que además se une al terreno lejano. La bruma aclara suavemente hacia el horizonte.
+static const float GroundFogMax = 0.35;     // fracción máxima de color de niebla que añade
+static const float GroundFogBias = -1.0;    // bloques bajo los ojos donde empieza (negativo: empieza un poco por encima de los pies)
+static const float GroundFogDepth = 10.0;   // bloques más abajo hasta el máximo
+static const float GroundFogNear = 10.0, GroundFogMid = 60.0, GroundFogFar = 220.0;   // anillo de distancias (bloques)
+static const float HazeMax = 0.10;          // bruma de distancia (cuadrática hasta FogEnd)
+
 struct VSInput
 {
 	float4 Position : POSITION0;
@@ -60,6 +69,7 @@ struct VSOutput
 	float4 Clip : TEXCOORD1;       // posición en espacio de recorte (para obtener el píxel y la profundidad en el PS)
 	float Distance : TEXCOORD2;    // distancia horizontal de cuadrado a la cámara
 	float4 Light : TEXCOORD3;
+	float RelY : TEXCOORD4;        // altura respecto a la cámara (para la niebla de suelo)
 };
 
 VSOutput MainVS(in VSInput input)
@@ -80,6 +90,7 @@ VSOutput MainVS(in VSInput input)
 	output.Light = float4(lr, lg, lb, la) / 255.0;
 	output.Clip = output.Position;
 	output.Distance = max(abs(worldPos.x), abs(worldPos.z));
+	output.RelY = worldPos.y;
 	return output;
 }
 
@@ -104,8 +115,15 @@ float4 MainPS(VSOutput input) : COLOR0
 	// Color.rgb = luz de cielo (0..1, teñida por el vidrio), Light.rgb = luz de bloques. Día/noche = SkyLight, sin remallar.
 	float3 lit = max(max(input.Color.rgb * SkyLight, input.Light.rgb), AmbientLight);
 	float4 color = float4(tex.rgb * lit * input.Light.a, tex.a * input.Color.a);   // el alfa del agua viene del color de vértice
-	float fog = saturate((input.Clip.w - FogStart) / (FogEnd - FogStart));
-	color.rgb = lerp(color.rgb, FogColor, fog);
+	float d = input.Clip.w;
+	float fog = saturate((d - FogStart) / (FogEnd - FogStart));
+	float below = saturate((-input.RelY - GroundFogBias) / GroundFogDepth);
+	float band = smoothstep(GroundFogNear, GroundFogMid, d) * (1.0 - smoothstep(GroundFogMid, GroundFogFar, d));
+	float ground = below * band * GroundFogMax;
+	float haze = saturate(d / FogEnd);
+	haze = haze * haze * HazeMax;
+	float total = 1.0 - (1.0 - fog) * (1.0 - ground) * (1.0 - haze);
+	color.rgb = lerp(color.rgb, FogColor, total);
 	return color;
 }
 

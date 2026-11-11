@@ -91,8 +91,8 @@ public static class AtlasFactory
                 data[(dy + y) * size + dx + x] = old[(sy + y) * ow + sx + x];
         }
         PaintAlien(data, size);
-        PunchHoles(data, size, Blocks.TileLeaves, 41, 0.30f);    // hojas: un 30 % de píxeles transparentes
-        PunchHoles(data, size, Blocks.TileFronds, 43, 0.30f);
+        PunchHoles(data, size, Blocks.TileLeaves, 41, 0.15f);    // hojas: un 15 % de píxeles transparentes
+        PunchHoles(data, size, Blocks.TileFronds, 43, 0.15f);
         var tex = new Texture2D(device, size, size);
         tex.SetData(data);
         return tex;

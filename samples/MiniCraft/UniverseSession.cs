@@ -58,6 +58,15 @@ public sealed class UniverseSession
         if (!planet.Habitable) throw new ArgumentException("El planeta no es habitable.", nameof(planet));
         Current = planet.Address;
         DayNightCycle.SkyTint = new SplitMixRandom(Hashing.Mix(planet.Address.Seed ^ 0x5CA1E5UL)).NextFloat() * 2f - 1f;   // cielo de este planeta: turquesa (-1) .. estándar (0) .. rojizo (1)
+        var weather = BaseSettings.Weather;   // nubes, viento y estrellas de este planeta (el json manda sobre lo automático)
+        var sky = new SplitMixRandom(Hashing.Mix(planet.Address.Seed ^ 0xC10D5UL));
+        Atmosphere.CloudCoverage = weather.CloudCoverage >= 0f ? weather.CloudCoverage : 0.25f + sky.NextFloat() * 0.5f;
+        Atmosphere.CloudAltitude = weather.CloudAltitude;
+        Atmosphere.CloudSpeed = weather.CloudSpeed;
+        Atmosphere.WindAngle = sky.NextFloat() * MathF.Tau;
+        Atmosphere.Stars = weather.Stars;
+        Atmosphere.SkyGradient = weather.SkyGradient;
+        Atmosphere.StarSeed = (int)(planet.Address.Seed ^ (planet.Address.Seed >> 32));
         Biomes.ApplyPlanet(planet.Address.Seed);                           // materiales (suelo, roca, madera...) de este planeta
         Flora.ApplyPlanet(planet.Address.Seed);                            // especies de árboles y arbustos de este planeta
         PlanetPalette.Current = PlanetPalette.For(planet.Address.Seed);   // paleta alienígena de este planeta (atlas y terreno lejano)

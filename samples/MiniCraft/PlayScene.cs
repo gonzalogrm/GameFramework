@@ -163,7 +163,8 @@ public sealed class PlayScene : UiScene
             .AddStage(new CityStage(cities, _scale, columns))
 			.AddStage(new StatueFieldStage(_seed, cities, _scale, columns, _climate.SeaLevel, _settings.Ruins.FieldDensity))
 			.AddStage(new TreeStage(_climate, _scale, columns, cities))
-            .AddStage(new DecorationStage(_climate, _scale, columns, cities));
+            .AddStage(new DecorationStage(_climate, _scale, columns, cities))
+			.AddStage(new SupportStage(columns));
 
         int cs = _settings.ChunkSize, layers = _settings.VerticalChunks, view = _settings.ViewDistance;
         float viewBlocks = view * cs;
