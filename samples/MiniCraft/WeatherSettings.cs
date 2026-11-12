@@ -11,6 +11,7 @@ public sealed class WeatherSettings
     public float CloudAltitude { get; set; } = 150f;   // 60..400: altura de las nubes, en bloques
     public bool Stars { get; set; } = true;            // estrellas de noche
     public bool SkyGradient { get; set; } = true;      // degradado del cielo (cenit más oscuro que el horizonte)
+    public float GroundFog { get; set; } = 1f;         // 0..3: niebla de suelo en bancos (0 = ninguna)
 
     public void Validate(List<string> warnings)
     {
@@ -23,5 +24,6 @@ public sealed class WeatherSettings
         if (CloudCoverage >= 0f) CloudCoverage = F(nameof(CloudCoverage), CloudCoverage, 0f, 1f); else CloudCoverage = -1f;
         CloudSpeed = F(nameof(CloudSpeed), CloudSpeed, 0f, 5f);
         CloudAltitude = F(nameof(CloudAltitude), CloudAltitude, 60f, 400f);
+        GroundFog = F(nameof(GroundFog), GroundFog, 0f, 3f);
     }
 }

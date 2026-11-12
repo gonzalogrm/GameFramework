@@ -221,7 +221,8 @@ public sealed class PlayScene : UiScene
             fadeBand = FadeBand.Disabled;
             _farCloseChunks = _settings.FarCloseChunks > 0 ? _settings.FarCloseChunks : view;   // sin fundido, sin solape
         }
-        _renderer = new VoxelWorldRenderer(Game.GraphicsDevice, _world, Blocks.Registry, AtlasFactory.Load(Game.Content, Game.GraphicsDevice), _sprites, chunkFade)
+		FogBinder.Target = chunkFade;
+		_renderer = new VoxelWorldRenderer(Game.GraphicsDevice, _world, Blocks.Registry, AtlasFactory.Load(Game.Content, Game.GraphicsDevice), _sprites, chunkFade)
         {
             MaxMeshingJobs = meshThreads,
             FadeStart = fadeBand.Start,
@@ -618,7 +619,8 @@ public sealed class PlayScene : UiScene
     public override void Draw(GameTime gameTime)
     {
         using (_prof.Measure("dibujo"))
-            _renderer.Draw(_camera, () =>
+			FogBinder.Update(_camera.Position, gameTime.TotalGameTime.TotalSeconds);
+		    _renderer.Draw(_camera, () =>
             {
                 _far?.Draw(_camera);   // tras los chunks: donde hay bloques, la prueba de profundidad oculta el terreno lejano
                 _boxes.Draw(_camera, ActiveBoxes());

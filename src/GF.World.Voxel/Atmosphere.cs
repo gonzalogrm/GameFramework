@@ -1,3 +1,5 @@
+using Microsoft.Xna.Framework.Graphics;
+
 namespace GF.World.Voxel;
 
 /// <summary>
@@ -20,4 +22,10 @@ public static class Atmosphere
     public static bool SkyGradient { get; set; } = true;
     /// <summary>Semilla de la distribución de estrellas (distinta en cada planeta).</summary>
     public static int StarSeed { get; set; }
+    /// <summary>Multiplicador de la niebla de suelo (0 = sin niebla de suelo).</summary>
+    public static float GroundFog { get; set; } = 1f;
+    /// <summary>Bloques que abarca la textura de ruido de la niebla antes de repetirse.</summary>
+    public const float FogPeriod = 400f;
+    /// <summary>Ruido (R, 0..1) de la niebla de suelo: sale del MISMO ruido que las nubes (SkyRenderer lo crea una vez). null hasta el primer dibujo del cielo.</summary>
+    public static Texture2D? FogNoise { get; set; }
 }
