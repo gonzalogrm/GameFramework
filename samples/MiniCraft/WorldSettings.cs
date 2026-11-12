@@ -63,6 +63,7 @@ public sealed class WorldSettings
     public float TreeDensityMultiplier { get; set; } = 1f;    // se guarda con el mundo (cada planeta lo modifica según su clima)
     public float PropDensityMultiplier { get; set; } = 1f;    // hierba, flores y rocas (sprites)
     public WeatherSettings Weather { get; set; } = new();   // nubes, estrellas y cielo (se leen siempre del json actual)
+    public FogSettings Fog { get; set; } = new();   // niebla de bloques con ruido Perlin (se lee siempre del json actual)
     public VegetationSettings Vegetation { get; set; } = new();   // multiplicadores por separado de árboles, arbustos, hierbas, hongos, rocas y cristales (se aplican siempre)
 
     // ----- Vegetación y formaciones (se aplican SIEMPRE con el worldsettings.json actual, también al continuar un mundo: no cambian el terreno) -----
@@ -127,6 +128,7 @@ public sealed class WorldSettings
         Cities.SpecialNpcs = other.Cities.SpecialNpcs;
         Ruins.ApplyView(other.Ruins);
         Vegetation.CopyFrom(other.Vegetation);
+        Fog.CopyFrom(other.Fog);
     }
 
     public WorldScale CreateScale() => new(MapWidth, MapHeight, RegionChunksX, RegionChunksZ, ChunkSize, ChunkSize);
@@ -263,6 +265,7 @@ public sealed class WorldSettings
         Ruins.Validate(warnings);
         Vegetation.Validate(warnings);
         Weather.Validate(warnings);
+        Fog.Validate(warnings);
         return warnings;
     }
 }

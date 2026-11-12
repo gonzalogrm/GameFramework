@@ -92,6 +92,20 @@
   "MapSamplesPerAxis": 3, // precision del mapamundi: muestras por region = n*n (1..16)
   "WorkerThreads": 0, // hilos de fondo para generar y mallar chunks (0 = automatico: nucleos - 2). Sube si te sobran nucleos  
   "MysteryDensity": 0.5, // 0..3. Lugares misteriosos (sumideros, circulos de monolitos, pilonos, arboledas de cristal). 0 = ninguno
+  "Fog": {
+    "Enabled": true,
+    "Radius": 32, // 16..256 radio alrededor del jugador
+    "CellSize": 1, // 1..8 lado de cada bloque de niebla
+    "BankHeight": 4, // 1..32 altura del banco sobre el suelo
+    "Threshold": 0.50, // 0..0.95 por debajo de este valor del ruido no hay niebla
+    "MaxAlpha": 0.25, // 0..1 opacidad maxima
+    "NoiseScale": 48, // 8..500 tamaño tipico de un banco
+    "EvolutionSpeed": 0.05, // 0..1 velocidad a la que evoluciona el ruido
+    "FadeSpeed": 0.3, // 0.05..5 rapidez de aparicion y desaparicion
+    "MaxColumns": 5000, // 256..60000 capacidad del pool
+    "LodDistance": 1, // 0.1..1 (1 = sin LOD)
+    "HeightVariation": 0.65
+  },
   "Cities": {
     "Chance": 0.8, // probabilidad de ciudad por celda de 1024 bloques (0..1)
     "MinRadius": 50, // radio minimo en bloques

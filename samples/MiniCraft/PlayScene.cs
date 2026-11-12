@@ -83,8 +83,10 @@ public sealed class PlayScene : UiScene
     private LightWatcher _lightWatcher = null!;
     private readonly DayNightCycle _day = new();
     private int _daySpeed;   // 0 normal, 1 rápido, 2 parado
+	private FogSystem? _fog;
+	private FogRenderer? _fogView;
 
-    private readonly UniverseSession _session;
+	private readonly UniverseSession _session;
     private readonly Planet _planet;
     private readonly string _saveDir;   // carpeta de guardado de ESTE planeta
 
@@ -232,8 +234,14 @@ public sealed class PlayScene : UiScene
             FogStart = fogStart,
             FogEnd = fogEnd,
         };
+		if (_settings.Fog.Enabled)
+			_fog = new FogSystem(_settings.Fog.ToOptions(), new PerlinNoise(_seed ^ 0xF06),
+				FogGround.For(_world, Blocks.Registry, 0, _settings.WorldHeight - 1));
+		if (_fog != null) _fog.LightQuery = FogLight.For(_renderer.Light);
+		if (_fog != null) _world.CellChanged += (cell, _, _) => _fog.Invalidate(cell.X, cell.Z);
+		if (_fog != null) _fogView = new FogRenderer(Game.GraphicsDevice);
 
-        _camera.FarPlane = Math.Max(500f, fogRange * 1.2f);
+		_camera.FarPlane = Math.Max(500f, fogRange * 1.2f);
         if (farEnabled) _camera.NearPlane = 0.15f;   // más precisión de profundidad a distancia
 
         // Terreno LEJANO: relieve aproximado que llega mucho más lejos que los chunks y gana detalle al acercarte. Dentro de la
@@ -322,7 +330,8 @@ public sealed class PlayScene : UiScene
         _boxes.Dispose();
         _sprites.Dispose();
         _far?.Dispose();
-    }
+		_fogView?.Dispose();
+	}
 
     private void Save()
     {
@@ -550,7 +559,8 @@ public sealed class PlayScene : UiScene
         ApplyDayNight();
         using (_prof.Measure("malla"))
             _renderer.Update(_camera.Position);
-        using (_prof.Measure("lejano"))
+		_fog?.Update(dt, _camera.Position, gameTime.TotalGameTime.TotalSeconds);
+		using (_prof.Measure("lejano"))
         {
             if (_far != null)
             {
@@ -623,7 +633,12 @@ public sealed class PlayScene : UiScene
                 _far?.Draw(_camera);   // tras los chunks: donde hay bloques, la prueba de profundidad oculta el terreno lejano
                 _boxes.Draw(_camera, ActiveBoxes());
             });
-        if (_target is { } t) _renderer.DrawOutline(_camera, t.Cell);
+		if (_fog != null && _fogView != null)
+		{
+			_fogView.Tint = Vector3.Max(_day.SkyLight, _day.Ambient);   // luz del dia
+			_fogView.Draw(_camera, _fog);
+		}
+		if (_target is { } t) _renderer.DrawOutline(_camera, t.Cell);
         UpdateDebug(gameTime);
         base.Draw(gameTime);   // UI encima
     }
@@ -832,6 +847,8 @@ public sealed class PlayScene : UiScene
                       $"Terreno lejano: {FarInfo()}\n" +
                       $"Tiempos del hilo principal (ms): {_prof.Report()}\n" +
 					  $"{CityText()}\n" +
+					  $"{_fog?.DebugText ?? "Niebla: desactivada"}\n" +
+					  $"{_fogView?.Stats}\n" +
 					  $"Luz aqui: {LightText()}\n";
     }
 
