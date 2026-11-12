@@ -69,7 +69,6 @@
     "CaveCrystals": 0.8 // cristales dentro de las cuevas
   },
   "Weather": {
-    "GroundFog": 0.5, // 0..3 (0 = sin niebla de suelo)
     "CloudCoverage": -1, // 0..1 (0 = cielo despejado). -1 = segun el planeta (entre 0.25 y 0.75)
     "CloudSpeed": 1.0, // 0..5. Velocidad de las nubes
     "CloudAltitude": 150, // 60..400. Altura de las nubes en bloques

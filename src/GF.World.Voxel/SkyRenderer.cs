@@ -23,7 +23,7 @@ internal sealed class SkyRenderer : IDisposable
     private VertexPositionColor[] _stars = Array.Empty<VertexPositionColor>();
     private short[] _starIdx = Array.Empty<short>();
     private int _starSeed = int.MinValue;
-    private Texture2D? _cloudTex, _fogTex;
+    private Texture2D? _cloudTex;
     private float _cloudCoverage = -1f;
     private readonly VertexPositionColorTexture[] _cloudVerts = new VertexPositionColorTexture[(CloudCells + 1) * (CloudCells + 1)];
     private readonly short[] _cloudIdx = new short[CloudCells * CloudCells * 6];
@@ -73,8 +73,6 @@ internal sealed class SkyRenderer : IDisposable
         if (float.IsNaN(far) || far < 50f) far = 500f;
         float radius = far * 0.98f;
         float lum = Luminance(horizon);
-
-        EnsureCloudTexture();   // también crea el ruido de la niebla de suelo (aunque no haya nubes)
 
         _device.BlendState = BlendState.Opaque;
         _device.DepthStencilState = DepthStencilState.DepthRead;   // solo rellena lo que no tapa nada
@@ -170,24 +168,16 @@ internal sealed class SkyRenderer : IDisposable
 
         float threshold = 1f - Math.Clamp(coverage, 0f, 1f) * 0.8f;   // más cobertura = umbral más bajo
         var level = new Color[CloudTexSize * CloudTexSize];
-        var fogPx = new Color[CloudTexSize * CloudTexSize];   // el mismo ruido, para la niebla de suelo
         for (int y = 0; y < CloudTexSize; y++)
         for (int x = 0; x < CloudTexSize; x++)
         {
             float u = x / (float)CloudTexSize, v = y / (float)CloudTexSize;
             float n = 0.5f * Vn(u, v, 6, 1) + 0.3f * Vn(u, v, 12, 2) + 0.2f * Vn(u, v, 24, 3);
-            byte fb = (byte)(255f * Math.Clamp((n - 0.30f) / 0.40f, 0f, 1f));   // contraste: el ruido de valores rara vez sale de 0,3..0,7
-            fogPx[y * CloudTexSize + x] = new Color(fb, fb, fb, (byte)255);
             float a = MathHelper.SmoothStep(0f, 1f, Math.Clamp((n - threshold + 0.14f) / 0.24f, 0f, 1f));
             float shade = 1f - 0.22f * MathHelper.SmoothStep(0f, 1f, Math.Clamp((n - threshold - 0.05f) / 0.3f, 0f, 1f));   // el centro denso, algo más gris
             int g = (int)(255 * shade);
             level[y * CloudTexSize + x] = new Color(g, g, g, (int)(a * 235f));
         }
-
-        _fogTex?.Dispose();
-        _fogTex = new Texture2D(_device, CloudTexSize, CloudTexSize);
-        _fogTex.SetData(fogPx);
-        Atmosphere.FogNoise = _fogTex;
 
         int levels = 1;
         for (int s = CloudTexSize; s > 1; s >>= 1) levels++;
@@ -265,7 +255,5 @@ internal sealed class SkyRenderer : IDisposable
         _skyFx.Dispose();
         _cloudFx.Dispose();
         _cloudTex?.Dispose();
-        if (ReferenceEquals(Atmosphere.FogNoise, _fogTex)) Atmosphere.FogNoise = null;
-        _fogTex?.Dispose();
     }
 }

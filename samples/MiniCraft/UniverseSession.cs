@@ -66,7 +66,6 @@ public sealed class UniverseSession
         Atmosphere.WindAngle = sky.NextFloat() * MathF.Tau;
         Atmosphere.Stars = weather.Stars;
         Atmosphere.SkyGradient = weather.SkyGradient;
-        Atmosphere.GroundFog = weather.GroundFog;
         Atmosphere.StarSeed = (int)(planet.Address.Seed ^ (planet.Address.Seed >> 32));
         Biomes.ApplyPlanet(planet.Address.Seed);                           // materiales (suelo, roca, madera...) de este planeta
         Flora.ApplyPlanet(planet.Address.Seed);                            // especies de árboles y arbustos de este planeta

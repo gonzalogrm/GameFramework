@@ -45,30 +45,6 @@ float3 SkyLight;          // color de la luz de cielo ahora (día = 1,1,1; noche
 float3 AmbientLight;      // brillo mínimo por canal
 float2 ViewportSize;      // tamaño de la pantalla en píxeles (para el patrón de tramado)
 
-// ---- Niebla de suelo en BANCOS y bruma. La textura FogNoise es el mismo ruido que las nubes (lo crea SkyRenderer). La niebla se acumula a lo largo del rayo
-// de la cámara al píxel con 3 muestras del ruido (a 35 %, 70 % y 100 % del recorrido): así hay bancos cerca, otros detrás de árboles y edificios (lo opaco los
-// tapa), y se nota que están a distintas distancias. Es más espesa por debajo de la altura de los ojos (valles, suelo) y se apaga con la distancia
-// (FogRangeNear..Far) para no desentonar con el terreno lejano, que no la lleva. Constantes ajustables: GroundFog = 0 la quita.
-Texture2D FogNoise;
-sampler2D FogSampler = sampler_state
-{
-	Texture = <FogNoise>;
-	MagFilter = Linear;
-	MinFilter = Linear;
-	MipFilter = Linear;
-	AddressU = Wrap;
-	AddressV = Wrap;
-};
-float2 FogOrigin;   // posición de la cámara en unidades del ruido (fracción de su periodo), con la deriva del viento
-float GroundFog;    // multiplicador de la intensidad (0 = sin niebla de suelo)
-
-static const float FogPeriodInv = 1.0 / 400.0;   // = 1 / Atmosphere.FogPeriod
-static const float FogK = 0.020;                 // densidad óptica por bloque en un banco denso
-static const float FogMax = 0.75;                // fracción máxima de color de niebla que añade
-static const float FogHeightLo = -10.0, FogHeightHi = 10.0;   // altura relativa a los ojos: con 10 bloques por debajo, plena; 10 por encima, nada
-static const float FogRangeNear = 110.0, FogRangeFar = 230.0; // distancia a partir de la cual se apaga
-static const float HazeMax = 0.10;               // bruma de distancia (cuadrática hasta FogEnd)
-
 struct VSInput
 {
 	float4 Position : POSITION0;
@@ -84,7 +60,6 @@ struct VSOutput
 	float4 Clip : TEXCOORD1;       // posición en espacio de recorte (para obtener el píxel y la profundidad en el PS)
 	float Distance : TEXCOORD2;    // distancia horizontal de cuadrado a la cámara
 	float4 Light : TEXCOORD3;
-	float3 RelPos : TEXCOORD4;     // posición respecto a la cámara (para la niebla de suelo)
 };
 
 VSOutput MainVS(in VSInput input)
@@ -105,7 +80,6 @@ VSOutput MainVS(in VSInput input)
 	output.Light = float4(lr, lg, lb, la) / 255.0;
 	output.Clip = output.Position;
 	output.Distance = max(abs(worldPos.x), abs(worldPos.z));
-	output.RelPos = worldPos.xyz;
 	return output;
 }
 
@@ -130,26 +104,8 @@ float4 MainPS(VSOutput input) : COLOR0
 	// Color.rgb = luz de cielo (0..1, teñida por el vidrio), Light.rgb = luz de bloques. Día/noche = SkyLight, sin remallar.
 	float3 lit = max(max(input.Color.rgb * SkyLight, input.Light.rgb), AmbientLight);
 	float4 color = float4(tex.rgb * lit * input.Light.a, tex.a * input.Color.a);   // el alfa del agua viene del color de vértice
-	float d = input.Clip.w;
-	float fog = saturate((d - FogStart) / (FogEnd - FogStart));
-
-	// Niebla de suelo: profundidad óptica = K * distancia * (ruido x altura) medido en 3 puntos del rayo.
-	float3 rel = input.RelPos;
-	float dist = length(rel);
-	float n1 = tex2D(FogSampler, FogOrigin + rel.xz * (0.35 * FogPeriodInv)).r;
-	float n2 = tex2D(FogSampler, FogOrigin + rel.xz * (0.70 * FogPeriodInv)).r;
-	float n3 = tex2D(FogSampler, FogOrigin + rel.xz * FogPeriodInv).r;
-	float h1 = 1.0 - smoothstep(FogHeightLo, FogHeightHi, rel.y * 0.35);
-	float h2 = 1.0 - smoothstep(FogHeightLo, FogHeightHi, rel.y * 0.70);
-	float h3 = 1.0 - smoothstep(FogHeightLo, FogHeightHi, rel.y);
-	float dens = 0.50 * n1 * h1 + 0.35 * n2 * h2 + 0.15 * n3 * h3;
-	float ground = (1.0 - exp(-FogK * GroundFog * dist * dens)) * FogMax;
-	ground *= 1.0 - smoothstep(FogRangeNear, FogRangeFar, dist);
-
-	float haze = saturate(d / FogEnd);
-	haze = haze * haze * HazeMax;
-	float total = 1.0 - (1.0 - fog) * (1.0 - ground) * (1.0 - haze);
-	color.rgb = lerp(color.rgb, FogColor, total);
+	float fog = saturate((input.Clip.w - FogStart) / (FogEnd - FogStart));
+	color.rgb = lerp(color.rgb, FogColor, fog);
 	return color;
 }
 
