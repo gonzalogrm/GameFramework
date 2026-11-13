@@ -17,20 +17,21 @@ public sealed class FogSettings
     public float NoiseScale { get; set; } = 48f;      // 8..500: tamaño típico de un banco
     public float EvolutionSpeed { get; set; } = 0.03f; // 0..1: velocidad a la que evoluciona el ruido
     public float FadeSpeed { get; set; } = 0.6f;      // 0.05..5: lo rapido que aparece y desaparece un bloque
-    public float LodDistance { get; set; } = 0.5f;    // 0.1..1: a partir de esta fraccion del radio cada banco es un solo bloque (mas barato)
+    public float Concealment { get; set; } = 0.12f;   // 0..1: cuanto esconde la niebla (0 = no esconde de los enemigos)
+    public float MinSight { get; set; } = 0.2f;       // 0..1: fraccion minima del alcance de vision de un enemigo en niebla muy densa
     public float HeightVariation { get; set; } = 0.65f; // 0..1: los bancos densos son mas altos (0 = todos de BankHeight)
     public int MaxColumns { get; set; } = 6000;       // 256..60000: capacidad del pool
 
     public FogOptions ToOptions() => new()
     {
         Enabled = Enabled, Radius = Radius, CellSize = CellSize, BankHeight = BankHeight, Threshold = Threshold, MaxAlpha = MaxAlpha,
-        NoiseScale = NoiseScale, EvolutionSpeed = EvolutionSpeed, FadeSpeed = FadeSpeed, HeightVariation = HeightVariation, LodDistance = LodDistance, MaxColumns = MaxColumns,
+        NoiseScale = NoiseScale, EvolutionSpeed = EvolutionSpeed, FadeSpeed = FadeSpeed, HeightVariation = HeightVariation, Concealment = Concealment, MinSight = MinSight, MaxColumns = MaxColumns,
     };
 
     public void CopyFrom(FogSettings o)
     {
         Enabled = o.Enabled; Radius = o.Radius; CellSize = o.CellSize; BankHeight = o.BankHeight; Threshold = o.Threshold; MaxAlpha = o.MaxAlpha;
-        NoiseScale = o.NoiseScale; EvolutionSpeed = o.EvolutionSpeed; FadeSpeed = o.FadeSpeed; HeightVariation = o.HeightVariation; LodDistance = o.LodDistance; MaxColumns = o.MaxColumns;
+        NoiseScale = o.NoiseScale; EvolutionSpeed = o.EvolutionSpeed; FadeSpeed = o.FadeSpeed; HeightVariation = o.HeightVariation; Concealment = o.Concealment; MinSight = o.MinSight; MaxColumns = o.MaxColumns;
     }
 
     public void Validate(List<string> warnings)
@@ -56,7 +57,8 @@ public sealed class FogSettings
         EvolutionSpeed = F(nameof(EvolutionSpeed), EvolutionSpeed, 0f, 1f);
         FadeSpeed = F(nameof(FadeSpeed), FadeSpeed, 0.05f, 5f);
         HeightVariation = F(nameof(HeightVariation), HeightVariation, 0f, 1f);
-        LodDistance = F(nameof(LodDistance), LodDistance, 0.1f, 1f);
+        Concealment = F(nameof(Concealment), Concealment, 0f, 1f);
+        MinSight = F(nameof(MinSight), MinSight, 0f, 1f);
         MaxColumns = I(nameof(MaxColumns), MaxColumns, 256, 60000);
     }
 }

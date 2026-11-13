@@ -83,8 +83,13 @@ public sealed class PlayScene : UiScene
     private LightWatcher _lightWatcher = null!;
     private readonly DayNightCycle _day = new();
     private int _daySpeed;   // 0 normal, 1 rápido, 2 parado
+
+
 	private FogSystem? _fog;
 	private FogRenderer? _fogView;
+	private FogWatcher? _fogWatcher;
+	private static readonly EventKind FogEnter = new("entra_niebla"), FogLeave = new("sale_niebla");
+
 
 	private readonly UniverseSession _session;
     private readonly Planet _planet;
@@ -237,6 +242,7 @@ public sealed class PlayScene : UiScene
 		if (_settings.Fog.Enabled)
 			_fog = new FogSystem(_settings.Fog.ToOptions(), new PerlinNoise(_seed ^ 0xF06),
 				FogGround.For(_world, Blocks.Registry, 0, _settings.WorldHeight - 1));
+		EnemyAi.Visibility = _fog == null ? null : (from, to) => _fog.Sight(from, to);
 		if (_fog != null) _fog.LightQuery = FogLight.For(_renderer.Light);
 		if (_fog != null) _world.CellChanged += (cell, _, _) => _fog.Invalidate(cell.X, cell.Z);
 		if (_fog != null) _fogView = new FogRenderer(Game.GraphicsDevice);
@@ -292,7 +298,9 @@ public sealed class PlayScene : UiScene
         else if (_save?.Player != null) _player.Restore(_save.Player);
         else _player.GiveStarterKit();
         _lightWatcher = new LightWatcher(_events, _renderer.Light, _scale, GameEvents.DarkEnter, GameEvents.LightEnter);
-        _boxes = new BoxRenderer(Game.GraphicsDevice, _scale)
+		if (_fog != null) _fogWatcher = new FogWatcher(_events, _fog, _scale, FogEnter, FogLeave);
+
+		_boxes = new BoxRenderer(Game.GraphicsDevice, _scale)
         {
             FogColor = MiniCraftGame.SkyColor,
             FogStart = fogStart,
@@ -331,6 +339,7 @@ public sealed class PlayScene : UiScene
         _sprites.Dispose();
         _far?.Dispose();
 		_fogView?.Dispose();
+		EnemyAi.Visibility = null;
 	}
 
     private void Save()
@@ -573,7 +582,8 @@ public sealed class PlayScene : UiScene
             _entities.Update(dt, _pos);
             _npcs.Update(dt, _pos);
             _lightWatcher.Update(dt, _pos);
-        }
+			_fogWatcher?.Update(dt, _pos);
+		}
 
         _target = VoxelRaycaster.Raycast(_world, Blocks.Registry, _camera.Position, _camera.Forward, Reach, out var hit) ? hit : null;
 

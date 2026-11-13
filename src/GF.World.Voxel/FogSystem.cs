@@ -32,15 +32,17 @@ public sealed class FogOptions
     public float FadeSpeed { get; set; } = 0.6f;
     /// <summary>0..1: cuánto depende la altura del banco de su densidad. 0 = todos del alto BankHeight; 1 = el borde tenue es plano y solo el centro denso alcanza BankHeight.</summary>
     public float HeightVariation { get; set; } = 0.65f;
-    /// <summary>0.1..1: a partir de esta fracción del radio, cada banco se dibuja como UN solo bloque (mismo aspecto, menos geometría). 1 = nunca.</summary>
-    public float LodDistance { get; set; } = 0.5f;
+    /// <summary>Cuánto esconde la niebla: la visibilidad entre dos puntos es exp(-Concealment x suma de densidad a lo largo del rayo, en bloques). 0 = no esconde.</summary>
+    public float Concealment { get; set; } = 0.12f;
+    /// <summary>Fracción mínima del alcance de visión de un enemigo dentro de niebla muy densa (0 = puede quedar ciego del todo).</summary>
+    public float MinSight { get; set; } = 0.2f;
     public float RefreshInterval { get; set; } = 0.25f;
     /// <summary>Capacidad del pool: columnas de niebla activas a la vez.</summary>
     public int MaxColumns { get; set; } = 6000;
     /// <summary>Tope de búsquedas de suelo por refresco (reparte el coste al moverse).</summary>
-    public int MaxQueriesPerRefresh { get; set; } = 256;
+    public int MaxQueriesPerRefresh { get; set; } = 128;
     /// <summary>Columnas activas cuyo suelo se vuelve a comprobar por refresco (por si se edita el terreno).</summary>
-    public int RecheckPerRefresh { get; set; } = 64;
+    public int RecheckPerRefresh { get; set; } = 32;
 
     public int Layers => Math.Max(1, (int)Math.Ceiling(BankHeight / Math.Max(1, CellSize)));
 }
@@ -146,6 +148,30 @@ public sealed class FogSystem
         int layer = Math.Min(Layers - 1, (int)(h / cs));
         return c.Density * LayerFactor(layer) * LayerReach(c.Density, layer);
     }
+
+    /// <summary>
+    /// Visibilidad (1 = despejado, 0 = opaco) entre dos puntos del mundo a través de la niebla: integra la densidad a lo largo del segmento. Es lo que usa la IA para
+    /// que la niebla ESCONDA (un enemigo ve menos lejos si hay niebla entre él y el objetivo). La niebla no bloquea movimiento ni pathfinding: solo la vista.
+    /// </summary>
+    public float Transmittance(Vec3d from, Vec3d to)
+    {
+        if (!_o.Enabled || _activeCount == 0 || _o.Concealment <= 0f) return 1f;
+        double dx = to.X - from.X, dy = to.Y - from.Y, dz = to.Z - from.Z;
+        double len = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 0.01) return 1f;
+        int steps = Math.Max(1, (int)Math.Ceiling(len / Math.Max(0.5, _o.CellSize * 0.5)));
+        double inv = 1.0 / steps;
+        float stepLen = (float)(len * inv), sum = 0f;
+        for (int i = 0; i < steps; i++)
+        {
+            double t = (i + 0.5) * inv;
+            sum += DensityAt(new Vec3d(from.X + dx * t, from.Y + dy * t, from.Z + dz * t)) * stepLen;
+        }
+        return MathF.Exp(-_o.Concealment * sum);
+    }
+
+    /// <summary>Multiplicador (MinSight..1) del alcance de visión entre dos puntos: la niebla lo reduce, nunca por debajo de MinSight.</summary>
+    public float Sight(Vec3d from, Vec3d to) => Math.Max(_o.MinSight, Transmittance(from, to));
 
     private static long Key(int ix, int iz) => ((long)ix << 32) | (uint)iz;
 

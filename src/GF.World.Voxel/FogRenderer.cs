@@ -65,8 +65,6 @@ public sealed class FogRenderer : IDisposable
 
         int cs = fog.Options.CellSize, layers = fog.Layers;
         float size = cs, radius = cs * 1.8f + layers * cs * 0.5f;
-        float lodR = fog.Options.LodDistance * fog.Options.Radius, lod2 = lodR * lodR;
-        bool lod = fog.Options.LodDistance < 0.999f;
         bool useLight = fog.UsesLight;
         var globalColor = BaseColor * Tint;
         _quads = 0;
@@ -88,22 +86,6 @@ public sealed class FogRenderer : IDisposable
 
             var color = useLight ? BaseColor * c.Light : globalColor;
             float x1 = x0 + size, z1 = z0 + size;
-
-            if (lod && center.LengthSquared() > lod2)
-            {
-                // Lejos: todas las capas en un solo bloque con la opacidad de la pila (1 - producto de transparencias).
-                float keep = 1f;
-                int top = 0;
-                for (int layer = 0; layer < layers; layer++)
-                {
-                    float a = fog.LayerAlpha(in c, layer);
-                    if (a < 0.004f) continue;
-                    keep *= 1f - a;
-                    top = layer + 1;
-                }
-                if (top > 0) Box(x0, x1, y0, y0 + top * cs, z0, z1, color, (int)((1f - keep) * 255f));
-                continue;
-            }
 
             for (int layer = 0; layer < layers; layer++)
             {

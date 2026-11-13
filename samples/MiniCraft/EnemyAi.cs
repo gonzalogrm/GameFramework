@@ -10,12 +10,17 @@ namespace MiniCraft;
 /// Cerebro de los enemigos (entidades con el prototipo "enemigo"). Cerca del jugador (aggro) planifican un camino con A* sobre el terreno
 /// voxel y lo siguen; si ya están a su alcance, atacan. Lejos no hacen nada aquí: NpcSystem los deja vagar (wandering).
 /// El A* es caro, así que cada enemigo replanifica como mucho cada ~1 s y solo se hacen unas pocas búsquedas por frame.
+/// LA NIEBLA ESCONDE: el alcance de visión (aggro) se multiplica por Visibility (entre 0 y 1) según la niebla que haya entre el enemigo y el jugador; a corta
+/// distancia de ataque no influye.
 /// Coordenadas LOCALES al jugador (las de los chunks cargados).
 /// </summary>
 internal sealed class EnemyAi
 {
     private const int PathsPerFrame = 2;
     private const double MaxSpeed = 10.0;
+
+    /// <summary>Multiplicador del alcance de visión entre dos puntos (ojos del enemigo, ojos del jugador). null = sin niebla. Lo asigna PlayScene (FogSystem.Sight).</summary>
+    public static Func<Vec3d, Vec3d, float>? Visibility { get; set; }
 
     private readonly World<ushort> _world;
     private readonly Random _rng = new(1234);
@@ -36,7 +41,12 @@ internal sealed class EnemyAi
         st.AttackCooldown -= dt;
         double dx = player.X - local.X, dz = player.Z - local.Z, dy = player.Y - local.Y;
         double dist = Math.Sqrt(dx * dx + dz * dz);
-        if (target.Hp <= 0f || dist > e.GetFloat("aggro") || Math.Abs(dy) > 10)
+
+        double aggro = e.GetFloat("aggro");
+        if (dist <= aggro && dist > 1.2 && Visibility is { } sight)   // la niebla entre los dos reduce lo lejos que ve
+            aggro *= sight(local + new Vec3d(0, 1.4, 0), player + new Vec3d(0, 1.4, 0));
+
+        if (target.Hp <= 0f || dist > aggro || Math.Abs(dy) > 10)
         {
             st.Path = null;   // fuera de alcance: vuelve a vagar
             return false;
