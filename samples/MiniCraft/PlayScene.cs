@@ -90,6 +90,8 @@ public sealed class PlayScene : UiScene
 	private FogWatcher? _fogWatcher;
 	private static readonly EventKind FogEnter = new("entra_niebla"), FogLeave = new("sale_niebla");
 
+	private GrenadeKit? _grenades;
+	private GasZone? _gas;
 
 	private readonly UniverseSession _session;
     private readonly Planet _planet;
@@ -239,13 +241,15 @@ public sealed class PlayScene : UiScene
             FogStart = fogStart,
             FogEnd = fogEnd,
         };
+
 		if (_settings.Fog.Enabled)
 			_fog = new FogSystem(_settings.Fog.ToOptions(), new PerlinNoise(_seed ^ 0xF06),
-				FogGround.For(_world, Blocks.Registry, 0, _settings.WorldHeight - 1));
-		EnemyAi.Visibility = _fog == null ? null : (from, to) => _fog.Sight(from, to);
+				FogGround.For(_world, Blocks.Registry, 0, _settings.WorldHeight - 1));		
 		if (_fog != null) _fog.LightQuery = FogLight.For(_renderer.Light);
-		if (_fog != null) _world.CellChanged += (cell, _, _) => _fog.Invalidate(cell.X, cell.Z);
+		if (_fog != null) _world.CellChanged += (cell, _, _) => { _fog?.Invalidate(cell.X, cell.Z); _gas?.Invalidate(cell.X, cell.Z); };
 		if (_fog != null) _fogView = new FogRenderer(Game.GraphicsDevice);
+
+		EnemyAi.Visibility = (from, to) => (_fog?.Sight(from, to) ?? 1f) * (_gas?.Sight(from, to) ?? 1f) * (_grenades?.Sight(from, to) ?? 1f);
 
 		_camera.FarPlane = Math.Max(500f, fogRange * 1.2f);
         if (farEnabled) _camera.NearPlane = 0.15f;   // más precisión de profundidad a distancia
@@ -297,8 +301,14 @@ public sealed class PlayScene : UiScene
         if (_universalPlayer != null) _player.Restore(_universalPlayer);
         else if (_save?.Player != null) _player.Restore(_save.Player);
         else _player.GiveStarterKit();
+
+
         _lightWatcher = new LightWatcher(_events, _renderer.Light, _scale, GameEvents.DarkEnter, GameEvents.LightEnter);
+		_gas = GasZone.Create(_settings.Gas, _seed, _world, _renderer.Light, _events, _scale, _player, Game.GraphicsDevice, _settings.WorldHeight);
 		if (_fog != null) _fogWatcher = new FogWatcher(_events, _fog, _scale, FogEnter, FogLeave);
+
+		_grenades = GrenadeKit.Create(_settings.Smoke, _settings.ToxicGrenade, _settings.Spores, _world, 
+            Blocks.Registry, _events, _scale, _player, Game.GraphicsDevice);
 
 		_boxes = new BoxRenderer(Game.GraphicsDevice, _scale)
         {
@@ -339,6 +349,8 @@ public sealed class PlayScene : UiScene
         _sprites.Dispose();
         _far?.Dispose();
 		_fogView?.Dispose();
+		_gas?.Dispose();
+		_grenades?.Dispose();
 		EnemyAi.Visibility = null;
 	}
 
@@ -569,6 +581,19 @@ public sealed class PlayScene : UiScene
         using (_prof.Measure("malla"))
             _renderer.Update(_camera.Position);
 		_fog?.Update(dt, _camera.Position, gameTime.TotalGameTime.TotalSeconds);
+		_gas?.Update(dt, _camera.Position, gameTime.TotalGameTime.TotalSeconds, _pos);
+
+		_grenades?.Update(dt, _pos);
+		if (_grenades != null)
+		{
+			if (input.Pressed("GrenadeType")) ShowMessage("Granada: " + _grenades.CycleType());
+			if (input.Pressed("Grenade"))
+			{
+				var no = _grenades.Throw(_camera.Position, _camera.Forward);
+				if (no != null) ShowMessage(no);
+			}
+		}
+
 		using (_prof.Measure("lejano"))
         {
             if (_far != null)
@@ -647,6 +672,8 @@ public sealed class PlayScene : UiScene
 		{
 			_fogView.Tint = Vector3.Max(_day.SkyLight, _day.Ambient);   // luz del dia
 			_fogView.Draw(_camera, _fog);
+			_gas?.Draw(_camera);
+			_grenades?.Draw(_camera, Vector3.Max(_day.SkyLight, _day.Ambient));
 		}
 		if (_target is { } t) _renderer.DrawOutline(_camera, t.Cell);
         UpdateDebug(gameTime);
@@ -859,6 +886,8 @@ public sealed class PlayScene : UiScene
 					  $"{CityText()}\n" +
 					  $"{_fog?.DebugText ?? "Niebla: desactivada"}\n" +
 					  $"{_fogView?.Stats}\n" +
+					  $"{_gas?.DebugText}\n" +
+					  $"{_grenades?.DebugText}\n" +
 					  $"Luz aqui: {LightText()}\n";
     }
 

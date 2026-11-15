@@ -31,6 +31,8 @@ public sealed class MiniCraftGame : FrameworkGame
         Input.Bind("Universe", Keys.U);                    // mapa del universo: galaxias, sistemas solares y planetas
         Input.Bind("Inventory", Keys.E);                   // inventario y equipamiento
         Input.Bind("Inspect", Keys.I);                      // panel de propiedades del bloque o la entidad apuntados
+        Input.Bind("Grenade", Keys.V);                      // lanzar la granada seleccionada
+        Input.Bind("GrenadeType", Keys.X);                  // cambiar de granada: humo, toxica, esporas
 
         // Objetos (items.json) y después los tipos de entidad (entitytypes.json: prototipos, inventarios y variantes, que los referencian),
         // antes de crear ninguna escena.

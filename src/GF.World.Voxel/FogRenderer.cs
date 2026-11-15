@@ -24,6 +24,8 @@ public sealed class FogRenderer : IDisposable
     public Vector3 BaseColor { get; set; } = new(0.86f, 0.89f, 0.93f);
     /// <summary>Tinte global (día/noche) cuando la niebla NO tiene LightQuery; con LightQuery manda la luz de cada columna y esto se ignora.</summary>
     public Vector3 Tint { get; set; } = Vector3.One;
+    /// <summary>Luz mínima por canal cuando hay LightQuery (un gas puede brillar un poco de noche o en cuevas).</summary>
+    public float MinLight { get; set; }
 
     public int ColumnsDrawn { get; private set; }
     public int CubesDrawn { get; private set; }
@@ -67,6 +69,7 @@ public sealed class FogRenderer : IDisposable
         float size = cs, radius = cs * 1.8f + layers * cs * 0.5f;
         bool useLight = fog.UsesLight;
         var globalColor = BaseColor * Tint;
+        var minLight = new Vector3(MinLight);
         _quads = 0;
 
         for (int i = 0; i < fog.ActiveCount; i++)
@@ -84,7 +87,7 @@ public sealed class FogRenderer : IDisposable
             if (MathF.Abs(Vector3.Dot(center, up)) > df * tanY + radius * 1.6f) continue;
             ColumnsDrawn++;
 
-            var color = useLight ? BaseColor * c.Light : globalColor;
+            var color = useLight ? BaseColor * Vector3.Max(c.Light, minLight) : globalColor;
             float x1 = x0 + size, z1 = z0 + size;
 
             for (int layer = 0; layer < layers; layer++)

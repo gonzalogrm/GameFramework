@@ -17,45 +17,216 @@
 {
   "items": [
     // ======================= prototipos base =======================
-    { "name": "item", "abstract": true, "properties": { "title": "", "category": "misc", "max_stack": 64 } },
+    {
+      "name": "item",
+      "abstract": true,
+      "properties": {
+        "title": "",
+        "category": "misc",
+        "max_stack": 64
+      }
+    },
 
-    { "name": "ingredient", "abstract": true, "parents": ["item"], "properties": { "category": "ingredient" } },
+    {
+      "name": "ingredient",
+      "abstract": true,
+      "parents": [ "item" ],
+      "properties": { "category": "ingredient" }
+    },
 
-    { "name": "consumable", "abstract": true, "parents": ["item"], "properties": { "max_stack": 16 } },
-    { "name": "food",   "abstract": true, "parents": ["consumable"], "properties": { "category": "food", "max_stack": 32 } },
-    { "name": "potion", "abstract": true, "parents": ["consumable"], "properties": { "category": "potion", "max_stack": 8 } },
+    {
+      "name": "consumable",
+      "abstract": true,
+      "parents": [ "item" ],
+      "properties": { "max_stack": 16 }
+    },
+    {
+      "name": "food",
+      "abstract": true,
+      "parents": [ "consumable" ],
+      "properties": {
+        "category": "food",
+        "max_stack": 32
+      }
+    },
+    {
+      "name": "potion",
+      "abstract": true,
+      "parents": [ "consumable" ],
+      "properties": {
+        "category": "potion",
+        "max_stack": 8
+      }
+    },
 
-    { "name": "equipment", "abstract": true, "parents": ["item"], "properties": { "max_stack": 64 } },
-    { "name": "weapon", "abstract": true, "parents": ["equipment"], "properties": { "slot": "hand", "category": "weapon", "attack": 1.0 } },
-    { "name": "armor",  "abstract": true, "parents": ["equipment"], "properties": { "category": "armor", "defense": 1.0 } },
+    {
+      "name": "equipment",
+      "abstract": true,
+      "parents": [ "item" ],
+      "properties": { "max_stack": 64 }
+    },
+    {
+      "name": "weapon",
+      "abstract": true,
+      "parents": [ "equipment" ],
+      "properties": {
+        "slot": "hand",
+        "category": "weapon",
+        "attack": 1.0
+      }
+    },
+    {
+      "name": "armor",
+      "abstract": true,
+      "parents": [ "equipment" ],
+      "properties": {
+        "category": "armor",
+        "defense": 1.0
+      }
+    },
 
     // ======================= ingredientes =======================
-    { "name": "bone",          "parents": ["ingredient"], "title": "Hueso" },
-    { "name": "rotten_flesh",  "parents": ["ingredient"], "title": "Carne podrida" },
-    { "name": "healing_herb",  "parents": ["ingredient"], "title": "Hierba curativa" },
+    {
+      "name": "bone",
+      "parents": [ "ingredient" ],
+      "title": "Hueso"
+    },
+    {
+      "name": "rotten_flesh",
+      "parents": [ "ingredient" ],
+      "title": "Carne podrida"
+    },
+    {
+      "name": "healing_herb",
+      "parents": [ "ingredient" ],
+      "title": "Hierba curativa"
+    },
 
     // ======================= comida y pociones =======================
-    { "name": "apple",         "parents": ["food"],   "title": "Manzana", "properties": { "max_stack": 16, "use_heal": 3.0 } },
-    { "name": "berries",       "parents": ["food"],   "title": "Bayas",   "properties": { "use_heal": 1.0 } },
-    { "name": "health_potion", "parents": ["potion"], "title": "Pocion de vida", "properties": { "use_heal": 10.0 } },
+    {
+      "name": "apple",
+      "parents": [ "food" ],
+      "title": "Manzana",
+      "properties": {
+        "max_stack": 16,
+        "use_heal": 3.0
+      }
+    },
+    {
+      "name": "berries",
+      "parents": [ "food" ],
+      "title": "Bayas",
+      "properties": { "use_heal": 1.0 }
+    },
+    {
+      "name": "health_potion",
+      "parents": [ "potion" ],
+      "title": "Pocion de vida",
+      "properties": { "use_heal": 10.0 }
+    },
 
     // ======================= armas (ranura "hand") =======================
-    { "name": "club",       "parents": ["weapon"], "title": "Garrote",          "properties": { "attack": 1.5 } },
-    { "name": "wood_sword", "parents": ["weapon"], "title": "Espada de madera", "properties": { "attack": 2.0 } },
-    { "name": "iron_sword", "parents": ["weapon"], "title": "Espada de hierro", "properties": { "attack": 4.0 } },
+    {
+      "name": "club",
+      "parents": [ "weapon" ],
+      "title": "Garrote",
+      "properties": { "attack": 1.5 }
+    },
+    {
+      "name": "wood_sword",
+      "parents": [ "weapon" ],
+      "title": "Espada de madera",
+      "properties": { "attack": 2.0 }
+    },
+    {
+      "name": "iron_sword",
+      "parents": [ "weapon" ],
+      "title": "Espada de hierro",
+      "properties": { "attack": 4.0 }
+    },
 
     // Herencia MULTIPLE: hereda de item y de weapon (en ese orden: lo que tengan en comun lo pone weapon). En partida se crean variantes de el
     // (el cuchillo unico de un lider, las armas legendarias...): ver EnemySpawner y LegendaryRegistry.
-    { "name": "knife", "parents": ["item", "weapon"], "title": "Cuchillo", "properties": { "attack": 2.5 } },
+    {
+      "name": "knife",
+      "parents": [ "item", "weapon" ],
+      "title": "Cuchillo",
+      "properties": { "attack": 2.5 }
+    },
 
     // ======================= armaduras =======================
-    { "name": "leather_cap",   "parents": ["armor"], "title": "Gorro de cuero",  "properties": { "slot": "head",  "defense": 1.0 } },
-    { "name": "leather_vest",  "parents": ["armor"], "title": "Peto de cuero",   "properties": { "slot": "chest", "defense": 2.0 } },
-    { "name": "leather_boots", "parents": ["armor"], "title": "Botas de cuero",  "properties": { "slot": "feet",  "defense": 1.0 } },
-    { "name": "iron_helmet",   "parents": ["armor"], "title": "Casco de hierro", "properties": { "slot": "head",  "defense": 2.0 } },
+    {
+      "name": "leather_cap",
+      "parents": [ "armor" ],
+      "title": "Gorro de cuero",
+      "properties": {
+        "slot": "head",
+        "defense": 1.0
+      }
+    },
+    {
+      "name": "leather_vest",
+      "parents": [ "armor" ],
+      "title": "Peto de cuero",
+      "properties": {
+        "slot": "chest",
+        "defense": 2.0
+      }
+    },
+    {
+      "name": "leather_boots",
+      "parents": [ "armor" ],
+      "title": "Botas de cuero",
+      "properties": {
+        "slot": "feet",
+        "defense": 1.0
+      }
+    },
+    {
+      "name": "iron_helmet",
+      "parents": [ "armor" ],
+      "title": "Casco de hierro",
+      "properties": {
+        "slot": "head",
+        "defense": 2.0
+      }
+    },
 
     // ======================= accesorios =======================
-    { "name": "lucky_ring", "parents": ["equipment"], "title": "Anillo de la suerte",
-      "properties": { "slot": "ring", "category": "accessory", "attack": 0.5, "defense": 0.5 } }
+    {
+      "name": "lucky_ring",
+      "parents": [ "equipment" ],
+      "title": "Anillo de la suerte",
+      "properties": {
+        "slot": "ring",
+        "category": "accessory",
+        "attack": 0.5,
+        "defense": 0.5
+      }
+    },
+    {
+      "name": "grenade",
+      "abstract": true,
+      "parents": [ "item" ],
+      "properties": {
+        "category": "grenade",
+        "max_stack": 8
+      }
+    },
+    {
+      "name": "smoke_grenade",
+      "parents": [ "grenade" ],
+      "title": "Granada de humo"
+    },
+    {
+      "name": "toxic_grenade",
+      "parents": [ "grenade" ],
+      "title": "Granada toxica"
+    },
+    {
+      "name": "spore_grenade",
+      "parents": [ "grenade" ],
+      "title": "Granada de esporas"
+    }
   ]
 }

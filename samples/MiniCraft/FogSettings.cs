@@ -6,8 +6,10 @@ namespace MiniCraft;
 /// Bloque "Fog" de worldsettings.json: niebla de bloques semitransparentes sobre el suelo, con un ruido Perlin que evoluciona (ver FogSystem). No cambia el terreno:
 /// se lee siempre del json actual, también al continuar un mundo.
 /// </summary>
-public sealed class FogSettings
+public class FogSettings
 {
+    protected virtual string Section => "Fog";
+
     public bool Enabled { get; set; } = true;
     public float Radius { get; set; } = 64f;          // 16..256: radio alrededor del jugador donde puede haber niebla
     public int CellSize { get; set; } = 2;            // 1..8: lado de cada bloque de niebla
@@ -39,13 +41,13 @@ public sealed class FogSettings
         float F(string name, float v, float min, float max)
         {
             float c = float.IsNaN(v) ? min : Math.Clamp(v, min, max);
-            if (c != v) warnings.Add($"Fog.{name}: {v} fuera de [{min}, {max}], se usa {c}");
+            if (c != v) warnings.Add($"{Section}.{name}: {v} fuera de [{min}, {max}], se usa {c}");
             return c;
         }
         int I(string name, int v, int min, int max)
         {
             int c = Math.Clamp(v, min, max);
-            if (c != v) warnings.Add($"Fog.{name}: {v} fuera de [{min}, {max}], se usa {c}");
+            if (c != v) warnings.Add($"{Section}.{name}: {v} fuera de [{min}, {max}], se usa {c}");
             return c;
         }
         Radius = F(nameof(Radius), Radius, 16f, 256f);

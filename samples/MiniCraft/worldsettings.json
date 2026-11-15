@@ -100,10 +100,54 @@
     "Threshold": 0.50, // 0..0.95 por debajo de este valor del ruido no hay niebla
     "MaxAlpha": 0.25, // 0..1 opacidad maxima
     "NoiseScale": 48, // 8..500 tamaño tipico de un banco
-    "EvolutionSpeed": 0.05, // 0..1 velocidad a la que evoluciona el ruido
-    "FadeSpeed": 0.3, // 0.05..5 rapidez de aparicion y desaparicion
-    "MaxColumns": 5000, // 256..60000 capacidad del pool
+    "EvolutionSpeed": 0.03, // 0..1 velocidad a la que evoluciona el ruido
+    "FadeSpeed": 0.5, // 0.05..5 rapidez de aparicion y desaparicion
+    "MaxColumns": 2000, // 256..60000 capacidad del pool
     "HeightVariation": 0.65
+  },
+  "Gas": {
+    "Enabled": true,
+    "Radius": 32,
+    "CellSize": 1,
+    "BankHeight": 4,
+    "Threshold": 0.75, // mas alto = mas raro
+    "MaxAlpha": 0.2,
+    "NoiseScale": 36,
+    "EvolutionSpeed": 0.03,
+    "FadeSpeed": 0.5,
+    "HeightVariation": 0.65,
+    "MaxColumns": 2000,
+    "Concealment": 0.2,
+    "MinSight": 0.2,
+    "DamagePerSecond": 2.0, // 0..50, a densidad 1
+    "DamageThreshold": 0.15, // densidad minima para dañar
+    "GraceSeconds": 5,
+    "Tint": [ 0.9, 0.22, 0.18 ] // color RGB
+  },
+  "Smoke": {
+    "Enabled": true,
+    "Amount": 300, // 10..5000 gas por granada
+    "InitialRadius": 1.5, // 0..4 radio de los voxels iniciales
+    "FullDensity": 10, // 1..100 concentracion con opacidad total
+    "Spread": 1.0, // 0.1..1 velocidad de expansion
+    "Dissipation": 0.03, // 0.001..0.5 gas que se pierde por segundo
+    "Buoyancy": 0.15, // 0..0.5 cuanto sube
+    "MaxCells": 12000,
+    "MaxAlpha": 0.6,
+    "Concealment": 0.35, // cuanto esconde de los enemigos
+    "MinSight": 0.1,
+    "Tint": [ 0.62, 0.62, 0.64 ],
+    "ToxicGrenade": {
+      "Amount": 250,
+      "DamagePerSecond": 3.0,
+      "Tint": [ 0.9, 0.22, 0.18 ]
+    },
+    "Spores": {
+      "Amount": 400,
+      "DamagePerSecond": 0.7,
+      "Dissipation": 0.015,
+      "Tint": [ 0.55, 0.8, 0.3 ]
+    }
   },
   "Cities": {
     "Chance": 0.8, // probabilidad de ciudad por celda de 1024 bloques (0..1)

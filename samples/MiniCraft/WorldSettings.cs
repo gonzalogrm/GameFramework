@@ -63,6 +63,10 @@ public sealed class WorldSettings
     public float TreeDensityMultiplier { get; set; } = 1f;    // se guarda con el mundo (cada planeta lo modifica según su clima)
     public float PropDensityMultiplier { get; set; } = 1f;    // hierba, flores y rocas (sprites)
     public WeatherSettings Weather { get; set; } = new();   // nubes, estrellas y cielo (se leen siempre del json actual)
+    public ToxicGrenadeSettings ToxicGrenade { get; set; } = new();   // granada toxica (automata celular, rojo, daño)
+    public SporeSettings Spores { get; set; } = new();   // esporas (automata celular, verde, daño lento)
+    public SmokeSettings Smoke { get; set; } = new();   // granadas de humo (automata celular 3D)
+    public GasSettings Gas { get; set; } = new();   // gas toxico rojo con daño (se lee siempre del json actual)
     public FogSettings Fog { get; set; } = new();   // niebla de bloques con ruido Perlin (se lee siempre del json actual)
     public VegetationSettings Vegetation { get; set; } = new();   // multiplicadores por separado de árboles, arbustos, hierbas, hongos, rocas y cristales (se aplican siempre)
 
@@ -129,6 +133,10 @@ public sealed class WorldSettings
         Ruins.ApplyView(other.Ruins);
         Vegetation.CopyFrom(other.Vegetation);
         Fog.CopyFrom(other.Fog);
+        Gas.CopyFrom(other.Gas);
+        Smoke.CopyFrom(other.Smoke);
+        ToxicGrenade.CopyFrom(other.ToxicGrenade);
+        Spores.CopyFrom(other.Spores);
     }
 
     public WorldScale CreateScale() => new(MapWidth, MapHeight, RegionChunksX, RegionChunksZ, ChunkSize, ChunkSize);
@@ -266,6 +274,10 @@ public sealed class WorldSettings
         Vegetation.Validate(warnings);
         Weather.Validate(warnings);
         Fog.Validate(warnings);
+        Gas.Validate(warnings);
+        Smoke.Validate(warnings);
+        ToxicGrenade.Validate(warnings);
+        Spores.Validate(warnings);
         return warnings;
     }
 }
