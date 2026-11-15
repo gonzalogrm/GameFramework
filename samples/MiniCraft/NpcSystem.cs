@@ -209,8 +209,8 @@ public sealed class NpcSystem
                 if (dist < 1.5) _store.NotifyArrived(e);
                 else
                 {
-                    double speed = Math.Min(e.Speed, MaxActiveSpeed);
-                    wishX = (float)(dx / dist * speed);
+					double speed = Math.Min(e.Speed * StatusEffects.SpeedFactor(e), MaxActiveSpeed);
+					wishX = (float)(dx / dist * speed);
                     wishZ = (float)(dz / dist * speed);
                 }
             }

@@ -526,8 +526,10 @@ public sealed class PlayScene : UiScene
         if (input.IsDown("Left")) wish -= right;
         if (wish != Vector3.Zero) wish.Normalize();
         bool sprint = input.IsDown("Sprint");
+
         float speed = _flying ? (sprint ? 40f : 10f) : (sprint ? 40f : 5.5f);
-        _vel.X = wish.X * speed;
+		speed *= StatusEffects.PlayerSpeedFactor;
+		_vel.X = wish.X * speed;
         _vel.Z = wish.Z * speed;
         if (_flying)
         {
@@ -797,7 +799,10 @@ public sealed class PlayScene : UiScene
             block.Set("durability", durability - 1f);
             return;
         }
-        _world.SetCell(cell, Blocks.Air);   // sustituir el bloque borra también sus cambios de instancia
+		ushort brokenId = _world.GetCell(cell);
+		if (brokenId == Blocks.Fungus || brokenId == Blocks.SporeCap)
+			_grenades?.ReleaseSpores(new Vec3d(cell.X + 0.5, cell.Y + 0.5, cell.Z + 0.5));
+		_world.SetCell(cell, Blocks.Air);   // sustituir el bloque borra también sus cambios de instancia
     }
 
     /// <summary>Pasa la hora del día al renderer, al terreno lejano, a la niebla y al fondo. No remalla nada.</summary>

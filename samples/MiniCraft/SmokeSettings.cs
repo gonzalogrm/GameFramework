@@ -24,6 +24,8 @@ public class SmokeSettings
     public float[] Tint { get; set; } = { 0.62f, 0.62f, 0.64f };   // color RGB (0..1)
     public float DamagePerSecond { get; set; }         // 0..50: daño por segundo a densidad 1 (0 = inofensivo, como el humo); ignora la armadura
     public float DamageThreshold { get; set; } = 0.15f; // 0.01..1: densidad minima para dañar y para los eventos de entrar y salir
+    public float SlowFactor { get; set; } = 1f;        // 0.1..1: velocidad de quien esta dentro (1 = no ralentiza; 0.5 = a la mitad)
+    public float SlowSeconds { get; set; } = 2f;       // 0.5..10: lo que dura el efecto tras salir (se renueva mientras sigue dentro)
     public float FuseSeconds { get; set; } = 1.6f;     // 0.2..10: segundos hasta que la granada suelta el gas
     public float ThrowSpeed { get; set; } = 16f;       // 4..24: velocidad de lanzamiento
 
@@ -37,7 +39,7 @@ public class SmokeSettings
     {
         Enabled = o.Enabled; Amount = o.Amount; InitialRadius = o.InitialRadius; FullDensity = o.FullDensity; Spread = o.Spread; Dissipation = o.Dissipation;
         Buoyancy = o.Buoyancy; MaxCells = o.MaxCells; MaxAlpha = o.MaxAlpha; Concealment = o.Concealment; MinSight = o.MinSight; Tint = (float[])o.Tint.Clone();
-        DamagePerSecond = o.DamagePerSecond; DamageThreshold = o.DamageThreshold; FuseSeconds = o.FuseSeconds; ThrowSpeed = o.ThrowSpeed;
+        DamagePerSecond = o.DamagePerSecond; DamageThreshold = o.DamageThreshold; FuseSeconds = o.FuseSeconds; SlowFactor = o.SlowFactor; SlowSeconds = o.SlowSeconds; ThrowSpeed = o.ThrowSpeed;
     }
 
     public void Validate(List<string> warnings)
@@ -63,6 +65,8 @@ public class SmokeSettings
         DamagePerSecond = F(nameof(DamagePerSecond), DamagePerSecond, 0f, 50f);
         DamageThreshold = F(nameof(DamageThreshold), DamageThreshold, 0.01f, 1f);
         FuseSeconds = F(nameof(FuseSeconds), FuseSeconds, 0.2f, 10f);
+        SlowFactor = F(nameof(SlowFactor), SlowFactor, 0.1f, 1f);
+        SlowSeconds = F(nameof(SlowSeconds), SlowSeconds, 0.5f, 10f);
         ThrowSpeed = F(nameof(ThrowSpeed), ThrowSpeed, 4f, 24f);
         if (Tint is not { Length: 3 })
         {

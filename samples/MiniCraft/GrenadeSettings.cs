@@ -29,6 +29,7 @@ public sealed class SporeSettings : SmokeSettings
         Concealment = 0.15f;
         Tint = new[] { 0.55f, 0.8f, 0.3f };
         DamagePerSecond = 0.7f;
+        SlowFactor = 0.55f;   // las esporas ralentizan
     }
 
     protected override string Section => "Spores";

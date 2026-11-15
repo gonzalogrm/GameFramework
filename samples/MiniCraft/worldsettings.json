@@ -146,6 +146,8 @@
       "Amount": 400,
       "DamagePerSecond": 0.7,
       "Dissipation": 0.015,
+      "SlowFactor": 0.5,
+      "SlowSeconds": 3,
       "Tint": [ 0.55, 0.8, 0.3 ]
     }
   },

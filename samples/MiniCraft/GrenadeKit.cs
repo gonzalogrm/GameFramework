@@ -64,6 +64,7 @@ public sealed class GrenadeKit : IDisposable
     public static GrenadeKit? Create(SmokeSettings smoke, SmokeSettings toxic, SmokeSettings spores, World<ushort> world, BlockRegistry blocks, EventHub hub,
         WorldScale scale, PlayerState player, GraphicsDevice device)
     {
+        StatusEffects.Clear();
         GasZone.Register(hub);   // manejadores del daño de gas y de entrar / salir (los mismos que el gas de Perlin)
         var table = blocks.GetTable();
         var shape = world.Shape;
@@ -127,8 +128,21 @@ public sealed class GrenadeKit : IDisposable
         return null;
     }
 
+    /// <summary>Libera una nube de esporas en una posición (un hongo roto): una fracción de lo que suelta una granada de esporas. false si ese tipo está desactivado.</summary>
+    public bool ReleaseSpores(Vec3d position, float fraction = 0.35f)
+    {
+        foreach (var c in _clouds)
+            if (c.ItemName == "spore_grenade")
+            {
+                c.Field.Add(position, c.S.Amount * fraction, c.S.InitialRadius * 0.5f);
+                return true;
+            }
+        return false;
+    }
+
     public void Update(float dt, Vec3d playerPos)
     {
+        StatusEffects.Update(dt);
         foreach (var c in _clouds) c.Field.Update(dt);
         UpdateShots(dt);
         _timer += dt;
@@ -171,14 +185,18 @@ public sealed class GrenadeKit : IDisposable
     {
         foreach (var c in _clouds)
         {
-            if (c.S.DamagePerSecond <= 0f) continue;
+            if (c.S.DamagePerSecond <= 0f && c.S.SlowFactor >= 1f) continue;   // ni daña ni ralentiza: solo esconde
             float thr = c.S.DamageThreshold;
             if (c.Field.ActiveCount == 0) { c.PlayerIn = false; c.Inside.Clear(); continue; }
 
             float dp = MathF.Max(c.Field.DensityAt(playerPos + new Vec3d(0, 0.2, 0)), c.Field.DensityAt(playerPos + new Vec3d(0, 1.3, 0)));
             if (!c.PlayerIn && dp > thr) { c.PlayerIn = true; _hub.Notify($"Entras en {c.Label}"); }
             else if (c.PlayerIn && dp < thr * 0.5f) { c.PlayerIn = false; _hub.Notify($"Sales de {c.Label}"); }
-            if (dp > thr) _hub.Send(_player, new GameEvent(GasZone.Gas, null, (float)(c.S.DamagePerSecond * dp * Interval)));
+            if (dp > thr)
+            {
+                if (c.S.SlowFactor < 1f) StatusEffects.SlowPlayer(Slow(c.S, dp), c.S.SlowSeconds);
+                if (c.S.DamagePerSecond > 0f) _hub.Send(_player, new GameEvent(GasZone.Gas, null, (float)(c.S.DamagePerSecond * dp * Interval)));
+            }
 
             _scratch.Clear();
             _scratch.AddRange(_hub.Entities.Active);   // copia: el daño puede eliminar entidades
@@ -199,7 +217,8 @@ public sealed class GrenadeKit : IDisposable
                         _hub.Send(e, new GameEvent(GasZone.Enter, Amount: d));
                         if (!_hub.Entities.Contains(e)) continue;
                     }
-                    _hub.Send(e, new GameEvent(GasZone.Gas, null, (float)(c.S.DamagePerSecond * d * Interval)));
+                    if (c.S.SlowFactor < 1f) StatusEffects.SlowEntity(e, Slow(c.S, d), c.S.SlowSeconds);
+                    if (c.S.DamagePerSecond > 0f) _hub.Send(e, new GameEvent(GasZone.Gas, null, (float)(c.S.DamagePerSecond * d * Interval)));
                 }
                 else if (inside && d < thr * 0.5f)
                 {
@@ -211,6 +230,9 @@ public sealed class GrenadeKit : IDisposable
             _scratch.Clear();
         }
     }
+
+    /// <summary>Factor de velocidad con la nube a esta densidad: SlowFactor a partir de densidad 0.5, y proporcional por debajo.</summary>
+    private static float Slow(SmokeSettings s, float density) => 1f - (1f - s.SlowFactor) * MathF.Min(1f, density * 2f);
 
     public void Draw(ICamera3D camera, Vector3 tint)
     {

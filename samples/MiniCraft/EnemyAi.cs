@@ -91,7 +91,7 @@ internal sealed class EnemyAi
         double mx = tx - local.X, mz = tz - local.Z, len = Math.Sqrt(mx * mx + mz * mz);
         if (len > 1e-6)
         {
-            double speed = Math.Min(e.Speed, MaxSpeed);
+            double speed = Math.Min(e.Speed * StatusEffects.SpeedFactor(e), MaxSpeed);
             wishX = (float)(mx / len * speed);
             wishZ = (float)(mz / len * speed);
         }

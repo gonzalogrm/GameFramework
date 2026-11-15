@@ -19,6 +19,8 @@ public sealed class FogRenderer : IDisposable
     private readonly VertexPositionColor[] _verts = new VertexPositionColor[MaxQuads * 4];
     private readonly short[] _idx = new short[MaxQuads * 6];
     private int _quads;
+    // Sesgo de profundidad negativo: los cubos de niebla ganan a las caras de los bloques que están en el mismo plano (sin parpadeo y sin encoger los cubos).
+    private readonly RasterizerState _raster = new() { CullMode = CullMode.None, DepthBias = -0.00002f, SlopeScaleDepthBias = -1f };
 
     /// <summary>Color de la niebla a plena luz (blanquecino azulado).</summary>
     public Vector3 BaseColor { get; set; } = new(0.86f, 0.89f, 0.93f);
@@ -63,7 +65,7 @@ public sealed class FogRenderer : IDisposable
 
         _device.BlendState = BlendState.NonPremultiplied;
         _device.DepthStencilState = DepthStencilState.DepthRead;
-        _device.RasterizerState = RasterizerState.CullNone;
+        _device.RasterizerState = _raster;
 
         int cs = fog.Options.CellSize, layers = fog.Layers;
         float size = cs, radius = cs * 1.8f + layers * cs * 0.5f;
@@ -137,5 +139,9 @@ public sealed class FogRenderer : IDisposable
         _quads = 0;
     }
 
-    public void Dispose() => _fx.Dispose();
+    public void Dispose()
+    {
+        _fx.Dispose();
+        _raster.Dispose();
+    }
 }

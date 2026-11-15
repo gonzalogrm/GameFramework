@@ -84,8 +84,8 @@ internal sealed class GuardAi
 
         if (dist > 1e-6)
         {
-            double speed = Math.Min(e.Speed * 1.4, MaxSpeed);   // corren hacia el enemigo
-            wishX = (float)(tx / dist * speed);
+			double speed = Math.Min(e.Speed * 1.4 * StatusEffects.SpeedFactor(e), MaxSpeed); // corren hacia el enemigo
+			wishX = (float)(tx / dist * speed);
             wishZ = (float)(tz / dist * speed);
         }
         return true;
