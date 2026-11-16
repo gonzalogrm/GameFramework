@@ -106,7 +106,7 @@
     "HeightVariation": 0.65
   },
   "Gas": {
-    "Enabled": true,
+    "Enabled": false,
     "Radius": 32,
     "CellSize": 1,
     "BankHeight": 4,
@@ -133,7 +133,7 @@
     "Dissipation": 0.03, // 0.001..0.5 gas que se pierde por segundo
     "Buoyancy": 0.15, // 0..0.5 cuanto sube
     "MaxCells": 12000,
-    "MaxAlpha": 0.6,
+    "MaxAlpha": 0.5,
     "Concealment": 0.35, // cuanto esconde de los enemigos
     "MinSight": 0.1,
     "Tint": [ 0.62, 0.62, 0.64 ],
