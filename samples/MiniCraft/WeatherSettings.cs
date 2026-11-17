@@ -14,14 +14,9 @@ public sealed class WeatherSettings
 
     public void Validate(List<string> warnings)
     {
-        float F(string name, float v, float min, float max)
-        {
-            float c = float.IsNaN(v) ? min : Math.Clamp(v, min, max);
-            if (c != v) warnings.Add($"Weather.{name}: {v} fuera de [{min}, {max}], se usa {c}");
-            return c;
-        }
-        if (CloudCoverage >= 0f) CloudCoverage = F(nameof(CloudCoverage), CloudCoverage, 0f, 1f); else CloudCoverage = -1f;
-        CloudSpeed = F(nameof(CloudSpeed), CloudSpeed, 0f, 5f);
-        CloudAltitude = F(nameof(CloudAltitude), CloudAltitude, 60f, 400f);
+        var v = new SettingsValidator("Weather", warnings);
+        CloudCoverage = CloudCoverage >= 0f ? v.F(nameof(CloudCoverage), CloudCoverage, 0f, 1f) : -1f;
+        CloudSpeed = v.F(nameof(CloudSpeed), CloudSpeed, 0f, 5f);
+        CloudAltitude = v.F(nameof(CloudAltitude), CloudAltitude, 60f, 400f);
     }
 }

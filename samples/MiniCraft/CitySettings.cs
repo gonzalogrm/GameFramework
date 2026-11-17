@@ -23,29 +23,22 @@ public sealed class CitySettings
 
     public void Validate(List<string> warnings)
     {
-        int I(string name, int v, int min, int max)
-        {
-            int c = Math.Clamp(v, min, max);
-            if (c != v) warnings.Add($"Cities.{name}: {v} fuera de [{min}, {max}], se usa {c}");
-            return c;
-        }
-        float chance = float.IsNaN(Chance) ? 0f : Math.Clamp(Chance, 0f, 1f);
-        if (chance != Chance) warnings.Add($"Cities.Chance: {Chance} fuera de [0, 1], se usa {chance}");
-        Chance = chance;
-        MinRadius = I(nameof(MinRadius), MinRadius, 30, 200);
-        MaxRadius = I(nameof(MaxRadius), MaxRadius, 30, 300);
-        if (MaxRadius < MinRadius) { MaxRadius = MinRadius; warnings.Add("Cities.MaxRadius no puede ser menor que MinRadius; se iguala"); }
+        var v = new SettingsValidator("Cities", warnings);
+        Chance = v.F(nameof(Chance), Chance, 0f, 1f);
+        MinRadius = v.I(nameof(MinRadius), MinRadius, 30, 200);
+        MaxRadius = v.I(nameof(MaxRadius), MaxRadius, 30, 300);
+        if (MaxRadius < MinRadius) { MaxRadius = MinRadius; v.Warn("MaxRadius no puede ser menor que MinRadius; se iguala"); }
         SizeFactor = float.IsNaN(SizeFactor) ? 1.6f : Math.Clamp(SizeFactor, 0.5f, 3f);
         int fit = (int)(470 / (1.625 * SizeFactor));   // la ciudad más grande tiene que caber en su celda de 1024
         if (MaxRadius > fit)
         {
-            warnings.Add($"Cities.MaxRadius: {MaxRadius} no cabe con SizeFactor {SizeFactor}, se usa {Math.Max(30, fit)}");
+            v.Warn($"MaxRadius: {MaxRadius} no cabe con SizeFactor {SizeFactor}, se usa {Math.Max(30, fit)}");
             MaxRadius = Math.Max(30, fit);
             if (MinRadius > MaxRadius) MinRadius = MaxRadius;
         }
-        MaxSlope = I(nameof(MaxSlope), MaxSlope, 0, 30);
-        MaxFloors = I(nameof(MaxFloors), MaxFloors, 1, 8);
-        Villagers = I(nameof(Villagers), Villagers, 0, 50);
-        Guards = I(nameof(Guards), Guards, -1, 20);
+        MaxSlope = v.I(nameof(MaxSlope), MaxSlope, 0, 30);
+        MaxFloors = v.I(nameof(MaxFloors), MaxFloors, 1, 8);
+        Villagers = v.I(nameof(Villagers), Villagers, 0, 50);
+        Guards = v.I(nameof(Guards), Guards, -1, 20);
     }
 }

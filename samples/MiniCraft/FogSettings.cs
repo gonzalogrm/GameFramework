@@ -38,29 +38,18 @@ public class FogSettings
 
     public void Validate(List<string> warnings)
     {
-        float F(string name, float v, float min, float max)
-        {
-            float c = float.IsNaN(v) ? min : Math.Clamp(v, min, max);
-            if (c != v) warnings.Add($"{Section}.{name}: {v} fuera de [{min}, {max}], se usa {c}");
-            return c;
-        }
-        int I(string name, int v, int min, int max)
-        {
-            int c = Math.Clamp(v, min, max);
-            if (c != v) warnings.Add($"{Section}.{name}: {v} fuera de [{min}, {max}], se usa {c}");
-            return c;
-        }
-        Radius = F(nameof(Radius), Radius, 16f, 256f);
-        CellSize = I(nameof(CellSize), CellSize, 1, 8);
-        BankHeight = F(nameof(BankHeight), BankHeight, 1f, 32f);
-        Threshold = F(nameof(Threshold), Threshold, 0f, 0.95f);
-        MaxAlpha = F(nameof(MaxAlpha), MaxAlpha, 0f, 1f);
-        NoiseScale = F(nameof(NoiseScale), NoiseScale, 8f, 500f);
-        EvolutionSpeed = F(nameof(EvolutionSpeed), EvolutionSpeed, 0f, 1f);
-        FadeSpeed = F(nameof(FadeSpeed), FadeSpeed, 0.05f, 5f);
-        HeightVariation = F(nameof(HeightVariation), HeightVariation, 0f, 1f);
-        Concealment = F(nameof(Concealment), Concealment, 0f, 1f);
-        MinSight = F(nameof(MinSight), MinSight, 0f, 1f);
-        MaxColumns = I(nameof(MaxColumns), MaxColumns, 256, 60000);
+        var v = new SettingsValidator(Section, warnings);
+        Radius = v.F(nameof(Radius), Radius, 16f, 256f);
+        CellSize = v.I(nameof(CellSize), CellSize, 1, 8);
+        BankHeight = v.F(nameof(BankHeight), BankHeight, 1f, 32f);
+        Threshold = v.F(nameof(Threshold), Threshold, 0f, 0.95f);
+        MaxAlpha = v.F(nameof(MaxAlpha), MaxAlpha, 0f, 1f);
+        NoiseScale = v.F(nameof(NoiseScale), NoiseScale, 8f, 500f);
+        EvolutionSpeed = v.F(nameof(EvolutionSpeed), EvolutionSpeed, 0f, 1f);
+        FadeSpeed = v.F(nameof(FadeSpeed), FadeSpeed, 0.05f, 5f);
+        HeightVariation = v.F(nameof(HeightVariation), HeightVariation, 0f, 1f);
+        Concealment = v.F(nameof(Concealment), Concealment, 0f, 1f);
+        MinSight = v.F(nameof(MinSight), MinSight, 0f, 1f);
+        MaxColumns = v.I(nameof(MaxColumns), MaxColumns, 256, 60000);
     }
 }

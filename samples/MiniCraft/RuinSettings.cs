@@ -53,45 +53,27 @@ public sealed class RuinSettings
 
     public void Validate(List<string> warnings)
     {
-        float F(string name, float v, float min, float max)
-        {
-            float c = float.IsNaN(v) ? min : Math.Clamp(v, min, max);
-            if (c != v) warnings.Add($"Ruins.{name}: {v} fuera de [{min}, {max}], se usa {c}");
-            return c;
-        }
-        int I(string name, int v, int min, int max)
-        {
-            int c = Math.Clamp(v, min, max);
-            if (c != v) warnings.Add($"Ruins.{name}: {v} fuera de [{min}, {max}], se usa {c}");
-            return c;
-        }
-        int[] W(string name, int[]? v, int count)
-        {
-            var r = new int[count];
-            for (int i = 0; i < count; i++) r[i] = v != null && i < v.Length ? Math.Max(0, v[i]) : 1;
-            if (v == null || v.Length != count) warnings.Add($"Ruins.{name}: debe tener {count} pesos; se completan con 1 o se recortan");
-            return r;
-        }
+        var v = new SettingsValidator("Ruins", warnings);
 
-        Chance = F(nameof(Chance), Chance, 0f, 1f);
-        CityWeight = I(nameof(CityWeight), CityWeight, 0, 1000);
-        TempleWeight = I(nameof(TempleWeight), TempleWeight, 0, 1000);
-        StatuesWeight = I(nameof(StatuesWeight), StatuesWeight, 0, 1000);
-        TechWeight = I(nameof(TechWeight), TechWeight, 0, 1000);
+        Chance = v.F(nameof(Chance), Chance, 0f, 1f);
+        CityWeight = v.I(nameof(CityWeight), CityWeight, 0, 1000);
+        TempleWeight = v.I(nameof(TempleWeight), TempleWeight, 0, 1000);
+        StatuesWeight = v.I(nameof(StatuesWeight), StatuesWeight, 0, 1000);
+        TechWeight = v.I(nameof(TechWeight), TechWeight, 0, 1000);
         if (CityWeight + TempleWeight + StatuesWeight + TechWeight == 0) { CityWeight = 40; warnings.Add("Ruins: todos los pesos de clase son 0; se usa CityWeight 40"); }
-        TempleVariants = W(nameof(TempleVariants), TempleVariants, 7);
-        StatuesVariants = W(nameof(StatuesVariants), StatuesVariants, 3);
-        TechVariants = W(nameof(TechVariants), TechVariants, 7);
-        MinDecay = F(nameof(MinDecay), MinDecay, 0.05f, 0.95f);
-        MaxDecay = F(nameof(MaxDecay), MaxDecay, 0.05f, 0.95f);
-        if (MaxDecay < MinDecay) { MaxDecay = MinDecay; warnings.Add("Ruins.MaxDecay no puede ser menor que MinDecay; se iguala"); }
-        SizeFactor = F(nameof(SizeFactor), SizeFactor, 1f, 1.5f);
-        FieldChance = F(nameof(FieldChance), FieldChance, 0f, 1f);
-        FieldMinRadius = I(nameof(FieldMinRadius), FieldMinRadius, 100, 1500);
-        FieldMaxRadius = I(nameof(FieldMaxRadius), FieldMaxRadius, 100, 1500);
-        if (FieldMaxRadius < FieldMinRadius) { FieldMaxRadius = FieldMinRadius; warnings.Add("Ruins.FieldMaxRadius no puede ser menor que FieldMinRadius; se iguala"); }
-        FieldDensity = F(nameof(FieldDensity), FieldDensity, 0f, 1f);
-        EnemyFactor = F(nameof(EnemyFactor), EnemyFactor, 0f, 3f);
-        FieldFindChance = F(nameof(FieldFindChance), FieldFindChance, 0f, 1f);
+        TempleVariants = v.Weights(nameof(TempleVariants), TempleVariants, 7);
+        StatuesVariants = v.Weights(nameof(StatuesVariants), StatuesVariants, 3);
+        TechVariants = v.Weights(nameof(TechVariants), TechVariants, 7);
+        MinDecay = v.F(nameof(MinDecay), MinDecay, 0.05f, 0.95f);
+        MaxDecay = v.F(nameof(MaxDecay), MaxDecay, 0.05f, 0.95f);
+        if (MaxDecay < MinDecay) { MaxDecay = MinDecay; v.Warn("MaxDecay no puede ser menor que MinDecay; se iguala"); }
+        SizeFactor = v.F(nameof(SizeFactor), SizeFactor, 1f, 1.5f);
+        FieldChance = v.F(nameof(FieldChance), FieldChance, 0f, 1f);
+        FieldMinRadius = v.I(nameof(FieldMinRadius), FieldMinRadius, 100, 1500);
+        FieldMaxRadius = v.I(nameof(FieldMaxRadius), FieldMaxRadius, 100, 1500);
+        if (FieldMaxRadius < FieldMinRadius) { FieldMaxRadius = FieldMinRadius; v.Warn("FieldMaxRadius no puede ser menor que FieldMinRadius; se iguala"); }
+        FieldDensity = v.F(nameof(FieldDensity), FieldDensity, 0f, 1f);
+        EnemyFactor = v.F(nameof(EnemyFactor), EnemyFactor, 0f, 3f);
+        FieldFindChance = v.F(nameof(FieldFindChance), FieldFindChance, 0f, 1f);
     }
 }

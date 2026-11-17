@@ -33,20 +33,10 @@ public sealed class GasSettings : FogSettings
     public new void Validate(List<string> warnings)
     {
         base.Validate(warnings);
-        float F(string name, float v, float min, float max)
-        {
-            float c = float.IsNaN(v) ? min : Math.Clamp(v, min, max);
-            if (c != v) warnings.Add($"Gas.{name}: {v} fuera de [{min}, {max}], se usa {c}");
-            return c;
-        }
-        DamagePerSecond = F(nameof(DamagePerSecond), DamagePerSecond, 0f, 50f);
-        DamageThreshold = F(nameof(DamageThreshold), DamageThreshold, 0.01f, 1f);
-        GraceSeconds = F(nameof(GraceSeconds), GraceSeconds, 0f, 120f);
-        if (Tint is not { Length: 3 })
-        {
-            warnings.Add("Gas.Tint debe tener 3 valores (R, G, B); se usa el rojo por defecto");
-            Tint = new[] { 0.9f, 0.22f, 0.18f };
-        }
-        for (int i = 0; i < 3; i++) Tint[i] = Math.Clamp(float.IsNaN(Tint[i]) ? 0f : Tint[i], 0f, 1f);
+        var v = new SettingsValidator(Section, warnings);
+        DamagePerSecond = v.F(nameof(DamagePerSecond), DamagePerSecond, 0f, 50f);
+        DamageThreshold = v.F(nameof(DamageThreshold), DamageThreshold, 0.01f, 1f);
+        GraceSeconds = v.F(nameof(GraceSeconds), GraceSeconds, 0f, 120f);
+        Tint = v.Rgb(Tint, new[] { 0.9f, 0.22f, 0.18f }, "el rojo");
     }
 }

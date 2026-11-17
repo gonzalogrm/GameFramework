@@ -29,24 +29,19 @@ public sealed class VegetationSettings
 
     public void Validate(List<string> warnings)
     {
-        float F(string name, float v, float min, float max)
-        {
-            float c = float.IsNaN(v) ? min : Math.Clamp(v, min, max);
-            if (c != v) warnings.Add($"Vegetation.{name}: {v} fuera de [{min}, {max}], se usa {c}");
-            return c;
-        }
-        Master = F(nameof(Master), Master, 0f, 5f);
-        Trees = F(nameof(Trees), Trees, 0f, 5f);
-        Shrubs = F(nameof(Shrubs), Shrubs, 0f, 5f);
-        SpriteShare = F(nameof(SpriteShare), SpriteShare, 0f, 1f);
-        Grass = F(nameof(Grass), Grass, 0f, 5f);
-        TallGrass = F(nameof(TallGrass), TallGrass, 0f, 5f);
-        Flowers = F(nameof(Flowers), Flowers, 0f, 5f);
-        Bushes = F(nameof(Bushes), Bushes, 0f, 5f);
-        Fungi = F(nameof(Fungi), Fungi, 0f, 5f);
-        Rocks = F(nameof(Rocks), Rocks, 0f, 5f);
-        Crystals = F(nameof(Crystals), Crystals, 0f, 5f);
-        CaveFungi = F(nameof(CaveFungi), CaveFungi, 0f, 5f);
-        CaveCrystals = F(nameof(CaveCrystals), CaveCrystals, 0f, 5f);
+        var v = new SettingsValidator("Vegetation", warnings);
+        Master = v.F(nameof(Master), Master, 0f, 5f);
+        Trees = v.F(nameof(Trees), Trees, 0f, 5f);
+        Shrubs = v.F(nameof(Shrubs), Shrubs, 0f, 5f);
+        SpriteShare = v.F(nameof(SpriteShare), SpriteShare, 0f, 1f);
+        Grass = v.F(nameof(Grass), Grass, 0f, 5f);
+        TallGrass = v.F(nameof(TallGrass), TallGrass, 0f, 5f);
+        Flowers = v.F(nameof(Flowers), Flowers, 0f, 5f);
+        Bushes = v.F(nameof(Bushes), Bushes, 0f, 5f);
+        Fungi = v.F(nameof(Fungi), Fungi, 0f, 5f);
+        Rocks = v.F(nameof(Rocks), Rocks, 0f, 5f);
+        Crystals = v.F(nameof(Crystals), Crystals, 0f, 5f);
+        CaveFungi = v.F(nameof(CaveFungi), CaveFungi, 0f, 5f);
+        CaveCrystals = v.F(nameof(CaveCrystals), CaveCrystals, 0f, 5f);
     }
 }

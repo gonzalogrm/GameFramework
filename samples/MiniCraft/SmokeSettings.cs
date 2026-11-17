@@ -44,35 +44,23 @@ public class SmokeSettings
 
     public void Validate(List<string> warnings)
     {
-        float F(string name, float v, float min, float max)
-        {
-            float c = float.IsNaN(v) ? min : Math.Clamp(v, min, max);
-            if (c != v) warnings.Add($"{Section}.{name}: {v} fuera de [{min}, {max}], se usa {c}");
-            return c;
-        }
-        Amount = F(nameof(Amount), Amount, 10f, 5000f);
-        InitialRadius = F(nameof(InitialRadius), InitialRadius, 0f, 4f);
-        FullDensity = F(nameof(FullDensity), FullDensity, 1f, 100f);
-        Spread = F(nameof(Spread), Spread, 0.1f, 1f);
-        Dissipation = F(nameof(Dissipation), Dissipation, 0.001f, 0.5f);
-        Buoyancy = F(nameof(Buoyancy), Buoyancy, 0f, 0.5f);
-        int cells = Math.Clamp(MaxCells, 256, 60000);
-        if (cells != MaxCells) warnings.Add($"{Section}.MaxCells: {MaxCells} fuera de [256, 60000], se usa {cells}");
-        MaxCells = cells;
-        MaxAlpha = F(nameof(MaxAlpha), MaxAlpha, 0f, 1f);
-        Concealment = F(nameof(Concealment), Concealment, 0f, 2f);
-        MinSight = F(nameof(MinSight), MinSight, 0f, 1f);
-        DamagePerSecond = F(nameof(DamagePerSecond), DamagePerSecond, 0f, 50f);
-        DamageThreshold = F(nameof(DamageThreshold), DamageThreshold, 0.01f, 1f);
-        FuseSeconds = F(nameof(FuseSeconds), FuseSeconds, 0.2f, 10f);
-        SlowFactor = F(nameof(SlowFactor), SlowFactor, 0.1f, 1f);
-        SlowSeconds = F(nameof(SlowSeconds), SlowSeconds, 0.5f, 10f);
-        ThrowSpeed = F(nameof(ThrowSpeed), ThrowSpeed, 4f, 24f);
-        if (Tint is not { Length: 3 })
-        {
-            warnings.Add($"{Section}.Tint debe tener 3 valores (R, G, B); se usa el color por defecto");
-            Tint = new[] { 0.62f, 0.62f, 0.64f };
-        }
-        for (int i = 0; i < 3; i++) Tint[i] = Math.Clamp(float.IsNaN(Tint[i]) ? 0f : Tint[i], 0f, 1f);
+        var v = new SettingsValidator(Section, warnings);
+        Amount = v.F(nameof(Amount), Amount, 10f, 5000f);
+        InitialRadius = v.F(nameof(InitialRadius), InitialRadius, 0f, 4f);
+        FullDensity = v.F(nameof(FullDensity), FullDensity, 1f, 100f);
+        Spread = v.F(nameof(Spread), Spread, 0.1f, 1f);
+        Dissipation = v.F(nameof(Dissipation), Dissipation, 0.001f, 0.5f);
+        Buoyancy = v.F(nameof(Buoyancy), Buoyancy, 0f, 0.5f);
+        MaxCells = v.I(nameof(MaxCells), MaxCells, 256, 60000);
+        MaxAlpha = v.F(nameof(MaxAlpha), MaxAlpha, 0f, 1f);
+        Concealment = v.F(nameof(Concealment), Concealment, 0f, 2f);
+        MinSight = v.F(nameof(MinSight), MinSight, 0f, 1f);
+        DamagePerSecond = v.F(nameof(DamagePerSecond), DamagePerSecond, 0f, 50f);
+        DamageThreshold = v.F(nameof(DamageThreshold), DamageThreshold, 0.01f, 1f);
+        FuseSeconds = v.F(nameof(FuseSeconds), FuseSeconds, 0.2f, 10f);
+        SlowFactor = v.F(nameof(SlowFactor), SlowFactor, 0.1f, 1f);
+        SlowSeconds = v.F(nameof(SlowSeconds), SlowSeconds, 0.5f, 10f);
+        ThrowSpeed = v.F(nameof(ThrowSpeed), ThrowSpeed, 4f, 24f);
+        Tint = v.Rgb(Tint, new[] { 0.62f, 0.62f, 0.64f }, "el color");
     }
 }
