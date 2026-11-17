@@ -9,7 +9,6 @@ namespace MiniCraft;
 /// </summary>
 internal static class StatueSites
 {
-    private static int Mod(int a, int b) => ((a % b) + b) % b;
     private static double Dist(int x, int z, int cx, int cz) { double dx = x - cx, dz = z - cz; return Math.Sqrt(dx * dx + dz * dz); }
 
     public static ushort Block(City c, int variant, int qx, int qz, int r, int padR) =>
@@ -37,7 +36,7 @@ internal static class StatueSites
         }
         if (!paved) return natural;
         ulong h = Hashing.Combine(c.Id, wx, 0xC4AB, wz);
-        if ((h >> 40) * (1.0 / (1 << 24)) < c.Decay * 0.5) return (h & 1) == 0 ? natural : Blocks.Dirt;
+        if (Hashing.UnitD(h) < c.Decay * 0.5) return (h & 1) == 0 ? natural : Blocks.Dirt;
         return c.Style.Plaza;
     }
 
@@ -56,7 +55,7 @@ internal static class StatueSites
         {
             if (Math.Abs(qx) >= 3 && r <= 8) return P;
             if (r == 9) return P;
-            if (r == 10 && Mod(qx, 2) == 0) return P;
+            if (r == 10 && IntMath.Mod(qx, 2) == 0) return P;
         }
 
         int count = (2 * l - 20) / 8;   // estatuas por fila
@@ -84,7 +83,7 @@ internal static class StatueSites
     private static int State(City c, int i, double entireBase)
     {
         ulong h = Hashing.Combine(c.Id, i, 0x57B, 1);
-        double u = (h >> 40) * (1.0 / (1 << 24)), p0 = entireBase * (1 - c.Decay) + 0.05;
+        double u = Hashing.UnitD(h), p0 = entireBase * (1 - c.Decay) + 0.05;
         return u < p0 ? 0 : u < p0 + 0.25 ? 1 : u < p0 + 0.5 ? 2 : 3;
     }
 
@@ -106,7 +105,7 @@ internal static class StatueSites
                 bool door = qz < 0 && Math.Abs(qx) <= 1 && r <= 3;
                 if (Math.Abs(d - 5) <= 0.7 && !door) return P;
                 if (Math.Abs(qx) <= 1 && Math.Abs(qz) <= 1) return r == 1 ? P : (qx == 0 && qz == 0 && r == 2 ? Blocks.Dirt : Blocks.Air);   // altar con una urna
-                if (Math.Abs(d - 3) <= 0.5 && Mod(qx + qz, 2) == 0) return StatueShapes.Urn(0, 0, r, P);                                    // urnas en el anillo interior
+                if (Math.Abs(d - 3) <= 0.5 && IntMath.Mod(qx + qz, 2) == 0) return StatueShapes.Urn(0, 0, r, P);                                    // urnas en el anillo interior
             }
             else if (r <= 12)
             {
@@ -126,10 +125,10 @@ internal static class StatueSites
         if (Math.Abs(d - (padR - 1)) <= 0.7)   // muro bajo con puertas
             return !(Math.Abs(qx) <= 1 || Math.Abs(qz) <= 1) && r <= 2 ? P : Blocks.Air;
 
-        if (d < padR - 2 && d > 8 && Mod(qx, 3) == 0 && Mod(qz, 3) == 0 && Math.Abs(qx) > 1 && Math.Abs(qz) > 1)   // campo de urnas
+        if (d < padR - 2 && d > 8 && IntMath.Mod(qx, 3) == 0 && IntMath.Mod(qz, 3) == 0 && Math.Abs(qx) > 1 && Math.Abs(qz) > 1)   // campo de urnas
         {
             ulong h = Hashing.Combine(c.Id, qx, 0x5E9, qz);
-            double u = (h >> 40) * (1.0 / (1 << 24));
+            double u = Hashing.UnitD(h);
             if (u < 0.12) return r <= 4 ? P : Blocks.Air;                   // monumento
             if (u < 0.85) return StatueShapes.Urn(0, 0, r, P);               // urna
         }

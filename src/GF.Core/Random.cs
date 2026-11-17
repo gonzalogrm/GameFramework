@@ -21,6 +21,12 @@ public static class Hashing
         h = Mix(h + (ulong)(uint)z);
         return h;
     }
+
+    /// <summary>Hash a float en [0, 1) usando sus 24 bits altos. Es el (h >> 40) * (1f / (1 << 24)) que se repetía por todo el código.</summary>
+    public static float Unit(ulong hash) => (hash >> 40) * (1f / (1 << 24));
+
+    /// <summary>Igual que Unit pero en double (mismos 24 bits: mismos resultados que el (h >> 40) * (1.0 / (1 << 24)) de ciudades y ruinas).</summary>
+    public static double UnitD(ulong hash) => (hash >> 40) * (1.0 / (1 << 24));
 }
 
 public interface IRandom
@@ -46,6 +52,6 @@ public sealed class SplitMixRandom : IRandom
 
     public int Next(int max) => max <= 0 ? 0 : (int)(NextU64() % (ulong)max);
     public int Next(int min, int max) => min + Next(max - min);
-    public float NextFloat() => (NextU64() >> 40) * (1f / (1 << 24));
+    public float NextFloat() => Hashing.Unit(NextU64());
     public bool Chance(float probability) => NextFloat() < probability;
 }

@@ -67,7 +67,7 @@ internal static class StatueShapes
         if (s == 2 && r <= 2 && (ax >= 3 || az >= 3) && ax <= 5 && az <= 5)
         {
             ulong h = Hashing.Combine(seed, dx, 0x57D, dz);
-            if ((h >> 40) * (1.0 / (1 << 24)) < 0.3) return P;
+            if (Hashing.UnitD(h) < 0.3) return P;
         }
         return Blocks.Air;
     }

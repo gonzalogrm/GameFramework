@@ -20,6 +20,8 @@ public static class IntMath
         return q;
     }
 
+    /// <summary>Módulo siempre en [0, b) (el % de C# da negativos con a negativo). Sustituye a los Mod privados repetidos.</summary>
+    public static int Mod(int a, int b) => ((a % b) + b) % b;
     public static int FloorToInt(float v) => (int)MathF.Floor(v);
     public static int FloorToInt(double v) => (int)Math.Floor(v);
 }

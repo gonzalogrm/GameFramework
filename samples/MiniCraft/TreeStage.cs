@@ -58,7 +58,7 @@ public sealed class TreeStage : IGenerationStage<ushort>
             int wrapped = _scale.WrapX(wx);
             ulong ht = Hashing.Combine(ctx.Seed, wrapped, 0x7EE, wz);
             ulong hs = Hashing.Combine(ctx.Seed, wrapped, 0x5B7, wz);
-            float ut = (ht >> 40) * (1f / (1 << 24)), us = (hs >> 40) * (1f / (1 << 24));
+            float ut = Hashing.Unit(hs), us = (hs >> 40) * (1f / (1 << 24));
             bool treeCandidate = ut < maxTree, shrubCandidate = us < maxShrub;
             if (!treeCandidate && !shrubCandidate) continue;   // descarte barato antes de mirar el terreno
 

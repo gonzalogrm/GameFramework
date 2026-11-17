@@ -48,12 +48,10 @@ internal static class RuinSites
         _ => 13,
     };
 
-    private static int Mod(int a, int b) => ((a % b) + b) % b;
-
     private static double U(City c, int a, int b, int salt)
     {
         ulong h = Hashing.Combine(c.Id, a, salt, b);
-        return (h >> 40) * (1.0 / (1 << 24));
+        return Hashing.UnitD(h);
     }
 
     /// <summary>El templo se gira (0 a 3 cuartos de vuelta) según la ciudad: la entrada no mira siempre al mismo lado.</summary>
@@ -208,7 +206,7 @@ internal static class RuinSites
     {
         if (c.Style.Name is "desierto" or "nevada") return Blocks.Air;
         ulong h = Hashing.Combine(c.Id, wx, 0xF11, wz);
-        float u = (h >> 40) * (1f / (1 << 24));
+        float u = Hashing.Unit(h);
         if (u < 0.04f) return Blocks.GrassTuft;
         if (u < 0.06f) return Blocks.TallGrass;
         if (u < 0.075f) return ((h >> 4) & 1) == 0 ? Blocks.FlowerRed : Blocks.FlowerYellow;
@@ -240,7 +238,7 @@ internal static class RuinSites
         }
 
         // Avenida de columnas hacia la entrada (-Z): pares de columnas rotas.
-        if (Math.Abs(qx) == 3 && qz < -(w + 2) && qz >= -(w + 2 + Approach) && Mod(-qz - (w + 2), 4) == 1)
+        if (Math.Abs(qx) == 3 && qz < -(w + 2) && qz >= -(w + 2 + Approach) && IntMath.Mod(-qz - (w + 2), 4) == 1)
         {
             int ph = 3 + (int)(U(c, qx, qz, 0xC01) * 3);
             return r <= ph ? st.Plaza : Blocks.Air;
@@ -268,7 +266,7 @@ internal static class RuinSites
         {
             if (qz == pc) return ax <= 1 && rr >= 2 && rr <= 4 ? Blocks.Air : st.Plaza;   // muro del fondo con un nicho
             if (qz == -pc && ax <= 1) return Blocks.Air;                                   // entrada
-            bool column = (onX && Mod(qx + pc, 3) == 0) || (onZ && Mod(qz + pc, 3) == 0) || (ax == pc && az == pc);
+            bool column = (onX && IntMath.Mod(qx + pc, 3) == 0) || (onZ && IntMath.Mod(qz + pc, 3) == 0) || (ax == pc && az == pc);
             return column ? st.Plaza : Blocks.Air;
         }
         if (pc >= 6 && ax == 3 && az == 3) return st.Plaza;                                // columnas interiores
@@ -322,16 +320,16 @@ internal static class RuinSites
         int bw = Math.Max(6, s / 2), z0 = s / 5, z1 = z0 + Math.Max(8, s / 2);
         if (Math.Abs(qx) <= bw && qz >= z0 && qz <= z1)
         {
-            if (r == 7) return Mod(qz - z0, 6) == 3 && Math.Abs(qx) <= bw - 2 ? Blocks.GlassBlue : st.Plaza;   // techo con tragaluces
+            if (r == 7) return IntMath.Mod(qz - z0, 6) == 3 && Math.Abs(qx) <= bw - 2 ? Blocks.GlassBlue : st.Plaza;   // techo con tragaluces
             if (r > 7) return Blocks.Air;
             bool wallX = Math.Abs(qx) == bw, wallZ = qz == z0 || qz == z1;
             if (wallX || wallZ)
             {
                 if (qz == z0 && Math.Abs(qx) <= 2 && r <= 4) return Blocks.Air;   // portón
-                bool window = r >= 3 && r <= 4 && !(wallX && wallZ) && Mod(wallX ? qz : qx, 2) == 0;
+                bool window = r >= 3 && r <= 4 && !(wallX && wallZ) && IntMath.Mod(wallX ? qz : qx, 2) == 0;
                 return window ? Blocks.GlassBlue : st.Plaza;
             }
-            if (Mod(qz - z0, 4) == 2 && Math.Abs(qx) < bw - 1 && Mod(qx, 2) == 0)   // consolas con pantalla
+            if (IntMath.Mod(qz - z0, 4) == 2 && Math.Abs(qx) < bw - 1 && IntMath.Mod(qx, 2) == 0)   // consolas con pantalla
             {
                 if (r <= 2) return st.Plaza;
                 if (r == 3) return Blocks.GlassBlue;
@@ -340,7 +338,7 @@ internal static class RuinSites
         }
 
         // paneles solares: mesas de un bloque con un cristal encima
-        if (qx >= -s + 3 && qx <= -4 && qz >= -s + 3 && qz <= -3 && Mod(qx, 2) == 0 && Mod(qz, 3) == 0)
+        if (qx >= -s + 3 && qx <= -4 && qz >= -s + 3 && qz <= -3 && IntMath.Mod(qx, 2) == 0 && IntMath.Mod(qz, 3) == 0)
         {
             if (r == 1) return st.Plaza;
             if (r == 2) return Blocks.GlassBlue;

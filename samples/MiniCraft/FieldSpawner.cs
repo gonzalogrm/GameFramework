@@ -52,7 +52,7 @@ public sealed class FieldSpawner
     {
         var region = StatueFields.RegionAt(_seed, _scale, px, pz, out double f);
         if (region == null) return;
-        if ((h >> 40) * (1.0 / (1 << 24)) >= _settings.FieldFindChance * Math.Clamp(f / 0.3, 0.0, 1.0)) return;   // no todas las celdas tienen un hallazgo
+        if (Hashing.UnitD(h) >= _settings.FieldFindChance * Math.Clamp(f / 0.3, 0.0, 1.0)) return;   // no todas las celdas tienen un hallazgo
         if ((uint)pz >= (uint)_scale.HeightBlocks || _planner.IsReserved(px, pz)) return;
         int g = _columns.HeightAt(px, pz);
         if (g <= _sea + 1 || !TryId("ruin_marker", out ushort markerId)) return;

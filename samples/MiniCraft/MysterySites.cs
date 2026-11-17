@@ -101,7 +101,7 @@ internal static class MysterySites
             {
                 int gw = ((gx % cellsX) + cellsX) % cellsX;
                 ulong h = Hashing.Combine(ctx.Seed, gw, 0x5173, gz);
-                if ((h >> 40) * (1f / (1 << 24)) >= 0.22f * density) continue;
+                if (Hashing.UnitD(h) >= 0.22f * density) continue;
 
                 int cx = gx * Cell + Margin + (int)((h >> 8) % (ulong)(Cell - 2 * Margin));
                 int cz = gz * Cell + Margin + (int)((h >> 24) % (ulong)(Cell - 2 * Margin));

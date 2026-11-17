@@ -196,7 +196,7 @@ public sealed class CityPlanner
             {
                 // Hacia fuera la reserva se va aclarando al azar: los árboles y las plantas del entorno se acercan poco a poco, sin una línea recta.
                 ulong h = Hashing.Combine(_seed, _scale.WrapX(wx), 0xFADE, wz);
-                if ((h >> 40) * (1f / (1 << 24)) < 1.0 - (over - 1) / (SkirtWidth - 1)) return true;
+                if (Hashing.UnitD(h) < 1.0 - (over - 1) / (SkirtWidth - 1)) return true;
             }
         }
         return false;

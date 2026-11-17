@@ -32,7 +32,7 @@ public sealed class CellularAutomataCaveStage<TCell> : IGenerationStage<TCell> w
         for (int x = 0; x < w; x++)
         {
             ulong hash = Hashing.Combine(ctx.Seed, origin.X + x - pad, origin.Y + y - pad, 0x5EED);
-            cur[y * w + x] = (hash >> 40) * (1f / (1 << 24)) < _fill;
+            cur[y * w + x] = Hashing.UnitD(hash) < _fill;
         }
 
         for (int it = 0; it < _iterations; it++)

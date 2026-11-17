@@ -104,8 +104,8 @@ public sealed class CityStage : IGenerationStage<ushort>
                 // Pocas farolas: solo en la mitad de las calles de la cuadrícula, con la separación del tipo de ciudad (y nunca en los cruces).
                 int sp = city.Type.LampSpacing;
                 post = !ruin && sp > 0 && !(ax.Street && az.Street) &&
-                       ((ax.Street && ax.Off == 0 && (ax.Index & 1) == 0 && Mod(rz, sp) == 0) ||
-                        (az.Street && az.Off == 0 && (az.Index & 1) == 0 && Mod(rx, sp) == 0));
+                       ((ax.Street && ax.Off == 0 && (ax.Index & 1) == 0 && IntMath.Mod(rz, sp) == 0) ||
+                        (az.Street && az.Off == 0 && (az.Index & 1) == 0 && IntMath.Mod(rx, sp) == 0));
                 extra = post ? 3 : 0;
             }
             else
@@ -119,7 +119,7 @@ public sealed class CityStage : IGenerationStage<ushort>
                     lx = rx - lot.X0; lz = rz - lot.Z0;
                     extra = Extra(lot);
                     if (lot.Kind == Kind.Well && lx == lot.Lw / 2 && lz == lot.Ld / 2) surface = Blocks.Water;   // el agua del pozo
-                    if (lot.Kind == Kind.Field && Mod(lz, 3) == 1) surface = Blocks.Dirt;                         // surcos del huerto
+                    if (lot.Kind == Kind.Field && IntMath.Mod(lz, 3) == 1) surface = Blocks.Dirt;                         // surcos del huerto
                 }
             }
 
@@ -127,7 +127,7 @@ public sealed class CityStage : IGenerationStage<ushort>
             if (street && !plazaSq && fade > 0.35)
             {
                 ulong fh = Hashing.Combine(city.Id, wx, 0xFAD1, wz);
-                if ((fh >> 40) * (1f / (1 << 24)) < (fade - 0.35) / 0.65)
+                if (Hashing.UnitD(fh) < (fade - 0.35) / 0.65)
                 {
                     ushort nt = Biomes.Surface[_columns.BiomeAt(wx, wz)];
                     surface = nt == Blocks.Stone ? Blocks.Grass : nt;
@@ -138,7 +138,7 @@ public sealed class CityStage : IGenerationStage<ushort>
             if (ruin && (street || plazaSq) && !water)
             {
                 ulong ch = Hashing.Combine(city.Id, wx, 0xC4AC, wz);
-                if ((ch >> 40) * (1f / (1 << 24)) < city.Decay * 0.6)
+                if (Hashing.UnitD(ch) < city.Decay * 0.6)
                 {
                     ushort nt2 = Biomes.Surface[_columns.BiomeAt(wx, wz)];
                     surface = (ch & 1) == 0 ? (nt2 == Blocks.Stone ? Blocks.Grass : nt2) : Blocks.Dirt;
@@ -246,7 +246,7 @@ public sealed class CityStage : IGenerationStage<ushort>
     private static double Un(City c, int a, int b, int salt)
     {
         ulong h = Hashing.Combine(c.Id, a, salt, b);
-        return (h >> 40) * (1.0 / (1 << 24));
+        return Hashing.UnitD(h);
     }
 
     /// <summary>El edificio tal como era, pero sin cristales (se rompieron: queda el hueco de la ventana) y sin lámparas.</summary>
@@ -334,9 +334,6 @@ public sealed class CityStage : IGenerationStage<ushort>
         if (plotHash != 0 && (plotHash >> 56) / 255.0 < c.Decay * 0.5) cap *= 0.25;
         return r <= (int)Math.Floor(cap) ? id : Blocks.Air;
     }
-
-    private static int Mod(int a, int b) => ((a % b) + b) % b;
-
     // ------------------------------------------------------------------ calles de la cuadrícula
 
     /// <summary>Desplazamiento (±Jitter) de la calle k de un eje: las calles no forman una cuadrícula perfecta, y las manzanas salen de anchos distintos.</summary>
@@ -670,7 +667,7 @@ public sealed class CityStage : IGenerationStage<ushort>
     {
         if (r != 1 || c.Style.Name is "desierto" or "nevada") return Blocks.Air;
         ulong ph = Hashing.Combine(c.Id, wx, 0xF10, wz);
-        float u = (ph >> 40) * (1f / (1 << 24));
+        float u = Hashing.Unit(ph);
         if (u < density * 0.5f) return Blocks.GrassTuft;
         if (u < density * 0.7f) return Blocks.TallGrass;
         if (u < density) return ((ph >> 4) & 1) == 0 ? Blocks.FlowerRed : Blocks.FlowerYellow;
@@ -690,9 +687,9 @@ public sealed class CityStage : IGenerationStage<ushort>
     /// <summary>Huerto: franjas de cultivo (hierba alta) entre surcos de tierra, con un borde libre de un bloque.</summary>
     private static ushort FieldBlock(City c, Lot l, int lx, int lz, int r, int wx, int wz)
     {
-        if (r != 1 || lx < 1 || lz < 1 || lx >= l.Lw - 1 || lz >= l.Ld - 1 || Mod(lz, 3) == 1) return Blocks.Air;
+        if (r != 1 || lx < 1 || lz < 1 || lx >= l.Lw - 1 || lz >= l.Ld - 1 || IntMath.Mod(lz, 3) == 1) return Blocks.Air;
         ulong ph = Hashing.Combine(c.Id, wx, 0xF1E, wz);
-        return ((ph >> 40) * (1f / (1 << 24))) < 0.8f ? Blocks.TallGrass : Blocks.GrassTuft;
+        return Hashing.UnitD(ph) < 0.8f ? Blocks.TallGrass : Blocks.GrassTuft;
     }
 
     /// <summary>Puesto de mercado: 5 x 3, cuatro postes, mostrador delante, tejadillo y una lámpara.</summary>

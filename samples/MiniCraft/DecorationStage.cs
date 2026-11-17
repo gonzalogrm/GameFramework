@@ -67,7 +67,7 @@ public sealed class DecorationStage : IGenerationStage<ushort>
         {
             int wx = o.X + x, wz = o.Z + z;
             ulong h = Hashing.Combine(ctx.Seed, _scale.WrapX(wx), 0xDEC0, wz);
-            float u = (h >> 40) * (1f / (1 << 24));
+            float u = Hashing.Unit(h);
             if (u >= MaxProbability * mult * boost) continue;   // descarte barato antes de mirar el terreno
 
             if (_planner.IsReserved(wx, wz)) continue;  // zona de ciudad

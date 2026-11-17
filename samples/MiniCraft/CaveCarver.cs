@@ -260,7 +260,7 @@ public static class CaveCarver
             if (floor)
             {
                 ulong h = Hashing.Combine(seed, wx, wy, wz);
-                float r = (h >> 40) * (1f / (1 << 24));
+                float r = Hashing.Unit(h);
                 if (r < crystalRate) Stack(cells, idx, stride, sy - 1 - y, 1 + (int)((h >> 8) % 3UL), Blocks.Crystal);
                 else if (r < crystalRate + fungusRate)
                 {
@@ -272,7 +272,7 @@ public static class CaveCarver
             if (ceiling && cells[idx] == Blocks.Air)
             {
                 ulong h = Hashing.Combine(seed ^ 0x5A5A, wx, wy, wz);
-                float r = (h >> 40) * (1f / (1 << 24));
+                float r = Hashing.Unit(h);
                 if (r < 0.02f) Stack(cells, idx, -stride, y, 1 + (int)((h >> 8) % 3UL), deep);
                 else if (r < 0.02f + 0.003f * crystalMult) Stack(cells, idx, -stride, y, 1 + (int)((h >> 8) % 2UL), Blocks.Crystal);
             }

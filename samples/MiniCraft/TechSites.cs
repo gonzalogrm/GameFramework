@@ -9,7 +9,6 @@ namespace MiniCraft;
 /// </summary>
 internal static class TechSites
 {
-    private static int Mod(int a, int b) => ((a % b) + b) % b;
     private static bool InBox(int x, int z, int x0, int z0, int x1, int z1) => x >= x0 && x <= x1 && z >= z0 && z <= z1;
     private static double Dist(int x, int z, int cx, int cz) { double dx = x - cx, dz = z - cz; return Math.Sqrt(dx * dx + dz * dz); }
 
@@ -31,7 +30,7 @@ internal static class TechSites
     {
         if (variant == 3)
         {
-            if (qz == 0 && Math.Abs(qx) <= s - 6 && Mod(qx, 8) < 4) return Blocks.Sand;   // línea central de la pista, a trazos
+            if (qz == 0 && Math.Abs(qx) <= s - 6 && IntMath.Mod(qx, 8) < 4) return Blocks.Sand;   // línea central de la pista, a trazos
             return AirportPaved(qx, qz, s) ? Paved(c, wx, wz, natural) : natural;
         }
         if (variant == 4)
@@ -45,7 +44,7 @@ internal static class TechSites
     private static ushort Paved(City c, int wx, int wz, ushort natural)
     {
         ulong h = Hashing.Combine(c.Id, wx, 0xC4AB, wz);
-        double u = (h >> 40) * (1.0 / (1 << 24));
+        double u = Hashing.UnitD(h);
         if (u < c.Decay * 0.5) return (h & 1) == 0 ? natural : Blocks.Dirt;   // el firme está agrietado
         return c.Style.Plaza;
     }
@@ -91,7 +90,7 @@ internal static class TechSites
             if (wallX || wallZ)
             {
                 if (qz == -6 && Math.Abs(qx + 1) <= 1 && r <= 4) return Blocks.Air;   // portón
-                bool window = r >= 3 && r <= 4 && !(wallX && wallZ) && Mod(wallX ? qz : qx, 2) == 0;
+                bool window = r >= 3 && r <= 4 && !(wallX && wallZ) && IntMath.Mod(wallX ? qz : qx, 2) == 0;
                 return window ? Blocks.Air : P;
             }
             if ((qz == -2 || qz == 2) && qx >= -3 && qx <= 1 && r <= 2) return P;   // turbinas
@@ -146,7 +145,7 @@ internal static class TechSites
 
         if (qz == -3 && qx >= -1 && qx <= s - 5)   // tubería elevada sobre postes
         {
-            if (r <= 2 && Mod(qx, 5) == 0) return P;
+            if (r <= 2 && IntMath.Mod(qx, 5) == 0) return P;
             if (r == 3) return P;
         }
 
@@ -158,7 +157,7 @@ internal static class TechSites
             if (wallX || wallZ)
             {
                 if (qz == -11 && Math.Abs(qx - 7) <= 1 && r <= 3) return Blocks.Air;
-                bool window = (r == 2 || r == 3) && !(wallX && wallZ) && Mod(wallX ? qz : qx, 2) == 0;
+                bool window = (r == 2 || r == 3) && !(wallX && wallZ) && IntMath.Mod(wallX ? qz : qx, 2) == 0;
                 return window ? Blocks.Air : P;
             }
             return Blocks.Air;
@@ -191,8 +190,8 @@ internal static class TechSites
             if (wallX || wallZ)
             {
                 if (qz == 10 && Math.Abs(qx) <= 2 && r <= 4) return Blocks.Air;                       // entrada
-                bool front = qz == 10 && r >= 2 && r <= 4 && Mod(qx, 3) != 0;                          // fachada acristalada: huecos entre pilares
-                bool window = r >= 3 && r <= 4 && !(wallX && wallZ) && Mod(wallX ? qz : qx, 2) == 0;
+                bool front = qz == 10 && r >= 2 && r <= 4 && IntMath.Mod(qx, 3) != 0;                          // fachada acristalada: huecos entre pilares
+                bool window = r >= 3 && r <= 4 && !(wallX && wallZ) && IntMath.Mod(wallX ? qz : qx, 2) == 0;
                 return front || window ? Blocks.Air : P;
             }
             return Blocks.Air;
@@ -210,7 +209,7 @@ internal static class TechSites
             bool edge = Math.Abs(tx) == 2 || Math.Abs(tz) == 2;
             if (!edge) return Blocks.Air;
             bool corner = Math.Abs(tx) == 2 && Math.Abs(tz) == 2;
-            return corner || Mod(tx + tz, 2) != 0 ? P : Blocks.Air;   // ventanales: huecos
+            return corner || IntMath.Mod(tx + tz, 2) != 0 ? P : Blocks.Air;   // ventanales: huecos
         }
 
         for (int i = 0; i < 2; i++)   // hangares (a la izquierda), con portón hacia la pista
@@ -289,7 +288,7 @@ internal static class TechSites
             if (wallX || wallZ)
             {
                 if (qz == 14 && Math.Abs(qx) <= 4 && r <= 13) return Blocks.Air;   // portón alto
-                bool window = wallX && r >= 8 && r <= 9 && Mod(qz, 3) == 0;
+                bool window = wallX && r >= 8 && r <= 9 && IntMath.Mod(qz, 3) == 0;
                 return window ? Blocks.Air : P;
             }
             return Blocks.Air;

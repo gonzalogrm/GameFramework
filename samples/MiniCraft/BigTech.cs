@@ -14,8 +14,6 @@ internal static class BigTech
 {
     private static readonly (int X, int Z)[] Corners = { (1, 1), (1, -1), (-1, 1), (-1, -1) };
 
-    private static int Mod(int a, int b) => ((a % b) + b) % b;
-
     public static ushort Block(City c, int variant, int qx, int qz, int r, int wx, int wz, int s)
     {
         ushort id = variant == 5 ? Arcology(c, qx, qz, r, s) : Telescope(c, qx, qz, r, s);
@@ -25,7 +23,7 @@ internal static class BigTech
     private static ushort Paved(City c, int wx, int wz, ushort natural)
     {
         ulong h = Hashing.Combine(c.Id, wx, 0xC4AB, wz);
-        double u = (h >> 40) * (1.0 / (1 << 24));
+        double u = Hashing.UnitD(h);
         if (u < c.Decay * 0.5) return (h & 1) == 0 ? natural : Blocks.Dirt;   // el firme está agrietado
         return c.Style.Plaza;
     }
@@ -69,19 +67,19 @@ internal static class BigTech
             if (m >= a - 1)   // muro de la terraza, con una puerta hacia la entrada y hileras de ventanas
             {
                 if (qz < 0 && az >= ax && ax <= 3 && r <= 7) return Blocks.Air;
-                if (r <= h) return r >= 3 && (r % 6 == 3 || r % 6 == 4) && Mod(qx + qz, 3) != 0 ? Blocks.Air : r % 6 == 0 ? Pn : M;
-                return r == h + 1 && Mod(qx + qz, 2) == 0 ? P : Blocks.Air;   // almenas
+                if (r <= h) return r >= 3 && (r % 6 == 3 || r % 6 == 4) && IntMath.Mod(qx + qz, 3) != 0 ? Blocks.Air : r % 6 == 0 ? Pn : M;
+                return r == h + 1 && IntMath.Mod(qx + qz, 2) == 0 ? P : Blocks.Air;   // almenas
             }
             if (r == h) return m <= a3 - 6 && h == H3 ? Blocks.Air : P;       // techo (lucernario sobre el atrio)
             if (r > h) return Blocks.Air;
             if (h == H3 && m <= 1 && r >= 4 && r <= 16) return Blocks.Crystal;   // el corazón de cristal del atrio
-            return Mod(qx, 8) == 0 && Mod(qz, 8) == 0 ? M : Blocks.Air;          // pilares
+            return IntMath.Mod(qx, 8) == 0 && IntMath.Mod(qz, 8) == 0 ? M : Blocks.Air;          // pilares
         }
 
-        if (m > a1 + 3 && m < s - 1 && !(qz < 0 && ax <= 2) && Mod(qx, 4) < 2 && Mod(qz, 4) < 2)   // paneles solares sobre postes
+        if (m > a1 + 3 && m < s - 1 && !(qz < 0 && ax <= 2) && IntMath.Mod(qx, 4) < 2 && IntMath.Mod(qz, 4) < 2)   // paneles solares sobre postes
         {
             if (r == 3) return Pn;
-            if (r <= 2 && Mod(qx, 4) == 0 && Mod(qz, 4) == 0) return M;
+            if (r <= 2 && IntMath.Mod(qx, 4) == 0 && IntMath.Mod(qz, 4) == 0) return M;
         }
         return Blocks.Air;
     }
@@ -135,14 +133,14 @@ internal static class BigTech
         int zb0 = -(s - 16), zb1 = zb0 + 12;   // edificio de control
         if (ax <= 10 && qz >= zb0 && qz <= zb1)
         {
-            if (r == 7) return ax <= 6 && Mod(qx, 4) == 2 ? Blocks.Air : P;
+            if (r == 7) return ax <= 6 && IntMath.Mod(qx, 4) == 2 ? Blocks.Air : P;
             if (r > 7) return Blocks.Air;
             if (ax == 10 || qz == zb0 || qz == zb1)
             {
                 if (qz == zb0 && ax <= 2 && r <= 4) return Blocks.Air;
-                return r >= 3 && r <= 4 && Mod(qx + qz, 3) == 0 ? Blocks.Air : P;
+                return r >= 3 && r <= 4 && IntMath.Mod(qx + qz, 3) == 0 ? Blocks.Air : P;
             }
-            if (Mod(qz - zb0, 4) == 2 && ax <= 6 && Mod(qx, 2) == 0) return r <= 2 ? M : r == 3 ? Pn : Blocks.Air;   // consolas
+            if (IntMath.Mod(qz - zb0, 4) == 2 && ax <= 6 && IntMath.Mod(qx, 2) == 0) return r <= 2 ? M : r == 3 ? Pn : Blocks.Air;   // consolas
             return Blocks.Air;
         }
 

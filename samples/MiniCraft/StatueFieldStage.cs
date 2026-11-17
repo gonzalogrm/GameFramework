@@ -53,7 +53,7 @@ public sealed class StatueFieldStage : IGenerationStage<ushort>
 
             var region = StatueFields.RegionAt(_seed, _scale, cx, cz, out double f);
             if (region == null) continue;
-            if ((h >> 40) * (1.0 / (1 << 24)) >= _density * Math.Clamp(f / 0.4, 0.0, 1.0)) continue;   // más escasas hacia el borde
+            if (Hashing.UnitD(h) >= _density * Math.Clamp(f / 0.4, 0.0, 1.0)) continue;   // más escasas hacia el borde
             if (_planner.IsReserved(cx, cz)) continue;
 
             int g0 = _columns.HeightAt(cx, cz);
@@ -77,7 +77,7 @@ public sealed class StatueFieldStage : IGenerationStage<ushort>
     {
         if (((dx % 2) + 2) % 2 != 0 || ((dz % 2) + 2) % 2 != 0 || Math.Abs(dx) > 4 || Math.Abs(dz) > 4) return Blocks.Air;
         ulong ch = Hashing.Combine(unchecked((int)h), dx, 0x5E9, dz);
-        return (ch >> 40) * (1.0 / (1 << 24)) < 0.7 ? StatueShapes.Urn(0, 0, r, P) : Blocks.Air;
+        return Hashing.UnitD(ch) < 0.7 ? StatueShapes.Urn(0, 0, r, P) : Blocks.Air;
     }
 
     private void Place(Chunk<ushort> chunk, CellCoord o, int cx, int cz, int g0, int type, int state, ulong h)

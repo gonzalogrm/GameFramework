@@ -14,7 +14,6 @@ namespace MiniCraft;
 /// </summary>
 internal static class BigTemples
 {
-    private static int Mod(int a, int b) => ((a % b) + b) % b;
     private static double Dist(int x, int z, int cx, int cz) { double dx = x - cx, dz = z - cz; return Math.Sqrt(dx * dx + dz * dz); }
 
     public static ushort Block(City c, int variant, int qx, int qz, int r, int wx, int wz, int s)
@@ -27,7 +26,7 @@ internal static class BigTemples
     private static ushort Paved(City c, int wx, int wz, ushort natural)
     {
         ulong h = Hashing.Combine(c.Id, wx, 0xC4AB, wz);
-        double u = (h >> 40) * (1.0 / (1 << 24));
+        double u = Hashing.UnitD(h);
         if (u < c.Decay * 0.5) return (h & 1) == 0 ? natural : Blocks.Dirt;   // el empedrado está agrietado
         return c.Style.Plaza;
     }
@@ -84,8 +83,8 @@ internal static class BigTemples
         if (qz >= z0 - 6 && qz <= z0 - 1 && ax <= hw + 4)
         {
             if (ax <= 3 && r <= 11 - (ax * ax) / 2) return Blocks.Air;
-            if (r <= 16) return r >= 8 && r <= 10 && qz == z0 - 3 && Mod(ax, 6) == 4 ? Blocks.Air : P;
-            return r == 17 && Mod(qx + qz, 2) == 0 ? P : Blocks.Air;
+            if (r <= 16) return r >= 8 && r <= 10 && qz == z0 - 3 && IntMath.Mod(ax, 6) == 4 ? Blocks.Air : P;
+            return r == 17 && IntMath.Mod(qx + qz, 2) == 0 ? P : Blocks.Air;
         }
 
         // Torres de señales detrás de las naves, con brasero de cristal.
@@ -101,11 +100,11 @@ internal static class BigTemples
         }
 
         // Contrafuertes en los muros laterales.
-        if (ax > hw && ax <= hw + 3 && qz >= z0 && qz <= z1 && Mod(qz - z0, 8) == 4) return r <= 13 - (ax - hw) * 3 ? P : Blocks.Air;
+        if (ax > hw && ax <= hw + 3 && qz >= z0 && qz <= z1 && IntMath.Mod(qz - z0, 8) == 4) return r <= 13 - (ax - hw) * 3 ? P : Blocks.Air;
 
         // Avenida de entrada: postes con una luz de cristal.
         if (qz < z0 - 6)
-            return ax == 7 && qz >= -s + 3 && Mod(qz - z0, 6) == 0 ? (r <= 4 ? P : r == 5 ? Blocks.Crystal : Blocks.Air) : Blocks.Air;
+            return ax == 7 && qz >= -s + 3 && IntMath.Mod(qz - z0, 6) == 0 ? (r <= 4 ? P : r == 5 ? Blocks.Crystal : Blocks.Air) : Blocks.Air;
         if (qz < z0 || qz > z1 || ax > hw) return Blocks.Air;
 
         int wallH = nv ? 20 : 12;
@@ -122,7 +121,7 @@ internal static class BigTemples
         if (ax == hw)   // muro lateral con ventanales en lente
         {
             if (r > 12) return Blocks.Air;
-            int m = Mod(qz - z0, 6);
+            int m = IntMath.Mod(qz - z0, 6);
             bool lens = m >= 2 && m <= 4 && (r >= 5 && r <= 9 || (m == 3 && (r == 4 || r == 10)));
             return lens ? Blocks.Air : P;
         }
@@ -136,13 +135,13 @@ internal static class BigTemples
         }
         bool inDome = h2 < (rd - 1.0) * (rd - 1.0);
 
-        if (r == 20 && nv) return inDome || (ax <= 2 && Mod(qz - z0, 12) >= 4 && Mod(qz - z0, 12) <= 7) ? Blocks.Air : P;   // techo de la nave con lucernarios
+        if (r == 20 && nv) return inDome || (ax <= 2 && IntMath.Mod(qz - z0, 12) >= 4 && IntMath.Mod(qz - z0, 12) <= 7) ? Blocks.Air : P;   // techo de la nave con lucernarios
         if (r == 12 && ax >= nave + 2) return P;                                                                              // techo de las naves laterales
         if (ax == nave + 2 && r >= 13 && r <= 19)                                                                              // claristorio
-            return r >= 15 && r <= 18 && (Mod(qz - z0, 4) == 1 || Mod(qz - z0, 4) == 2) ? Blocks.Air : P;
+            return r >= 15 && r <= 18 && (IntMath.Mod(qz - z0, 4) == 1 || IntMath.Mod(qz - z0, 4) == 2) ? Blocks.Air : P;
 
         int mid = (nave + 2 + hw) / 2;   // columnas: 2 x 2, altas en la nave y bajas en las laterales
-        if (Mod(qz - z0 - 4, 6) <= 1)
+        if (IntMath.Mod(qz - z0 - 4, 6) <= 1)
         {
             if ((ax == nave || ax == nave + 1) && r <= 19) return P;
             if ((ax == mid || ax == mid + 1) && r <= 11) return P;

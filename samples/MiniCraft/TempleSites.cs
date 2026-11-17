@@ -10,7 +10,6 @@ namespace MiniCraft;
 /// </summary>
 internal static class TempleSites
 {
-    private static int Mod(int a, int b) => ((a % b) + b) % b;
     private static bool InBox(int x, int z, int x0, int z0, int x1, int z1) => x >= x0 && x <= x1 && z >= z0 && z <= z1;
     private static double Dist(int x, int z, int cx, int cz) { double dx = x - cx, dz = z - cz; return Math.Sqrt(dx * dx + dz * dz); }
 
@@ -31,7 +30,7 @@ internal static class TempleSites
     private static ushort Paved(City c, int wx, int wz, ushort natural)
     {
         ulong h = Hashing.Combine(c.Id, wx, 0xC4AB, wz);
-        double u = (h >> 40) * (1.0 / (1 << 24));
+        double u = Hashing.UnitD(h);
         if (u < c.Decay * 0.5) return (h & 1) == 0 ? natural : Blocks.Dirt;   // el empedrado está agrietado
         return c.Style.Plaza;
     }
@@ -168,7 +167,7 @@ internal static class TempleSites
         {
             if (qz >= inner + 1 && Math.Abs(qx) <= 5)   // sala de los archivos
             {
-                if (r == 13) return Math.Abs(qx) <= 3 && Mod(qz, 3) == 0 ? Blocks.Air : P;   // techo plano con claraboyas
+                if (r == 13) return Math.Abs(qx) <= 3 && IntMath.Mod(qz, 3) == 0 ? Blocks.Air : P;   // techo plano con claraboyas
                 if (r > 13) return Blocks.Air;
                 bool wallX = Math.Abs(qx) == 5, wallZ = qz == e || qz == inner + 1;
                 if (wallX || wallZ)
@@ -184,9 +183,9 @@ internal static class TempleSites
                         }
                         return P;
                     }
-                    return r >= 5 && r <= 9 && Mod(qx + qz, 3) == 0 ? Blocks.Air : P;   // ventanales estrechos
+                    return r >= 5 && r <= 9 && IntMath.Mod(qx + qz, 3) == 0 ? Blocks.Air : P;   // ventanales estrechos
                 }
-                if (Math.Abs(qx) == 4 && qz > inner + 1 && qz < e && r <= 3 && Mod(qz, 2) == 0) return P;   // estanterías
+                if (Math.Abs(qx) == 4 && qz > inner + 1 && qz < e && r <= 3 && IntMath.Mod(qz, 2) == 0) return P;   // estanterías
                 return Math.Abs(qx) <= 1 && qz == e - 3 && r == 1 ? P : Blocks.Air;                        // mesa
             }
             if (r == 9) return P;                                   // tejado plano del claustro
@@ -194,9 +193,9 @@ internal static class TempleSites
             if (m == e)                                             // muro exterior
             {
                 if (qz == -e && Math.Abs(qx) <= 2 && r <= 5) return Blocks.Air;
-                return r >= 3 && r <= 4 && Mod(qx + qz, 3) == 0 ? Blocks.Air : P;
+                return r >= 3 && r <= 4 && IntMath.Mod(qx + qz, 3) == 0 ? Blocks.Air : P;
             }
-            if (m == inner + 1) return Mod(qx + qz, 2) == 0 ? P : Blocks.Air;   // arcada hacia el patio
+            if (m == inner + 1) return IntMath.Mod(qx + qz, 2) == 0 ? P : Blocks.Air;   // arcada hacia el patio
             return Blocks.Air;
         }
 
@@ -254,7 +253,7 @@ internal static class TempleSites
         if (Math.Abs(dx) + Math.Abs(dz) <= 1 && Math.Abs(cx) > 1 && Dist(cx, cz, 0, 3) > 8 && !InBox(cx, cz, -12, -2, -4, 6))
         {
             ulong h = Hashing.Combine(c.Id, cx, 0x7B5, cz);
-            if ((h >> 40) * (1.0 / (1 << 24)) < 0.45)
+            if (Hashing.UnitD(h) < 0.45)
             {
                 if (r == 1) return P;
                 if (dx == 0 && dz == 0 && r == 2) return P;
@@ -280,7 +279,7 @@ internal static class TempleSites
         if (m <= 3)
         {
             int rr = r - 4;
-            bool mono = m == 3 && Mod(qx, 3) == 0 && Mod(qz, 3) == 0;   // ocho monolitos
+            bool mono = m == 3 && IntMath.Mod(qx, 3) == 0 && IntMath.Mod(qz, 3) == 0;   // ocho monolitos
             if (mono && rr >= 1 && rr <= 5) return rr == 2 || rr == 4 ? Blocks.Dirt : P;
             if (m == 1 && rr >= 1 && rr <= 2) return P;                  // borde del brasero
             if (m == 0 && rr == 1) return Blocks.Dirt;                   // brasas
