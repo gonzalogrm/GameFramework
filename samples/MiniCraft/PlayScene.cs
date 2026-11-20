@@ -8,7 +8,6 @@ using GF.World.History;
 using GF.World.Items;
 using GF.World.Events;
 using GF.World.Map;
-using GF.World.Tiles;
 using GF.World.Voxel;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
@@ -26,7 +25,6 @@ public sealed class PlayScene : UiScene
     private const float EyeHeight = 1.60f;
     private const float Reach = 6f;
     private const float AutosaveSeconds = 60f;
-    private static readonly Vector3 BodySize = new(0.6f, 1.8f, 0.6f);
 
     private readonly int _seed;
     private readonly SaveData? _save;
@@ -37,12 +35,12 @@ public sealed class PlayScene : UiScene
             Blocks.Lamp, Blocks.LampWarm, Blocks.LampBlue, Blocks.GlassBlue };
     private readonly FirstPersonCamera _camera = new();
     private readonly FrameProfiler _prof = new();
-    private readonly List<Entity> _collisionScratch = new();
     private readonly PlayerState _player = new();   // vida, inventario y equipamiento del jugador
+    private readonly PlayerBody _body;               // posición, movimiento y colisión del jugador
+    private PlayerActions _actions = null!;           // golpear, picar, hablar, bola de fuego
     private EnemySpawner _spawner = null!;
     private CityPlanner _cities = null!;
-	private CitySpawner _citySpawner = null!;
-	private PlayerSave? _universalPlayer;
+    private PlayerSave? _universalPlayer;
     private WorldHistory _history = null!;
     private LegendaryRegistry _legendary = null!;
     private float _thinkTimer;   // tick de los componentes de lo que lleva equipado el jugador
@@ -55,10 +53,11 @@ public sealed class PlayScene : UiScene
     private RegionChunkStore<ushort> _store = null!;
     private VoxelWorldRenderer _renderer = null!;
     private SpriteAtlas _sprites = null!;
-    private (int X, int Z, int Loaded) _holeKey = (int.MinValue, 0, 0);   // para no recalcular el agujero si nada cambió
-    private int _coveredRadius, _farCloseChunks, _holeRadius;
+    private FarHoleTracker _holes = null!;   // agujero central del terreno lejano
     private FarTerrainRenderer? _far;   // terreno lejano por niveles de detalle (null si está desactivado)
     private MiniCraftClimate _climate = null!;
+    private WorldTerrain _terrain = null!;   // terreno: clima, columnas, ciudades y generador de chunks
+    private ViewConfig _view = null!;        // distancias de visión e hilos
     private Task<World<MapCell>> _mapTask = null!;
     private World<MapCell>? _map;
     private EntityStore _entities = null!;
@@ -68,14 +67,9 @@ public sealed class PlayScene : UiScene
     private Hotbar _hotbar = null!;
     private Label _debug = null!, _status = null!, _inspector = null!;
     private Entity? _entityTarget;
-	private RuinSpawner _ruinSpawner = null!;
-    private FieldSpawner _fieldSpawner = null!;
-	private bool _inspecting;
+    private bool _inspecting;
     private float _inspectTimer;
-    private Vec3d _pos = new(0, 64, 0);   // doble precisión: a 100.000 bloques del origen un float pierde 1/128 de bloque
-    private Vector3 _vel;
-    private bool _onGround, _loaded, _spawned, _needsUnstuck, _entitiesInit;
-    private bool _flying, _autoStep;   // modos de movimiento (F = volar, G = escalón automático)
+    private bool _loaded, _spawned, _entitiesInit;
     private float _messageTimer;
     private int _selected, _frames;
     private float _fpsTimer, _fps, _autosave;
@@ -84,16 +78,15 @@ public sealed class PlayScene : UiScene
     private readonly DayNightCycle _day = new();
     private int _daySpeed;   // 0 normal, 1 rápido, 2 parado
 
+    private FogSystem? _fog;
+    private FogRenderer? _fogView;
+    private FogWatcher? _fogWatcher;
+    private static readonly EventKind FogEnter = new("entra_niebla"), FogLeave = new("sale_niebla");
 
-	private FogSystem? _fog;
-	private FogRenderer? _fogView;
-	private FogWatcher? _fogWatcher;
-	private static readonly EventKind FogEnter = new("entra_niebla"), FogLeave = new("sale_niebla");
+    private GrenadeKit? _grenades;
+    private GasZone? _gas;
 
-	private GrenadeKit? _grenades;
-	private GasZone? _gas;
-
-	private readonly UniverseSession _session;
+    private readonly UniverseSession _session;
     private readonly Planet _planet;
     private readonly string _saveDir;   // carpeta de guardado de ESTE planeta
 
@@ -103,11 +96,14 @@ public sealed class PlayScene : UiScene
         _seed = seed;
         _settings = settings;
         _scale = settings.CreateScale();
+        _body = new PlayerBody(_scale, settings.VerticalChunks);
         _save = save;
         _session = session;
         _planet = planet;
         _saveDir = saveDir;
     }
+
+    private Vec3d Pos => _body.Pos;
 
     protected override Widget BuildUi()
     {
@@ -137,191 +133,18 @@ public sealed class PlayScene : UiScene
     public override void Load()
     {
         SaveSystem.UseDirectory(_saveDir);   // el almacén de chunks y los guardados de este planeta
-        // Catálogo de objetos de ESTE mundo: los del JSON y, además, los creados en partida que se guardaron (antes que entidades e inventarios, que los
-        // referencian por nombre).
-        // El personaje es UNIVERSAL: su inventario, equipo y vida vienen del universo, no de este planeta. Los objetos de runtime que lleva (de otros mundos) se
-        // recrean aquí junto a los de este mundo.
-        _universalPlayer = SaveSystem.TryLoadPlayer();
-        var worldItems = SaveSystem.TryLoadItems() ?? new List<RuntimeItemRecord>();
-        if (_universalPlayer?.Items != null) worldItems = worldItems.Concat(_universalPlayer.Items).ToList();
-        foreach (var problem in ItemTypes.BeginWorld(worldItems)) Console.Error.WriteLine("[items] " + problem);
-        if (_save != null)
-        {
-            _pos = new Vec3d(_save.X, _save.Y, _save.Z);
-            _camera.Yaw = _save.Yaw;
-            _camera.Pitch = _save.Pitch;
-            _selected = Math.Clamp(_save.Selected, 0, _hotbarBlocks.Length - 1);
-            _day.Time = _save.TimeOfDay;
-        }
+        RestoreSavedState();
 
-        // El mismo modelo climático alimenta el terreno de los chunks y el mapamundi.
-        _climate = new MiniCraftClimate(_seed, _settings, _scale);
-		StatueFields.Setup((x, z) => MiniCraftClimate.ToBlockHeight(_climate.Sample(x, z).Height), _climate.SeaLevel,
-						   _settings.Ruins.FieldChance, _settings.Ruins.FieldMinRadius, _settings.Ruins.FieldMaxRadius);
+        _terrain = new WorldTerrain(_seed, _settings, _scale);
+        _climate = _terrain.Climate;
+        _cities = _terrain.Cities;
+        _view = ViewConfig.From(_settings);
 
-		// Altura y bioma de cada columna se calculan una sola vez y los comparten terreno, árboles y decoración.
-		var columns = new TerrainColumnCache(_climate, _scale);
-		var cityOptions = _settings.Cities.ToOptions();
-		_settings.Ruins.Apply(cityOptions);
-		var cities = new CityPlanner(_seed, _climate, _scale, columns, cityOptions);
-		_cities = cities;
-		Task.Run(cities.PlanAll);
-		Task.Run(() => { foreach (var f in StatueFields.All(_scale, _seed)) Console.WriteLine($"[campo] centro x {f.X} z {f.Z}, radio {f.Radius}, {StatueFields.KindName(f.Kind)}"); });
-		var generator = new WorldGenerator<ushort>(_seed, _climate.Noise)
-            .AddStage(new TerrainStage(_climate, columns))
-            .AddStage(new CityStage(cities, _scale, columns))
-			.AddStage(new StatueFieldStage(_seed, cities, _scale, columns, _climate.SeaLevel, _settings.Ruins.FieldDensity))
-			.AddStage(new TreeStage(_climate, _scale, columns, cities))
-            .AddStage(new DecorationStage(_climate, _scale, columns, cities))
-			.AddStage(new SupportStage(columns));
-
-        int cs = _settings.ChunkSize, layers = _settings.VerticalChunks, view = _settings.ViewDistance;
-        float viewBlocks = view * cs;
-        // Terreno lejano (LOD): si está activo, la niebla y el plano lejano de la cámara se alejan hasta su límite.
-        float farBlocks = _settings.FarDistanceChunks * cs;
-        bool farEnabled = farBlocks > viewBlocks * 1.25f;
-        // Distancia CERCANA del terreno lejano: por dentro no hay malla lejana (0 = el borde de los chunks).
-        // Fundido: los bloques se disuelven en las últimas FadeChunks filas de chunks y el terreno lejano empieza justo debajo, así que
-        // lo que se descarta deja ver el relieve aproximado. Sin terreno lejano no hay nada que mostrar detrás: sin fundido.
-        int fadeChunks = Math.Clamp(_settings.FadeChunks, 0, Math.Max(0, view - 2));
-        _farCloseChunks = _settings.FarCloseChunks > 0 ? _settings.FarCloseChunks : (farEnabled && fadeChunks > 0 ? view - fadeChunks : view);
-        var fadeBand = farEnabled && fadeChunks > 0 ? FadeBand.For(_farCloseChunks, view, cs) : FadeBand.Disabled;
-        float fogRange = farEnabled ? farBlocks : viewBlocks;
-        float fogStart = fogRange * (farEnabled ? 0.05f : 0.55f), fogEnd = fogRange * (farEnabled ? 0.98f : 0.95f); //0.05 -> 0.40
-        // Hilos de fondo: ~60 % a generar chunks y el resto a mallarlos; se dejan libres un par de núcleos para el juego.
-        int workers = _settings.WorkerThreads > 0 ? _settings.WorkerThreads : Math.Max(2, Environment.ProcessorCount - 2);
-        int genThreads = Math.Max(1, (int)Math.Round(workers * 0.6));
-        int meshThreads = Math.Max(1, workers - genThreads);
-        _world = new World<ushort>(new ChunkShape(cs, cs, cs));
-        // Guardado por regiones (el chunk -1 y el N-1 son el mismo lugar: comparten dato). Si el mundo se guardó con el
-        // formato anterior (un archivo por chunk), esos chunks se siguen leyendo y pasan a regiones cuando se vuelvan a guardar.
-        Func<ChunkCoord, ChunkCoord> canonical = c => c with { X = _scale.WrapChunkX(c.X) };
-        _store = new RegionChunkStore<ushort>(SaveSystem.RegionsDir, regionChunksX: 16, regionChunksY: 32, regionChunksZ: 16,
-            maxOpenRegions: 16, canonicalize: canonical,
-            fallback: new FileChunkStore<ushort>(SaveSystem.ChunksDir, canonical));
-        _chunks = new ChunkManager<ushort>(_world, generator)
-        {
-            RadiusX = view,
-            RadiusY = layers,
-            RadiusZ = view,
-            MaxConcurrentJobs = genThreads,
-            MinChunkY = LowestChunkY,
-            MaxChunkY = layers - 1,
-            MinChunkZ = 0,
-            MaxChunkZ = _scale.ChunkCountZ - 1,   // los polos
-            Store = _store,
-        };
-        // Sprites 2D: cada textura de Content/sprites/ (compilada por MGCB) es un sprite, de cualquier tamaño. Los .png sueltos de una
-        // carpeta sprites/ junto al ejecutable los sustituyen o amplían sin recompilar el contenido (ver LEEME). Un ContentManager propio,
-        // porque las texturas sueltas solo hacen falta para empaquetar el atlas.
-        List<string> spriteMessages;
-        using (var spriteContent = new ContentManager(Game.Services, Game.Content.RootDirectory))
-            _sprites = SpriteLoader.LoadContent(Game.GraphicsDevice, spriteContent, "sprites",
-                Path.Combine(AppContext.BaseDirectory, "sprites"), out spriteMessages);
-        foreach (var message in spriteMessages) Console.Error.WriteLine("[sprites] " + message);
-
-        // Shader de los chunks (Content/Effects/ChunkFade.fx, compilado por MGCB): aplica la luz de cielo y de bloques (ciclo día/noche) y
-        // el desvanecimiento. Ahora se carga SIEMPRE; sin él el juego arranca, pero sin ciclo día/noche ni luz de bloques/color en los vértices.
-        Effect? chunkFade = null;
-        try { chunkFade = Game.Content.Load<Effect>("Effects/ChunkFade"); }
-        catch (ContentLoadException e)
-        {
-            Console.Error.WriteLine("[contenido] sin el efecto 'Effects/ChunkFade' (" + e.Message + "): sin ciclo dia/noche ni fundido");
-            fadeBand = FadeBand.Disabled;
-            _farCloseChunks = _settings.FarCloseChunks > 0 ? _settings.FarCloseChunks : view;   // sin fundido, sin solape
-        }
-		_renderer = new VoxelWorldRenderer(Game.GraphicsDevice, _world, Blocks.Registry, AtlasFactory.Load(Game.Content, Game.GraphicsDevice), _sprites, chunkFade)
-        {
-            MaxMeshingJobs = meshThreads,
-            FadeStart = fadeBand.Start,
-            FadeEnd = fadeBand.End,
-            FadeInSeconds = fadeBand.Enabled ? _settings.FadeInSeconds : 0,
-            CanMesh = _chunks.AreNeighborsSettled,   // no mallar hasta que los vecinos estén cargados: cada chunk se malla una vez, no diez
-            FogColor = MiniCraftGame.SkyColor,
-            FogStart = fogStart,
-            FogEnd = fogEnd,
-        };
-
-		if (_settings.Fog.Enabled)
-			_fog = new FogSystem(_settings.Fog.ToOptions(), new PerlinNoise(_seed ^ 0xF06),
-				FogGround.For(_world, Blocks.Registry, 0, _settings.WorldHeight - 1));		
-		if (_fog != null) _fog.LightQuery = FogLight.For(_renderer.Light);
-		if (_fog != null) _world.CellChanged += (cell, _, _) => { _fog?.Invalidate(cell.X, cell.Z); _gas?.Invalidate(cell.X, cell.Z); };
-		if (_fog != null) _fogView = new FogRenderer(Game.GraphicsDevice);
-
-		EnemyAi.Visibility = (from, to) => (_fog?.Sight(from, to) ?? 1f) * (_gas?.Sight(from, to) ?? 1f) * (_grenades?.Sight(from, to) ?? 1f);
-
-		_camera.FarPlane = Math.Max(500f, fogRange * 1.2f);
-        if (farEnabled) _camera.NearPlane = 0.15f;   // más precisión de profundidad a distancia
-
-        // Terreno LEJANO: relieve aproximado que llega mucho más lejos que los chunks y gana detalle al acercarte. Dentro de la
-        // distancia de chunks lo sustituyen los bloques (con colinas finas, árboles, sprites y entidades).
-        if (farEnabled)
-        {
-            _far = new FarTerrainRenderer(Game.GraphicsDevice, new MiniCraftFarSource(_climate, _scale, cities), _scale.HeightBlocks)
-            {
-                FarDistance = farBlocks,
-                SplitFactor = _settings.FarDetail,
-                FogColor = MiniCraftGame.SkyColor,
-                FogStart = fogStart,
-                FogEnd = fogEnd,
-            };
-        }
-
-        // Entidades: índice espacial + IA. El almacén se engancha al mundo para activarse al cargar chunks.
-        _entities = new EntityStore(_world.Shape, _scale);
-        _entities.Attach(_world);
-        _entities.Definitions = EntityTypes.Registry;   // cada entidad remite a su tipo y a su prototipo de propiedades
-
-        // Eventos: cada prototipo declara cuáles procesa (GameEvents.Register). Los manejadores avisan al jugador con Notify.
-        _events = new EventHub(_entities);
-        GameEvents.Register(_events);
-		CityNpcs.Register(_events);
-		_events.Message += ShowMessage;
-        _events.Delivered += OnDelivered;
-        _npcs = new NpcSystem(_entities, _world, _climate, _scale, () => _map, _seed);
-        _entities.Items = ItemTypes.Registry;   // guardar el inventario y el equipo de las entidades (por nombre de objeto)
-        _npcs.Player = _player;                 // los enemigos persiguen y golpean al jugador
-        _npcs.Events = _events;
-        _spawner = new EnemySpawner(_entities, _world, _climate, _scale, _npcs, _seed, _settings, () => _spawned ? (Vec3d?)_pos : null);
-		_citySpawner = new CitySpawner(_entities, _world, cities, _npcs, _scale, _settings.Cities);
-		_ruinSpawner = new RuinSpawner(_entities, _world, cities, _scale, _settings.Ruins);
-		_fieldSpawner = new FieldSpawner(_entities, _world, cities, _scale, columns, _seed, _climate.SeaLevel, _settings.Ruins); //hallazgos en campos kilometricos
-
-		// Historia del mundo (sale de la semilla, no se guarda) y sus objetos legendarios: variantes de armas creadas en partida, con su héroe y su destino.
-		_history = WorldHistory.Generate((ulong)(uint)_seed);
-        _legendary = LegendaryRegistry.Create(_history, (ulong)(uint)_seed, ItemTypes.Catalog, _scale,
-            (x, z) => MiniCraftClimate.ToBlockHeight(_climate.Sample(x, z).Height) > _climate.SeaLevel + _settings.BeachHeight,
-            new LegendaryOptions { Components = new[] { "thorns", "regeneration" }, NamePrefix = $"legendary_{(uint)_seed:x8}" });
-        _spawner.Legendary = _legendary;
-        foreach (var a in _legendary.Artifacts)
-            Console.WriteLine($"[historia] {a.Title}: {a.Fate}, columna ({a.ColumnX},{a.ColumnZ}), x {a.X} z {a.Z}, ataque {a.Attack:0.#}");
-
-        // Primero el personaje del universo; si no hay (partidas anteriores), el que guardó este mundo; si no, el inicial.
-        if (_universalPlayer != null) _player.Restore(_universalPlayer);
-        else if (_save?.Player != null) _player.Restore(_save.Player);
-        else _player.GiveStarterKit();
-
-
-        _lightWatcher = new LightWatcher(_events, _renderer.Light, _scale, GameEvents.DarkEnter, GameEvents.LightEnter);
-		_gas = GasZone.Create(_settings.Gas, _seed, _world, _renderer.Light, _events, _scale, _player, Game.GraphicsDevice, _settings.WorldHeight);
-		if (_fog != null) _fogWatcher = new FogWatcher(_events, _fog, _scale, FogEnter, FogLeave);
-
-		_grenades = GrenadeKit.Create(_settings.Smoke, _settings.ToxicGrenade, _settings.Spores, _world, 
-            Blocks.Registry, _events, _scale, _player, Game.GraphicsDevice);
-
-		_boxes = new BoxRenderer(Game.GraphicsDevice, _scale)
-        {
-            FogColor = MiniCraftGame.SkyColor,
-            FogStart = fogStart,
-            FogEnd = fogEnd,
-        };
-        if (_save != null && SaveSystem.TryLoadEntities() is { } savedEntities)
-        {
-            _entities.Import(savedEntities.Entities, EntityTypes.Registry, savedEntities.Time);
-            _spawner.ImportPopulated(savedEntities.Columns);
-            _spawner.CountExisting();
-        }
+        CreateChunkSystems();
+        CreateRenderers();
+        CreateEntities();
+        CreateHazards();
+        RestoreEntities();
 
         // El mapamundi se calcula en segundo plano (promedia unas 360.000 columnas).
         var scale = _scale; var climate = _climate; int samples = _settings.MapSamplesPerAxis;
@@ -333,6 +156,165 @@ public sealed class PlayScene : UiScene
         base.Load();   // construye la UI
         _loaded = true;
         Game.Input.SetMouseCaptured(true);
+    }
+
+    /// <summary>
+    /// Catálogo de objetos de ESTE mundo: los del JSON y, además, los creados en partida que se guardaron (antes que entidades e inventarios, que los
+    /// referencian por nombre). El personaje es UNIVERSAL: su inventario, equipo y vida vienen del universo, no de este planeta; los objetos de runtime que
+    /// lleva (de otros mundos) se recrean aquí junto a los de este mundo.
+    /// </summary>
+    private void RestoreSavedState()
+    {
+        _universalPlayer = SaveSystem.TryLoadPlayer();
+        var worldItems = SaveSystem.TryLoadItems() ?? new List<RuntimeItemRecord>();
+        if (_universalPlayer?.Items != null) worldItems = worldItems.Concat(_universalPlayer.Items).ToList();
+        foreach (var problem in ItemTypes.BeginWorld(worldItems)) Console.Error.WriteLine("[items] " + problem);
+        if (_save == null) return;
+
+        _body.Pos = new Vec3d(_save.X, _save.Y, _save.Z);
+        _camera.Yaw = _save.Yaw;
+        _camera.Pitch = _save.Pitch;
+        _selected = Math.Clamp(_save.Selected, 0, _hotbarBlocks.Length - 1);
+        _day.Time = _save.TimeOfDay;
+    }
+
+    /// <summary>El mundo de chunks, su almacén en disco y el gestor que los genera y descarga alrededor del jugador.</summary>
+    private void CreateChunkSystems()
+    {
+        _world = new World<ushort>(new ChunkShape(_view.ChunkSize, _view.ChunkSize, _view.ChunkSize));
+        // Guardado por regiones (el chunk -1 y el N-1 son el mismo lugar: comparten dato). Si el mundo se guardó con el
+        // formato anterior (un archivo por chunk), esos chunks se siguen leyendo y pasan a regiones cuando se vuelvan a guardar.
+        Func<ChunkCoord, ChunkCoord> canonical = c => c with { X = _scale.WrapChunkX(c.X) };
+        _store = new RegionChunkStore<ushort>(SaveSystem.RegionsDir, regionChunksX: 16, regionChunksY: 32, regionChunksZ: 16,
+            maxOpenRegions: 16, canonicalize: canonical,
+            fallback: new FileChunkStore<ushort>(SaveSystem.ChunksDir, canonical));
+        _chunks = new ChunkManager<ushort>(_world, _terrain.Generator)
+        {
+            RadiusX = _view.View,
+            RadiusY = _view.Layers,
+            RadiusZ = _view.View,
+            MaxConcurrentJobs = _view.GenThreads,
+            MinChunkY = LowestChunkY,
+            MaxChunkY = _view.Layers - 1,
+            MinChunkZ = 0,
+            MaxChunkZ = _scale.ChunkCountZ - 1,   // los polos
+            Store = _store,
+        };
+    }
+
+    /// <summary>Todo lo que se dibuja: sprites, shader y malla de chunks, niebla, terreno lejano y entidades.</summary>
+    private void CreateRenderers()
+    {
+        // Sprites 2D: cada textura de Content/sprites/ (compilada por MGCB) es un sprite, de cualquier tamaño. Los .png sueltos de una
+        // carpeta sprites/ junto al ejecutable los sustituyen o amplían sin recompilar el contenido. Un ContentManager propio,
+        // porque las texturas sueltas solo hacen falta para empaquetar el atlas.
+        List<string> spriteMessages;
+        using (var spriteContent = new ContentManager(Game.Services, Game.Content.RootDirectory))
+            _sprites = SpriteLoader.LoadContent(Game.GraphicsDevice, spriteContent, "sprites",
+                Path.Combine(AppContext.BaseDirectory, "sprites"), out spriteMessages);
+        foreach (var message in spriteMessages) Console.Error.WriteLine("[sprites] " + message);
+
+        // Shader de los chunks (Content/Effects/ChunkFade.fx, compilado por MGCB): aplica la luz de cielo y de bloques (ciclo día/noche) y
+        // el desvanecimiento. Sin él el juego arranca, pero sin ciclo día/noche ni luz de bloques/color en los vértices.
+        Effect? chunkFade = null;
+        try { chunkFade = Game.Content.Load<Effect>("Effects/ChunkFade"); }
+        catch (ContentLoadException e)
+        {
+            Console.Error.WriteLine("[contenido] sin el efecto 'Effects/ChunkFade' (" + e.Message + "): sin ciclo dia/noche ni fundido");
+            _view = _view.WithoutFade(_settings);
+        }
+        _renderer = new VoxelWorldRenderer(Game.GraphicsDevice, _world, Blocks.Registry, AtlasFactory.Load(Game.Content, Game.GraphicsDevice), _sprites, chunkFade)
+        {
+            MaxMeshingJobs = _view.MeshThreads,
+            FadeStart = _view.Fade.Start,
+            FadeEnd = _view.Fade.End,
+            FadeInSeconds = _view.Fade.Enabled ? _settings.FadeInSeconds : 0,
+            CanMesh = _chunks.AreNeighborsSettled,   // no mallar hasta que los vecinos estén cargados: cada chunk se malla una vez, no diez
+            FogColor = MiniCraftGame.SkyColor,
+            FogStart = _view.FogStart,
+            FogEnd = _view.FogEnd,
+        };
+        _holes = new FarHoleTracker(_renderer, _world, _scale, _settings.VerticalChunks, _view.FarClose);
+
+        if (_settings.Fog.Enabled)
+            _fog = new FogSystem(_settings.Fog.ToOptions(), new PerlinNoise(_seed ^ 0xF06),
+                FogGround.For(_world, Blocks.Registry, 0, _settings.WorldHeight - 1));
+        if (_fog != null) _fog.LightQuery = FogLight.For(_renderer.Light);
+        if (_fog != null) _world.CellChanged += (cell, _, _) => { _fog?.Invalidate(cell.X, cell.Z); _gas?.Invalidate(cell.X, cell.Z); };
+        if (_fog != null) _fogView = new FogRenderer(Game.GraphicsDevice);
+
+        EnemyAi.Visibility = (from, to) => (_fog?.Sight(from, to) ?? 1f) * (_gas?.Sight(from, to) ?? 1f) * (_grenades?.Sight(from, to) ?? 1f);
+
+        _camera.FarPlane = Math.Max(500f, _view.FogRange * 1.2f);
+        if (_view.FarEnabled) _camera.NearPlane = 0.15f;   // más precisión de profundidad a distancia
+
+        // Terreno LEJANO: relieve aproximado que llega mucho más lejos que los chunks y gana detalle al acercarte. Dentro de la
+        // distancia de chunks lo sustituyen los bloques (con colinas finas, árboles, sprites y entidades).
+        if (_view.FarEnabled)
+        {
+            _far = new FarTerrainRenderer(Game.GraphicsDevice, new MiniCraftFarSource(_climate, _scale, _cities), _scale.HeightBlocks)
+            {
+                FarDistance = _view.FarBlocks,
+                SplitFactor = _settings.FarDetail,
+                FogColor = MiniCraftGame.SkyColor,
+                FogStart = _view.FogStart,
+                FogEnd = _view.FogEnd,
+            };
+        }
+
+        _boxes = new BoxRenderer(Game.GraphicsDevice, _scale)
+        {
+            FogColor = MiniCraftGame.SkyColor,
+            FogStart = _view.FogStart,
+            FogEnd = _view.FogEnd,
+        };
+    }
+
+    /// <summary>Entidades y eventos, la historia del mundo con sus objetos legendarios, y el personaje.</summary>
+    private void CreateEntities()
+    {
+        var systems = new EntitySystems(_world, _terrain, _settings, _scale, _seed, _player, () => _map, () => _spawned ? (Vec3d?)Pos : null);
+        _entities = systems.Entities;
+        _events = systems.Events;
+        _npcs = systems.Npcs;
+        _spawner = systems.Enemies;
+        _events.Message += ShowMessage;
+        _events.Delivered += OnDelivered;
+
+        // Historia del mundo (sale de la semilla, no se guarda) y sus objetos legendarios: variantes de armas creadas en partida, con su héroe y su destino.
+        _history = WorldHistory.Generate((ulong)(uint)_seed);
+        _legendary = LegendaryRegistry.Create(_history, (ulong)(uint)_seed, ItemTypes.Catalog, _scale,
+            (x, z) => MiniCraftClimate.ToBlockHeight(_climate.Sample(x, z).Height) > _climate.SeaLevel + _settings.BeachHeight,
+            new LegendaryOptions { Components = new[] { "thorns", "regeneration" }, NamePrefix = $"legendary_{(uint)_seed:x8}" });
+        _spawner.Legendary = _legendary;
+        foreach (var a in _legendary.Artifacts)
+            Console.WriteLine($"[historia] {a.Title}: {a.Fate}, columna ({a.ColumnX},{a.ColumnZ}), x {a.X} z {a.Z}, ataque {a.Attack:0.#}");
+
+        // Primero el personaje del universo; si no hay (partidas anteriores), el que guardó este mundo; si no, el inicial.
+        if (_universalPlayer != null) _player.Restore(_universalPlayer);
+        else if (_save?.Player != null) _player.Restore(_save.Player);
+        else _player.GiveStarterKit();
+    }
+
+    /// <summary>Luz, niebla y gas como disparadores de eventos, granadas y acciones del jugador.</summary>
+    private void CreateHazards()
+    {
+        _lightWatcher = new LightWatcher(_events, _renderer.Light, _scale, GameEvents.DarkEnter, GameEvents.LightEnter);
+        _gas = GasZone.Create(_settings.Gas, _seed, _world, _renderer.Light, _events, _scale, _player, Game.GraphicsDevice, _settings.WorldHeight);
+        if (_fog != null) _fogWatcher = new FogWatcher(_events, _fog, _scale, FogEnter, FogLeave);
+
+        _grenades = GrenadeKit.Create(_settings.Smoke, _settings.ToxicGrenade, _settings.Spores, _world,
+            Blocks.Registry, _events, _scale, _player, Game.GraphicsDevice);
+        _actions = new PlayerActions(_events, _world, _scale, _player, _grenades, ShowMessage);
+    }
+
+    /// <summary>Si se continúa una partida, las entidades guardadas (se activarán al cargarse sus chunks).</summary>
+    private void RestoreEntities()
+    {
+        if (_save == null || SaveSystem.TryLoadEntities() is not { } saved) return;
+        _entities.Import(saved.Entities, EntityTypes.Registry, saved.Time);
+        _spawner.ImportPopulated(saved.Columns);
+        _spawner.CountExisting();
     }
 
     public override void OnResumed() => Game.Input.SetMouseCaptured(true);
@@ -348,11 +330,11 @@ public sealed class PlayScene : UiScene
         _boxes.Dispose();
         _sprites.Dispose();
         _far?.Dispose();
-		_fogView?.Dispose();
-		_gas?.Dispose();
-		_grenades?.Dispose();
-		EnemyAi.Visibility = null;
-	}
+        _fogView?.Dispose();
+        _gas?.Dispose();
+        _grenades?.Dispose();
+        EnemyAi.Visibility = null;
+    }
 
     private void Save()
     {
@@ -364,9 +346,9 @@ public sealed class PlayScene : UiScene
         {
             Seed = _seed,
             Settings = _settings,
-            X = _pos.X,
-            Y = _pos.Y,
-            Z = _pos.Z,
+            X = Pos.X,
+            Y = Pos.Y,
+            Z = Pos.Z,
             Yaw = _camera.Yaw,
             Pitch = _camera.Pitch,
             Selected = _selected,
@@ -386,10 +368,7 @@ public sealed class PlayScene : UiScene
         wx = _scale.WrapX(wx);
         wz = Math.Clamp(wz, 0, _scale.HeightBlocks - 1);
         int ground = MiniCraftClimate.ToBlockHeight(_climate.Sample(wx, wz).Height);
-        _pos = new Vec3d(wx + 0.5, Math.Max(ground, _climate.SeaLevel) + 2.0, wz + 0.5);
-        _vel = Vector3.Zero;
-        _onGround = false;
-        _needsUnstuck = true;   // al cargar la columna, si hay un árbol justo ahí, subimos hasta quedar libres
+        _body.Teleport(new Vec3d(wx + 0.5, Math.Max(ground, _climate.SeaLevel) + 2.0, wz + 0.5));
     }
 
     private bool TrySpawn()
@@ -397,7 +376,7 @@ public sealed class PlayScene : UiScene
         if (_save != null) { FinishSpawn(); return true; }
         if (_map == null && !_mapTask.IsFaulted) return false;   // esperando al mapa
 
-        if (_map != null && TryFindLandRegion(_map, out int wx, out int wz)) TeleportTo(wx, wz);
+        if (_map != null && SpawnFinder.TryFindLandRegion(_map, _scale, out int wx, out int wz)) TeleportTo(wx, wz);
         else
         {
             var c = _scale.RegionCenter(_scale.MapWidth / 2, _scale.MapHeight / 2);
@@ -410,33 +389,8 @@ public sealed class PlayScene : UiScene
     private void FinishSpawn()
     {
         _spawned = true;
-        _respawn = _pos;   // donde se reaparece al morir
+        _respawn = Pos;   // donde se reaparece al morir
         _status.Visible = false;
-    }
-
-    /// <summary>Busca en espiral, desde el centro del mapa, una región templada, de tierra y sin montañas.</summary>
-    private bool TryFindLandRegion(World<MapCell> map, out int wx, out int wz)
-    {
-        int cx = _scale.MapWidth / 2, cz = _scale.MapHeight / 2;
-        for (int r = 0; r < _scale.MapWidth; r++)
-            for (int dz = -r; dz <= r; dz++)
-                for (int dx = -r; dx <= r; dx++)
-                {
-                    if (Math.Max(Math.Abs(dx), Math.Abs(dz)) != r) continue;
-                    int rz = cz + dz;
-                    if (rz < 0 || rz >= _scale.MapHeight) continue;
-                    int rx = ((cx + dx) % _scale.MapWidth + _scale.MapWidth) % _scale.MapWidth;
-
-                    var c = map.GetCell(new CellCoord(rx, rz, 0));
-                    if (c.WaterFraction < 0.2f && c.Temperature > 0.3f && c.Biome != Biomes.Mountains && c.Biome != Biomes.SnowPeaks)
-                    {
-                        var center = _scale.RegionCenter(rx, rz);
-                        wx = center.X; wz = center.Z;
-                        return true;
-                    }
-                }
-        wx = wz = 0;
-        return false;
     }
 
     // ------------------------------------------------------------------ update
@@ -453,16 +407,31 @@ public sealed class PlayScene : UiScene
         if (!_spawned && !TrySpawn()) return;
 
         if (_messageTimer > 0 && (_messageTimer -= dt) <= 0) _status.Visible = false;
+        HandleToggles(input);
+        SpawnInitialEntities();
+        if (OpenOverlayScene(input)) return;
+
+        _autosave += dt;
+        if (_autosave >= AutosaveSeconds) { Save(); _autosave = 0; }
+
+        MovePlayer(input, dt);
+        UpdateWorld(input, gameTime, dt);
+        UpdateInteraction(input, dt);
+    }
+
+    /// <summary>Interruptores: vuelo, escalón automático e inspector.</summary>
+    private void HandleToggles(InputService input)
+    {
         if (input.Pressed("Fly"))
         {
-            _flying = !_flying;
-            _vel.Y = 0;
-            ShowMessage(_flying ? "Vuelo activado (Espacio sube, Ctrl o C baja, F para salir)" : "Vuelo desactivado");
+            _body.Flying = !_body.Flying;
+            _body.Vel.Y = 0;
+            ShowMessage(_body.Flying ? "Vuelo activado (Espacio sube, Ctrl o C baja, F para salir)" : "Vuelo desactivado");
         }
         if (input.Pressed("AutoStep"))
         {
-            _autoStep = !_autoStep;
-            ShowMessage(_autoStep ? "Escalon automatico activado" : "Escalon automatico desactivado");
+            _body.AutoStep = !_body.AutoStep;
+            ShowMessage(_body.AutoStep ? "Escalon automatico activado" : "Escalon automatico desactivado");
         }
         if (input.Pressed("Inspect"))
         {
@@ -470,13 +439,19 @@ public sealed class PlayScene : UiScene
             _inspector.Visible = _inspecting;
             _inspectTimer = 0;
         }
+    }
 
-        if (!_entitiesInit && _map != null)
-        {
-            if (_entities.Count == 0) _npcs.SpawnInitial(_pos);   // mundo nuevo (o guardado sin entidades)
-            _entitiesInit = true;
-        }
+    /// <summary>Mundo nuevo (o guardado sin entidades): aldeanos, perros y caravanas iniciales, cuando el mapa ya está listo.</summary>
+    private void SpawnInitialEntities()
+    {
+        if (_entitiesInit || _map == null) return;
+        if (_entities.Count == 0) _npcs.SpawnInitial(Pos);
+        _entitiesInit = true;
+    }
 
+    /// <summary>Teclas que abren otra escena (universo, historia, inventario, mapa). true = se abrió una: este frame no sigue.</summary>
+    private bool OpenOverlayScene(InputService input)
+    {
         if (input.Pressed("Universe"))
         {
             Save();
@@ -484,30 +459,33 @@ public sealed class PlayScene : UiScene
             {
                 Game.Scenes.Reset(_session.CreateScene(planet));   // el mundo actual se guarda al descargarse (en su propia carpeta)
             }));
-            return;
+            return true;
         }
 
         if (input.Pressed("History"))
         {
             Game.Scenes.Push(new HistoryScene(_history, _legendary, _entities, _player, _spawner, TeleportTo));
-            return;
+            return true;
         }
 
         if (input.Pressed("Inventory"))
         {
             Game.Scenes.Push(new InventoryScene(_player));
-            return;
+            return true;
         }
 
         if (input.Pressed("Map") && _map != null)
         {
-            Game.Scenes.Push(new MapScene(_map, _scale, () => new Vector2((float)_pos.X, (float)_pos.Z), TeleportTo, EntityMarkers, _settings.WorldHeight));
-            return;
+            Game.Scenes.Push(new MapScene(_map, _scale, () => new Vector2((float)Pos.X, (float)Pos.Z), TeleportTo,
+                () => MapMarkers.Build(_entities, _cities, _scale, _seed), _settings.WorldHeight));
+            return true;
         }
+        return false;
+    }
 
-        _autosave += dt;
-        if (_autosave >= AutosaveSeconds) { Save(); _autosave = 0; }
-
+    /// <summary>Cámara, barra de bloques, vida y movimiento del jugador.</summary>
+    private void MovePlayer(InputService input, float dt)
+    {
         _camera.Rotate(input.MouseDelta.X, input.MouseDelta.Y);
 
         for (int i = 0; i < _hotbarBlocks.Length; i++)
@@ -517,101 +495,56 @@ public sealed class PlayScene : UiScene
         _hotbar.Selected = _selected;
         UpdatePlayerState(dt);
 
-        var fwd = new Vector3(MathF.Sin(_camera.Yaw), 0, -MathF.Cos(_camera.Yaw));
-        var right = new Vector3(MathF.Cos(_camera.Yaw), 0, MathF.Sin(_camera.Yaw));
-        var wish = Vector3.Zero;
-        if (input.IsDown("Forward")) wish += fwd;
-        if (input.IsDown("Back")) wish -= fwd;
-        if (input.IsDown("Right")) wish += right;
-        if (input.IsDown("Left")) wish -= right;
-        if (wish != Vector3.Zero) wish.Normalize();
-        bool sprint = input.IsDown("Sprint");
+        _body.Update(input, dt, _camera.Yaw, _world, _entities);
 
-        float speed = _flying ? (sprint ? 40f : 10f) : (sprint ? 40f : 5.5f);
-		speed *= StatusEffects.PlayerSpeedFactor;
-		_vel.X = wish.X * speed;
-        _vel.Z = wish.Z * speed;
-        if (_flying)
-        {
-            // En vuelo no hay gravedad: Espacio sube, Ctrl/C baja.
-            float vertical = (input.IsDown("Jump") ? 1f : 0f) - (input.IsDown("Descend") ? 1f : 0f);
-            _vel.Y = vertical * (sprint ? 16f : 8f);
-        }
-
-        // Física: solo cuando la columna de chunks bajo el jugador ya está cargada
-        if (ColumnLoaded())
-        {
-            if (_needsUnstuck)
-            {
-                for (int guard = 0; guard < 64 && VoxelPhysics.Overlaps(_world, Blocks.Registry, _pos, BodySize); guard++)
-                    _pos = _pos with { Y = _pos.Y + 1.0 };
-                _needsUnstuck = false;
-            }
-
-            if (!_flying)
-            {
-                _vel.Y -= 28f * dt;
-                if (_onGround && input.IsDown("Jump")) _vel.Y = 9f;
-            }
-            // Escalón automático: solo andando y apoyado en el suelo (en el aire o volando no se sube nada solo).
-            double stepHeight = _autoStep && !_flying && _onGround ? 1.0 : 0.0;
-            _pos = VoxelPhysics.MoveAndCollide(_world, Blocks.Registry, _pos, BodySize,
-                new Vec3d(_vel.X * dt, _vel.Y * dt, _vel.Z * dt), out var flags, stepHeight);
-            _onGround = (flags & CollisionFlags.Ground) != 0;
-            if ((flags & CollisionFlags.Y) != 0) _vel.Y = 0;
-
-            // Las entidades son sólidas: no se pueden atravesar. Se te saca de su caja; si caes sobre una, te quedas encima.
-            var pushed = EntityCollision.PushOut(_entities, _scale, _pos, BodySize.X, BodySize.Y, null, _collisionScratch, out bool onEntity);
-            if (pushed != _pos)
-            {
-                _pos = VoxelPhysics.MoveAndCollide(_world, Blocks.Registry, _pos, BodySize, pushed - _pos, out _);   // sin meterte en una pared
-                if (onEntity) { _onGround = true; if (_vel.Y < 0) _vel.Y = 0; }
-            }
-        }
-
-        // Mundo cilíndrico: X se envuelve; Z termina en los polos.
-        _pos = _pos with { X = _scale.WrapX(_pos.X), Z = Math.Clamp(_pos.Z, 0.5, _scale.HeightBlocks - 0.5) };
-
-        _camera.Position = _pos.Add(new Vector3(0, EyeHeight, 0));
+        _camera.Position = Pos.Add(new Vector3(0, EyeHeight, 0));
         _camera.SetViewport(Game.GraphicsDevice.Viewport);
+    }
 
+    /// <summary>El mundo alrededor: chunks, malla, día y noche, niebla, gas, granadas, terreno lejano y entidades.</summary>
+    private void UpdateWorld(InputService input, GameTime gameTime, float dt)
+    {
         using (_prof.Measure("chunks"))
-            _chunks.Update(new CellCoord(IntMath.FloorToInt(_pos.X), IntMath.FloorToInt(_pos.Y), IntMath.FloorToInt(_pos.Z)));
+            _chunks.Update(new CellCoord(IntMath.FloorToInt(Pos.X), IntMath.FloorToInt(Pos.Y), IntMath.FloorToInt(Pos.Z)));
         _renderer.Time = gameTime.TotalGameTime.TotalSeconds;   // fundido de entrada de los chunks nuevos
         _day.Update(dt);
         ApplyDayNight();
         using (_prof.Measure("malla"))
             _renderer.Update(_camera.Position);
-		_fog?.Update(dt, _camera.Position, gameTime.TotalGameTime.TotalSeconds);
-		_gas?.Update(dt, _camera.Position, gameTime.TotalGameTime.TotalSeconds, _pos);
+        _fog?.Update(dt, _camera.Position, gameTime.TotalGameTime.TotalSeconds);
+        _gas?.Update(dt, _camera.Position, gameTime.TotalGameTime.TotalSeconds, Pos);
 
-		_grenades?.Update(dt, _pos);
-		if (_grenades != null)
-		{
-			if (input.Pressed("GrenadeType")) ShowMessage("Granada: " + _grenades.CycleType());
-			if (input.Pressed("Grenade"))
-			{
-				var no = _grenades.Throw(_camera.Position, _camera.Forward);
-				if (no != null) ShowMessage(no);
-			}
-		}
+        _grenades?.Update(dt, Pos);
+        if (_grenades != null)
+        {
+            if (input.Pressed("GrenadeType")) ShowMessage("Granada: " + _grenades.CycleType());
+            if (input.Pressed("Grenade"))
+            {
+                var no = _grenades.Throw(_camera.Position, _camera.Forward);
+                if (no != null) ShowMessage(no);
+            }
+        }
 
-		using (_prof.Measure("lejano"))
+        using (_prof.Measure("lejano"))
         {
             if (_far != null)
             {
-                _far.Hole = ComputeFarHole();
+                _far.Hole = _holes.Compute(Pos);
                 _far.Update(_camera.Position);
             }
         }
         using (_prof.Measure("entidades"))
         {
-            _entities.Update(dt, _pos);
-            _npcs.Update(dt, _pos);
-            _lightWatcher.Update(dt, _pos);
-			_fogWatcher?.Update(dt, _pos);
-		}
+            _entities.Update(dt, Pos);
+            _npcs.Update(dt, Pos);
+            _lightWatcher.Update(dt, Pos);
+            _fogWatcher?.Update(dt, Pos);
+        }
+    }
 
+    /// <summary>Lo que el jugador apunta y lo que hace con ello: golpear, picar, inspeccionar, hablar, bola de fuego y colocar bloques.</summary>
+    private void UpdateInteraction(InputService input, float dt)
+    {
         _target = VoxelRaycaster.Raycast(_world, Blocks.Registry, _camera.Position, _camera.Forward, Reach, out var hit) ? hit : null;
 
         // ¿Hay una entidad más cerca que el bloque apuntado? Manda la más cercana.
@@ -621,8 +554,8 @@ public sealed class PlayScene : UiScene
 
         if (input.LeftClicked)
         {
-            if (_entityTarget != null) Attack(_entityTarget);
-            else if (_target is { } mined) Mine(mined.Cell);
+            if (_entityTarget != null) _actions.Attack(_entityTarget);
+            else if (_target is { } mined) _actions.Mine(mined.Cell);
         }
 
         if (_inspecting && (_inspectTimer -= dt) <= 0f)
@@ -633,85 +566,54 @@ public sealed class PlayScene : UiScene
                 : "Apunta a un bloque o a una entidad";
         }
 
-        if (input.Pressed("Talk")) Talk();
-        if (input.Pressed("Night"))
-        {
-            _daySpeed = (_daySpeed + 1) % 3;
-            _day.Running = _daySpeed != 2;
-            _day.DayLengthSeconds = _daySpeed == 1 ? 30 : 600;
-            ShowMessage($"Ciclo dia/noche: {(new[] { "normal", "rapido", "parado" })[_daySpeed]} ({_day.Clock})");
-        }
-        if (input.Pressed("Fireball")) CastFireball();
-        if (_target is { } t)
-        {
-            if (input.RightClicked)
-            {
-                ushort block = _hotbarBlocks[_selected];
-                // Si apuntas a un sprite (hierba, flor...), el bloque nuevo lo sustituye; si no, se coloca contra la cara.
-                var place = Blocks.Registry.Get(_world.GetCell(t.Cell)).Render != BlockRender.Cube ? t.Cell : t.Previous;
-                if (!Blocks.Registry.Get(block).Solid || !IntersectsPlayer(place))
-                    _world.SetCell(place, block);
-            }
-        }
+        if (input.Pressed("Talk")) _actions.Talk(_entityTarget, _target);
+        if (input.Pressed("Night")) CycleDaySpeed();
+        if (input.Pressed("Fireball")) _actions.CastFireball(_entityTarget, _target, Pos);
+        if (_target is { } t && input.RightClicked) PlaceBlock(t);
+    }
+
+    /// <summary>Velocidad del ciclo día/noche: normal, rápido, parado.</summary>
+    private void CycleDaySpeed()
+    {
+        _daySpeed = (_daySpeed + 1) % 3;
+        _day.Running = _daySpeed != 2;
+        _day.DayLengthSeconds = _daySpeed == 1 ? 30 : 600;
+        ShowMessage($"Ciclo dia/noche: {(new[] { "normal", "rapido", "parado" })[_daySpeed]} ({_day.Clock})");
+    }
+
+    /// <summary>Coloca el bloque seleccionado. Si apuntas a un sprite (hierba, flor...), el nuevo lo sustituye; si no, se pone contra la cara.</summary>
+    private void PlaceBlock(VoxelHit t)
+    {
+        ushort block = _hotbarBlocks[_selected];
+        var place = Blocks.Registry.Get(_world.GetCell(t.Cell)).Render != BlockRender.Cube ? t.Cell : t.Previous;
+        if (!Blocks.Registry.Get(block).Solid || !_body.Intersects(place))
+            _world.SetCell(place, block);
     }
 
     private string LightText()
     {
-        var l = _renderer.Light.Sample(new CellCoord(IntMath.FloorToInt(_pos.X), IntMath.FloorToInt(_pos.Y + 0.5), IntMath.FloorToInt(_pos.Z)));
+        var l = _renderer.Light.Sample(new CellCoord(IntMath.FloorToInt(Pos.X), IntMath.FloorToInt(Pos.Y + 0.5), IntMath.FloorToInt(Pos.Z)));
         return l.Known ? $"nivel {l.Level:0.0} | cielo {l.Sky.Y:0} | bloque RGB {l.Block.X:0},{l.Block.Y:0},{l.Block.Z:0}" : "desconocida";
     }
-
 
     public override void Draw(GameTime gameTime)
     {
         using (_prof.Measure("dibujo"))
-		    _renderer.Draw(_camera, () =>
+            _renderer.Draw(_camera, () =>
             {
                 _far?.Draw(_camera);   // tras los chunks: donde hay bloques, la prueba de profundidad oculta el terreno lejano
-                _boxes.Draw(_camera, ActiveBoxes());
+                _boxes.Draw(_camera, EntityBoxes.Build(_entities, _scale, Pos, _renderer, _world, _day.SkyLight));
             });
-		if (_fog != null && _fogView != null)
-		{
-			_fogView.Tint = Vector3.Max(_day.SkyLight, _day.Ambient);   // luz del dia
-			_fogView.Draw(_camera, _fog);
-			_gas?.Draw(_camera);
-			_grenades?.Draw(_camera, Vector3.Max(_day.SkyLight, _day.Ambient));
-		}
-		if (_target is { } t) _renderer.DrawOutline(_camera, t.Cell);
+        if (_fog != null && _fogView != null)
+        {
+            _fogView.Tint = Vector3.Max(_day.SkyLight, _day.Ambient);   // luz del dia
+            _fogView.Draw(_camera, _fog);
+            _gas?.Draw(_camera);
+            _grenades?.Draw(_camera, Vector3.Max(_day.SkyLight, _day.Ambient));
+        }
+        if (_target is { } t) _renderer.DrawOutline(_camera, t.Cell);
         UpdateDebug(gameTime);
         base.Draw(gameTime);   // UI encima
-    }
-
-    /// <summary>Emite un evento de conversación al objetivo (entidad o bloque). Quien no lo acepte lo recibe y lo ignora.</summary>
-    private void Talk()
-    {
-        var ev = new GameEvent(GameEvents.Conversation);
-        if (_entityTarget != null) _events.Send(_entityTarget, ev);
-        else if (_target is { } t) _events.Send(new BlockRef(_world, Blocks.Registry, t.Cell), ev);
-        else ShowMessage("No hay nadie a quien hablar: apunta a algo");
-    }
-
-    /// <summary>
-    /// Emite una bola de fuego (3 de daño) sobre lo apuntado. La reciben TODAS las entidades a menos de 3 bloques y los bloques a menos
-    /// de 2; cada una la procesa solo si su tipo acepta el fuego. Criaturas: sufren daño. Tronco y hojas: arden. El resto: la ignoran.
-    /// </summary>
-    private void CastFireball()
-    {
-        Vec3d center;
-        if (_entityTarget != null)
-        {
-            // La posición de una entidad es canónica (X envuelta); los bloques usan las coordenadas cercanas al jugador.
-            double x = _pos.X + _scale.DeltaX(_pos.X, _entityTarget.Position.X);
-            center = new Vec3d(x, _entityTarget.Position.Y, _entityTarget.Position.Z);
-        }
-        else if (_target is { } t) center = new Vec3d(t.Cell.X + 0.5, t.Cell.Y + 0.5, t.Cell.Z + 0.5);
-        else { ShowMessage("Apunta a algo para lanzar la bola de fuego"); return; }
-
-        var ev = new GameEvent(GameEvents.Fireball, Amount: 3f);
-        var cell = new CellCoord((int)Math.Floor(center.X), (int)Math.Floor(center.Y), (int)Math.Floor(center.Z));
-        int entities = _events.Broadcast(center, 3.0, ev);
-        int blocks = BlockEvents.Broadcast(_events, _world, Blocks.Registry, cell, 2, ev);
-        ShowMessage($"Bola de fuego: la procesan {entities} entidades y {blocks} bloques");
     }
 
     /// <summary>Solo las conversaciones ignoradas se cuentan al jugador: el resto lo narran los manejadores.</summary>
@@ -723,43 +625,8 @@ public sealed class PlayScene : UiScene
 
     private string FarInfo() => _far == null ? "desactivado"
         : $"{_far.TilesDrawn} tiles dibujados, {_far.CachedTiles} en cache, {_far.PendingTiles} pendientes, {_far.AverageBuildMs:0.0} ms/tile | " +
-          $"anillo desde {_holeRadius} chunks hasta {_settings.FarDistanceChunks} | " +
+          $"anillo desde {_holes.Radius} chunks hasta {_settings.FarDistanceChunks} | " +
           $"fundido {(_renderer.FadeActive ? "si" : "no")}, {_renderer.FadingChunks} chunks apareciendo";
-
-    /// <summary>
-    /// Agujero central del terreno lejano: el cuadrado de chunks con su MALLA ya construida alrededor de la cámara (no basta con que
-    /// sus datos estén cargados: hasta que no se ve, el terreno lejano sigue ahí), con un máximo de
-    /// FarCloseChunks. Dentro no hay malla lejana; si los chunks van por detrás (carga inicial, vuelo rápido), el agujero se encoge
-    /// y el terreno lejano rellena lo que falte.
-    /// </summary>
-    private FarHole ComputeFarHole()
-    {
-        var cc = _world.Shape.ToChunk(new CellCoord(IntMath.FloorToInt(_pos.X), 0, IntMath.FloorToInt(_pos.Z)));
-        var key = (cc.X, cc.Z, _renderer.VisibilityVersion);   // cambia al construirse una malla, terminar su fundido o descargarse
-        if (key != _holeKey)
-        {
-            _holeKey = key;
-            _coveredRadius = FarHoleBuilder.CoveredRadius(cc.X, cc.Z, _farCloseChunks, ColumnCovered);
-        }
-
-        _holeRadius = Math.Min(_farCloseChunks, _coveredRadius);
-        if (_holeRadius < 0) { _holeRadius = 0; return default; }
-        return FarHoleBuilder.ForRadius(cc.X, cc.Z, _holeRadius, _world.Shape.SizeX);
-    }
-
-    private bool ColumnCovered(int cx, int cz)
-    {
-        if (cz < 0 || cz >= _scale.ChunkCountZ) return true;   // más allá de los polos no hay nada que cubrir
-        for (int cy = 0; cy < _settings.VerticalChunks; cy++)
-            if (!_renderer.IsFullyVisible(new ChunkCoord(cx, cy, cz))) return false;   // aún sin malla o disolviéndose: no se puede quitar el lejano
-        return true;
-    }
-
-    /// <summary>
-    /// Un golpe es un EVENTO de daño de 1 punto enviado a la entidad: lo procesa quien acepte "dano" (toda criatura) y baja su "hp";
-    /// al llegar a 0 muere. Cualquier otra cosa que lo reciba lo ignora.
-    /// </summary>
-    private void Attack(Entity entity) => _events.Send(entity, new GameEvent(GameEvents.Melee, _player, _player.AttackPower));
 
     /// <summary>Regeneración de vida, muerte y reaparición, y el texto de vida de la pantalla.</summary>
     private void UpdatePlayerState(float dt)
@@ -787,24 +654,6 @@ public sealed class PlayScene : UiScene
         ShowMessage("Has muerto: reapareces en el punto de inicio");
     }
 
-    /// <summary>
-    /// Cada golpe resta 1 a la durabilidad del bloque (stone 3, log 2, el resto 1). Solo el bloque golpeado guarda su valor nuevo;
-    /// los demás comparten el del prototipo. Los sprites y otros tipos sin propiedades se rompen de un golpe.
-    /// </summary>
-    private void Mine(CellCoord cell)
-    {
-        var block = new BlockRef(_world, Blocks.Registry, cell);
-        if (block.TryGetFloat("durability", out float durability) && durability > 1f)
-        {
-            block.Set("durability", durability - 1f);
-            return;
-        }
-		ushort brokenId = _world.GetCell(cell);
-		if (brokenId == Blocks.Fungus || brokenId == Blocks.SporeCap)
-			_grenades?.ReleaseSpores(new Vec3d(cell.X + 0.5, cell.Y + 0.5, cell.Z + 0.5));
-		_world.SetCell(cell, Blocks.Air);   // sustituir el bloque borra también sus cambios de instancia
-    }
-
     /// <summary>Pasa la hora del día al renderer, al terreno lejano, a la niebla y al fondo. No remalla nada.</summary>
     private void ApplyDayNight()
     {
@@ -819,50 +668,6 @@ public sealed class PlayScene : UiScene
         _boxes.FogColor = sky;
     }
 
-    private static float Brightness(float level) => MathF.Max(0.08f, MathF.Pow(0.82f, 15f - level));
-
-    private IEnumerable<EntityBox> ActiveBoxes()
-    {
-        foreach (var e in _entities.Active)
-        {
-            var def = EntityTypes.Registry.Get(e.TypeId);
-            var color = new Color(def.R, def.G, def.B);
-            // La luz de su celda (las entidades son canónicas: X relativa al jugador): de noche y en cuevas se oscurecen.
-            double x = _pos.X + _scale.DeltaX(_pos.X, e.Position.X);
-            var cell = new CellCoord(IntMath.FloorToInt(x), IntMath.FloorToInt(e.Position.Y + 0.5), IntMath.FloorToInt(e.Position.Z));
-            // Sin el terreno de su chunk construido y ya visible, la entidad flotaría sobre el vacío (aparecía y desaparecía a lo lejos).
-            if (!_renderer.IsFullyVisible(_world.Shape.ToChunk(cell))) continue;
-            var lv = _renderer.Light.Sample(cell);
-            // Sin dato de luz todavía se supone cielo abierto (de noche, oscuro): antes se dibujaba a pleno brillo.
-            var t = lv.Known ? lv.Total : Vector3.Max(lv.Ambient, _day.SkyLight * LightField.Max);
-            color = new Color(color.ToVector3() * new Vector3(Brightness(t.X), Brightness(t.Y), Brightness(t.Z)));
-            yield return new EntityBox(e.Position, new Vector3(def.Width, def.Height, def.Width), color);
-        }
-    }
-
-    private IEnumerable<MapMarker> EntityMarkers()
-    {
-        foreach (var e in _entities.All)
-        {
-            var def = EntityTypes.Registry.Get(e.TypeId);
-            yield return new MapMarker((float)e.Position.X, (float)e.Position.Z, new Color(def.R, def.G, def.B), 5f);
-        }
-
-		foreach (var c in _cities.Known)
-        {
-			Color mc = !c.Abandoned ? Color.White
-			    : c.Site == SiteKind.Temple ? new Color(180, 90, 220)      // templos: violeta
-			    : c.Site == SiteKind.Statues ? new Color(80, 200, 220)     // estatuas: cian
-				: c.Site == SiteKind.Tech ? new Color(150, 170, 255)      // instalaciones tecnologicas: azul claro
-				: new Color(220, 150, 50);                                 // ciudades abandonadas: naranja
-			yield return new MapMarker(c.CenterX, c.CenterZ, mc, c.Abandoned ? 7f : 9f);
-		}
-
-		foreach (var f in StatueFields.All(_scale, _seed))
-			yield return new MapMarker(f.X, f.Z,
-				f.Kind == 1 ? new Color(200, 170, 120) : f.Kind == 0 ? new Color(80, 200, 220) : new Color(160, 200, 150), 14f);   // estatuas cian, urnas arena, mixto verde
-	}
-
     private void UpdateDebug(GameTime gameTime)
     {
         _frames++;
@@ -872,11 +677,11 @@ public sealed class PlayScene : UiScene
         _frames = 0; _fpsTimer = 0;
         if (!_debug.Visible || !_spawned) return;
 
-        int wx = IntMath.FloorToInt(_pos.X), wz = IntMath.FloorToInt(_pos.Z);
+        int wx = IntMath.FloorToInt(Pos.X), wz = IntMath.FloorToInt(Pos.Z);
         var (rx, rz) = _scale.RegionOf(wx, wz);
         var chunk = _scale.ChunkOf(wx, wz);
         string biome = Biomes.Registry.Get(_climate.Classify(_climate.Sample(wx, wz))).Name;
-        _debug.Text = $"FPS {_fps:0} | Vuelo {(_flying ? "si" : "no")} | Escalon auto {(_autoStep ? "si" : "no")}\nXYZ {_pos.X:0.0} {_pos.Y:0.0} {_pos.Z:0.0}\n" +
+        _debug.Text = $"FPS {_fps:0} | Vuelo {(_body.Flying ? "si" : "no")} | Escalon auto {(_body.AutoStep ? "si" : "no")}\nXYZ {Pos.X:0.0} {Pos.Y:0.0} {Pos.Z:0.0}\n" +
                       $"Region ({rx}, {rz}) - {biome} | Chunk ({chunk.X}, {chunk.Z}) | Alto {_settings.WorldHeight}, mar {_climate.SeaLevel}\n" +
                       $"Chunks cargados {_world.LoadedChunkCount}, con malla {_renderer.MeshedChunks}, visibles {_renderer.VisibleChunks}\n" +
                       $"Mallado pendiente {_renderer.PendingMeshes} | Sprites cargados {_sprites.Count}, billboards {_renderer.BillboardsDrawn} | Mapa {(_map != null ? "listo" : "generando")}\n" +
@@ -888,12 +693,12 @@ public sealed class PlayScene : UiScene
                       $"Mallado {_renderer.AverageMeshMs:0.0} ms/chunk\n" +
                       $"Terreno lejano: {FarInfo()}\n" +
                       $"Tiempos del hilo principal (ms): {_prof.Report()}\n" +
-					  $"{CityText()}\n" +
-					  $"{_fog?.DebugText ?? "Niebla: desactivada"}\n" +
-					  $"{_fogView?.Stats}\n" +
-					  $"{_gas?.DebugText}\n" +
-					  $"{_grenades?.DebugText}\n" +
-					  $"Luz aqui: {LightText()}\n";
+                      $"{CityText()}\n" +
+                      $"{_fog?.DebugText ?? "Niebla: desactivada"}\n" +
+                      $"{_fogView?.Stats}\n" +
+                      $"{_gas?.DebugText}\n" +
+                      $"{_grenades?.DebugText}\n" +
+                      $"Luz aqui: {LightText()}\n";
     }
 
     /// <summary>Muestra un aviso breve en pantalla (se reutiliza la etiqueta de estado del centro).</summary>
@@ -904,27 +709,10 @@ public sealed class PlayScene : UiScene
         _messageTimer = 2.5f;
     }
 
-    private bool ColumnLoaded()
-    {
-        var cc = _world.Shape.ToChunk(new CellCoord(IntMath.FloorToInt(_pos.X), 0, IntMath.FloorToInt(_pos.Z)));
-        for (int cy = LowestChunkY; cy < _settings.VerticalChunks; cy++)
-            if (_world.GetChunk(new ChunkCoord(cc.X, cy, cc.Z)) == null) return false;
-        return true;
-    }
-
-    private bool IntersectsPlayer(CellCoord c)
-    {
-        float hx = BodySize.X * 0.5f, hz = BodySize.Z * 0.5f;
-        return _pos.X - hx < c.X + 1 && _pos.X + hx > c.X &&
-               _pos.Y < c.Y + 1 && _pos.Y + BodySize.Y > c.Y &&
-               _pos.Z - hz < c.Z + 1 && _pos.Z + hz > c.Z;
-    }
-
     private string CityText()
     {
-        var c = _cities.CityAt(IntMath.FloorToInt(_pos.X), IntMath.FloorToInt(_pos.Z));
+        var c = _cities.CityAt(IntMath.FloorToInt(Pos.X), IntMath.FloorToInt(Pos.Z));
         return c == null ? "Ciudad: ninguna aqui"
             : $"Ciudad: centro ({c.CenterX}, {c.CenterZ}) radio {c.Radius} suelo {c.GroundY} | conocidas {_cities.Known.Count()}";
-
     }
 }

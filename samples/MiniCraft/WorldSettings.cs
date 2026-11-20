@@ -179,96 +179,84 @@ public sealed class WorldSettings
     public List<string> Validate()
     {
         var warnings = new List<string>();
+        var v = new SettingsValidator("", warnings);
 
-        int I(string name, int v, int min, int max)
-        {
-            int c = Math.Clamp(v, min, max);
-            if (c != v) warnings.Add($"{name}: {v} fuera de [{min}, {max}], se usa {c}");
-            return c;
-        }
-        float F(string name, float v, float min, float max)
-        {
-            float c = float.IsNaN(v) ? min : Math.Clamp(v, min, max);
-            if (c != v) warnings.Add($"{name}: {v} fuera de [{min}, {max}], se usa {c}");
-            return c;
-        }
-
-        MapWidth = I(nameof(MapWidth), MapWidth, 8, 2000);
-        MapHeight = I(nameof(MapHeight), MapHeight, 4, 500);
-        RegionChunksX = I(nameof(RegionChunksX), RegionChunksX, 1, 256);
-        RegionChunksZ = I(nameof(RegionChunksZ), RegionChunksZ, 1, 256);
+        MapWidth = v.I(nameof(MapWidth), MapWidth, 8, 2000);
+        MapHeight = v.I(nameof(MapHeight), MapHeight, 4, 500);
+        RegionChunksX = v.I(nameof(RegionChunksX), RegionChunksX, 1, 256);
+        RegionChunksZ = v.I(nameof(RegionChunksZ), RegionChunksZ, 1, 256);
         if (ChunkSize is not (8 or 16 or 32)) { warnings.Add($"ChunkSize: {ChunkSize} no valido (8, 16 o 32), se usa 16"); ChunkSize = 16; }
-        VerticalChunks = I(nameof(VerticalChunks), VerticalChunks, 2, 32);
+        VerticalChunks = v.I(nameof(VerticalChunks), VerticalChunks, 2, 32);
 
-        SeaLevelFraction = F(nameof(SeaLevelFraction), SeaLevelFraction, 0.1f, 0.9f);
-        ContinentSize = F(nameof(ContinentSize), ContinentSize, 500f, 100_000f);
-        MountainSize = F(nameof(MountainSize), MountainSize, 200f, 50_000f);
-        DetailSize = F(nameof(DetailSize), DetailSize, 10f, 2_000f);
-        ContinentAmplitude = F(nameof(ContinentAmplitude), ContinentAmplitude, 0f, 1f);
-        MountainAmplitude = F(nameof(MountainAmplitude), MountainAmplitude, 0f, 1.5f);
-        DetailAmplitude = F(nameof(DetailAmplitude), DetailAmplitude, 0f, 0.5f);
-        LandBias = F(nameof(LandBias), LandBias, -0.5f, 0.5f);
-        ContinentOctaves = I(nameof(ContinentOctaves), ContinentOctaves, 1, 8);
-        MountainOctaves = I(nameof(MountainOctaves), MountainOctaves, 1, 8);
-        DetailOctaves = I(nameof(DetailOctaves), DetailOctaves, 1, 8);
-        RangeCoverage = F(nameof(RangeCoverage), RangeCoverage, 0f, 0.6f);
-        RangeSharpness = F(nameof(RangeSharpness), RangeSharpness, 0.02f, 0.6f);
-        RangeWarp = F(nameof(RangeWarp), RangeWarp, 0f, 3000f);
-        HillSize = F(nameof(HillSize), HillSize, 50f, 5000f);
-        HillAmplitude = F(nameof(HillAmplitude), HillAmplitude, 0f, 0.5f);
-        HillRegionSize = F(nameof(HillRegionSize), HillRegionSize, 200f, 20_000f);
-        PlateauHeight = F(nameof(PlateauHeight), PlateauHeight, 0f, 40f);
-        Terracing = F(nameof(Terracing), Terracing, 0f, 1f);
-        RiverSpacing = F(nameof(RiverSpacing), RiverSpacing, 300f, 20_000f);
-        RiverWidth = F(nameof(RiverWidth), RiverWidth, 2f, 80f);
-        ValleyWidth = F(nameof(ValleyWidth), ValleyWidth, 10f, 400f);
-        ValleyDepth = F(nameof(ValleyDepth), ValleyDepth, 0f, 1f);
-        Lakes = F(nameof(Lakes), Lakes, 0f, 1f);
-        MinHeightFraction = F(nameof(MinHeightFraction), MinHeightFraction, 0f, 0.5f);
-        MaxHeightFraction = F(nameof(MaxHeightFraction), MaxHeightFraction, 0.5f, 1f);
+        SeaLevelFraction = v.F(nameof(SeaLevelFraction), SeaLevelFraction, 0.1f, 0.9f);
+        ContinentSize = v.F(nameof(ContinentSize), ContinentSize, 500f, 100_000f);
+        MountainSize = v.F(nameof(MountainSize), MountainSize, 200f, 50_000f);
+        DetailSize = v.F(nameof(DetailSize), DetailSize, 10f, 2_000f);
+        ContinentAmplitude = v.F(nameof(ContinentAmplitude), ContinentAmplitude, 0f, 1f);
+        MountainAmplitude = v.F(nameof(MountainAmplitude), MountainAmplitude, 0f, 1.5f);
+        DetailAmplitude = v.F(nameof(DetailAmplitude), DetailAmplitude, 0f, 0.5f);
+        LandBias = v.F(nameof(LandBias), LandBias, -0.5f, 0.5f);
+        ContinentOctaves = v.I(nameof(ContinentOctaves), ContinentOctaves, 1, 8);
+        MountainOctaves = v.I(nameof(MountainOctaves), MountainOctaves, 1, 8);
+        DetailOctaves = v.I(nameof(DetailOctaves), DetailOctaves, 1, 8);
+        RangeCoverage = v.F(nameof(RangeCoverage), RangeCoverage, 0f, 0.6f);
+        RangeSharpness = v.F(nameof(RangeSharpness), RangeSharpness, 0.02f, 0.6f);
+        RangeWarp = v.F(nameof(RangeWarp), RangeWarp, 0f, 3000f);
+        HillSize = v.F(nameof(HillSize), HillSize, 50f, 5000f);
+        HillAmplitude = v.F(nameof(HillAmplitude), HillAmplitude, 0f, 0.5f);
+        HillRegionSize = v.F(nameof(HillRegionSize), HillRegionSize, 200f, 20_000f);
+        PlateauHeight = v.F(nameof(PlateauHeight), PlateauHeight, 0f, 40f);
+        Terracing = v.F(nameof(Terracing), Terracing, 0f, 1f);
+        RiverSpacing = v.F(nameof(RiverSpacing), RiverSpacing, 300f, 20_000f);
+        RiverWidth = v.F(nameof(RiverWidth), RiverWidth, 2f, 80f);
+        ValleyWidth = v.F(nameof(ValleyWidth), ValleyWidth, 10f, 400f);
+        ValleyDepth = v.F(nameof(ValleyDepth), ValleyDepth, 0f, 1f);
+        Lakes = v.F(nameof(Lakes), Lakes, 0f, 1f);
+        MinHeightFraction = v.F(nameof(MinHeightFraction), MinHeightFraction, 0f, 0.5f);
+        MaxHeightFraction = v.F(nameof(MaxHeightFraction), MaxHeightFraction, 0.5f, 1f);
         if (MaxHeightFraction < SeaLevelFraction + 0.1f)
         {
             MaxHeightFraction = Math.Min(1f, SeaLevelFraction + 0.1f);
             warnings.Add($"MaxHeightFraction debe superar el nivel del mar; se usa {MaxHeightFraction}");
         }
 
-        TemperatureNoiseSize = F(nameof(TemperatureNoiseSize), TemperatureNoiseSize, 500f, 100_000f);
-        HumidityNoiseSize = F(nameof(HumidityNoiseSize), HumidityNoiseSize, 500f, 100_000f);
-        LatitudeWeight = F(nameof(LatitudeWeight), LatitudeWeight, 0f, 1f);
-        AltitudeCooling = F(nameof(AltitudeCooling), AltitudeCooling, 0f, 1f);
-        ClimateWarmth = F(nameof(ClimateWarmth), ClimateWarmth, -0.5f, 0.5f);
-        ClimateWetness = F(nameof(ClimateWetness), ClimateWetness, -0.5f, 0.5f);
-        BeachHeight = I(nameof(BeachHeight), BeachHeight, 0, 6);
-        MountainFraction = F(nameof(MountainFraction), MountainFraction, 0f, 1f);
-        SnowPeakFraction = F(nameof(SnowPeakFraction), SnowPeakFraction, 0f, 1f);
+        TemperatureNoiseSize = v.F(nameof(TemperatureNoiseSize), TemperatureNoiseSize, 500f, 100_000f);
+        HumidityNoiseSize = v.F(nameof(HumidityNoiseSize), HumidityNoiseSize, 500f, 100_000f);
+        LatitudeWeight = v.F(nameof(LatitudeWeight), LatitudeWeight, 0f, 1f);
+        AltitudeCooling = v.F(nameof(AltitudeCooling), AltitudeCooling, 0f, 1f);
+        ClimateWarmth = v.F(nameof(ClimateWarmth), ClimateWarmth, -0.5f, 0.5f);
+        ClimateWetness = v.F(nameof(ClimateWetness), ClimateWetness, -0.5f, 0.5f);
+        BeachHeight = v.I(nameof(BeachHeight), BeachHeight, 0, 6);
+        MountainFraction = v.F(nameof(MountainFraction), MountainFraction, 0f, 1f);
+        SnowPeakFraction = v.F(nameof(SnowPeakFraction), SnowPeakFraction, 0f, 1f);
         if (SnowPeakFraction < MountainFraction)
         {
             SnowPeakFraction = MountainFraction;
             warnings.Add("SnowPeakFraction no puede ser menor que MountainFraction; se iguala");
         }
-        TreeDensityMultiplier = F(nameof(TreeDensityMultiplier), TreeDensityMultiplier, 0f, 5f);
-        PropDensityMultiplier = F(nameof(PropDensityMultiplier), PropDensityMultiplier, 0f, 5f);
-        FaunaPerChunk = F(nameof(FaunaPerChunk), FaunaPerChunk, 0f, 4f);
-        FaunaLimit = I(nameof(FaunaLimit), FaunaLimit, 0, 5000);
-        CaveDensity = F(nameof(CaveDensity), CaveDensity, 0f, 2f);
-        MysteryDensity = F(nameof(MysteryDensity), MysteryDensity, 0f, 3f);
+        TreeDensityMultiplier = v.F(nameof(TreeDensityMultiplier), TreeDensityMultiplier, 0f, 5f);
+        PropDensityMultiplier = v.F(nameof(PropDensityMultiplier), PropDensityMultiplier, 0f, 5f);
+        FaunaPerChunk = v.F(nameof(FaunaPerChunk), FaunaPerChunk, 0f, 4f);
+        FaunaLimit = v.I(nameof(FaunaLimit), FaunaLimit, 0, 5000);
+        CaveDensity = v.F(nameof(CaveDensity), CaveDensity, 0f, 2f);
+        MysteryDensity = v.F(nameof(MysteryDensity), MysteryDensity, 0f, 3f);
 
-        ViewDistance = I(nameof(ViewDistance), ViewDistance, 2, 24);
-        FadeChunks = I(nameof(FadeChunks), FadeChunks, 0, 8);
-        FadeInSeconds = F(nameof(FadeInSeconds), FadeInSeconds, 0f, 3f);
-        FarCloseChunks = I(nameof(FarCloseChunks), FarCloseChunks, 0, 512);
-        FarDistanceChunks = I(nameof(FarDistanceChunks), FarDistanceChunks, 0, 512);
-        FarDetail = F(nameof(FarDetail), FarDetail, 0.8f, 4f);
-        Villagers = I(nameof(Villagers), Villagers, 0, 100);
-        Caravans = I(nameof(Caravans), Caravans, 0, 2000);
-        EnemiesPerChunk = F(nameof(EnemiesPerChunk), EnemiesPerChunk, 0f, 4f);
-        EnemyLimit = I(nameof(EnemyLimit), EnemyLimit, 0, 5000);
-        Galaxies = I(nameof(Galaxies), Galaxies, 1, 100);
-        SystemsPerGalaxy = I(nameof(SystemsPerGalaxy), SystemsPerGalaxy, 1, 1000);
-        MinPlanets = I(nameof(MinPlanets), MinPlanets, 1, 12);
-        MaxPlanets = I(nameof(MaxPlanets), MaxPlanets, 1, 12);
-        MapSamplesPerAxis = I(nameof(MapSamplesPerAxis), MapSamplesPerAxis, 1, 16);
-        WorkerThreads = I(nameof(WorkerThreads), WorkerThreads, 0, 64);
+        ViewDistance = v.I(nameof(ViewDistance), ViewDistance, 2, 24);
+        FadeChunks = v.I(nameof(FadeChunks), FadeChunks, 0, 8);
+        FadeInSeconds = v.F(nameof(FadeInSeconds), FadeInSeconds, 0f, 3f);
+        FarCloseChunks = v.I(nameof(FarCloseChunks), FarCloseChunks, 0, 512);
+        FarDistanceChunks = v.I(nameof(FarDistanceChunks), FarDistanceChunks, 0, 512);
+        FarDetail = v.F(nameof(FarDetail), FarDetail, 0.8f, 4f);
+        Villagers = v.I(nameof(Villagers), Villagers, 0, 100);
+        Caravans = v.I(nameof(Caravans), Caravans, 0, 2000);
+        EnemiesPerChunk = v.F(nameof(EnemiesPerChunk), EnemiesPerChunk, 0f, 4f);
+        EnemyLimit = v.I(nameof(EnemyLimit), EnemyLimit, 0, 5000);
+        Galaxies = v.I(nameof(Galaxies), Galaxies, 1, 100);
+        SystemsPerGalaxy = v.I(nameof(SystemsPerGalaxy), SystemsPerGalaxy, 1, 1000);
+        MinPlanets = v.I(nameof(MinPlanets), MinPlanets, 1, 12);
+        MaxPlanets = v.I(nameof(MaxPlanets), MaxPlanets, 1, 12);
+        MapSamplesPerAxis = v.I(nameof(MapSamplesPerAxis), MapSamplesPerAxis, 1, 16);
+        WorkerThreads = v.I(nameof(WorkerThreads), WorkerThreads, 0, 64);
         Cities.Validate(warnings);
         Ruins.Validate(warnings);
         Vegetation.Validate(warnings);

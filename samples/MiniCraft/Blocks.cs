@@ -29,57 +29,60 @@ public static class Blocks
     public static readonly ushort[] FloraSprites = new ushort[16];
     public const ushort Air = BlockRegistry.Air;
 
+    // Prototipos derivados con su durabilidad (golpes para romperlos). Se mantienen exactamente como estaban: los usan los manejadores de eventos.
+    private static Prototype Hard(Prototype parent, string name, float hits) => parent.Derive(name).Float("durability", hits);
+
     // IMPORTANTE: el orden de registro define los ids guardados en disco. Añade bloques nuevos al final.
     static Blocks()
     {
-        Grass = Registry.Register("grass", BlockDef.TopSideBottom("grass", TileGrassTop, TileGrassSide, TileDirt) with { Props = BlockProto });
-        Dirt = Registry.Register("dirt", BlockDef.Cube("dirt", TileDirt) with { Props = BlockProto });
-        Stone = Registry.Register("stone", BlockDef.Cube("stone", TileStone) with { Props = BlockProto.Derive("piedra").Float("durability", 3f) });
-        Sand = Registry.Register("sand", BlockDef.Cube("sand", TileSand) with { Props = BlockProto });
-        Water = Registry.Register("water", BlockDef.Cube("water", TileWater, solid: false, opaque: false, translucent: true));
-        Log = Registry.Register("log", BlockDef.TopSideBottom("log", TileLogTop, TileLogSide, TileLogTop) with { Props = TrunkProto });
-        Leaves = Registry.Register("leaves", BlockDef.Cube("leaves", TileLeaves, solid: true, opaque: false) with { Props = LeafProto, LightFilter = new Color(150, 150, 150) });   // con huecos: se ve a través, y dan sombra a medias
-        Snow = Registry.Register("snow", BlockDef.Cube("snow", TileSnow) with { Props = BlockProto });
+        Grass = Registry.Define("grass").Tiles(TileGrassTop, TileGrassSide, TileDirt).Parent(BlockProto).Register();
+        Dirt = Registry.Define("dirt").Tile(TileDirt).Parent(BlockProto).Register();
+        Stone = Registry.Define("stone").Tile(TileStone).Props(Hard(BlockProto, "piedra", 3f)).Register();
+        Sand = Registry.Define("sand").Tile(TileSand).Parent(BlockProto).Register();
+        Water = Registry.Define("water").Tile(TileWater).Passable().NotOpaque().Translucent().Register();
+        Log = Registry.Define("log").Tiles(TileLogTop, TileLogSide, TileLogTop).Parent(TrunkProto).Register();
+        Leaves = Registry.Define("leaves").Tile(TileLeaves).NotOpaque().Parent(LeafProto).FilterLight(new Color(150, 150, 150)).Register();   // con huecos: se ve a través, y dan sombra a medias
+        Snow = Registry.Define("snow").Tile(TileSnow).Parent(BlockProto).Register();
 
-        // Sprites 2D importados de samples/MiniCraft/sprites/*.png. El segundo nombre es el del archivo, sin extensión.
+        // Sprites 2D importados de samples/MiniCraft/sprites/*.png. El primer argumento es el nombre del archivo, sin extensión.
         // Ancho/alto 0 = el sprite mide lo que mide su imagen (en bloques), así que pueden ser mayores que una celda.
         // Añade bloques siempre AL FINAL: el orden son los ids guardados en disco.
-        GrassTuft = Registry.Register("grass_tuft", BlockDef.Sprite("grass_tuft", "grass_tuft", BlockRender.Cross));
-        FlowerRed = Registry.Register("flower_red", BlockDef.Sprite("flower_red", "flower_red", BlockRender.Cross));
-        FlowerYellow = Registry.Register("flower_yellow", BlockDef.Sprite("flower_yellow", "flower_yellow", BlockRender.Cross));
-        Rock = Registry.Register("rock", BlockDef.Sprite("rock", "rock", BlockRender.Billboard));
-        TallGrass = Registry.Register("tall_grass", BlockDef.Sprite("tall_grass", "tall_grass", BlockRender.Cross));       // 1 x 2 bloques
-        Bush = Registry.Register("bush", BlockDef.Sprite("bush", "bush_large", BlockRender.Cross));                          // 3 x 2,25 bloques
+        GrassTuft = Registry.Define("grass_tuft").Sprite("grass_tuft").Register();
+        FlowerRed = Registry.Define("flower_red").Sprite("flower_red").Register();
+        FlowerYellow = Registry.Define("flower_yellow").Sprite("flower_yellow").Register();
+        Rock = Registry.Define("rock").Sprite("rock", BlockRender.Billboard).Register();
+        TallGrass = Registry.Define("tall_grass").Sprite("tall_grass").Register();       // 1 x 2 bloques
+        Bush = Registry.Define("bush").Sprite("bush_large").Register();                   // 3 x 2,25 bloques
 
         // Lámparas: bloques emisores (nivel 15). Usan el tile BLANCO (nieve): la textura se tiñe con el color de su propia luz.
-        Lamp = Registry.Register("lamp", BlockDef.Cube("lamp", TileSnow) with { Props = BlockProto, Emission = 15 });
-        LampWarm = Registry.Register("lamp_warm", BlockDef.Cube("lamp_warm", TileSnow) with { Props = BlockProto, Emission = 15, LightColor = new Color(255, 205, 140) });
-        LampBlue = Registry.Register("lamp_blue", BlockDef.Cube("lamp_blue", TileSnow) with { Props = BlockProto, Emission = 15, LightColor = new Color(150, 185, 255) });
-        LampGreen = Registry.Register("lamp_green", BlockDef.Cube("lamp_green", TileSnow) with { Props = BlockProto, Emission = 15, LightColor = new Color(160, 255, 170) });
-        GlassBlue = Registry.Register("glass_blue", BlockDef.Cube("glass_blue", TileWater, solid: true, opaque: false, translucent: true) with { LightFilter = new Color(40, 90, 255) });
+        Lamp = Registry.Define("lamp").Tile(TileSnow).Parent(BlockProto).Emits(15).Register();
+        LampWarm = Registry.Define("lamp_warm").Tile(TileSnow).Parent(BlockProto).Emits(15, new Color(255, 205, 140)).Register();
+        LampBlue = Registry.Define("lamp_blue").Tile(TileSnow).Parent(BlockProto).Emits(15, new Color(150, 185, 255)).Register();
+        LampGreen = Registry.Define("lamp_green").Tile(TileSnow).Parent(BlockProto).Emits(15, new Color(160, 255, 170)).Register();
+        GlassBlue = Registry.Define("glass_blue").Tile(TileWater).NotOpaque().Translucent().FilterLight(new Color(40, 90, 255)).Register();
 
         // ---- Bloques alienígenas (patch 2). Su color real lo pone la paleta del planeta (PlanetPalette) al recolorear el atlas.
         // Cristal y hongo emiten luz blanca: su color sale de la textura, que ya viene teñida por planeta.
-        Crystal = Registry.Register("crystal", BlockDef.Cube("crystal", TileCrystal, solid: true, opaque: false, translucent: true) with { Props = BlockProto, Emission = 12 });   // cuarzo: blanquecino y parcialmente transparente
-        Fungus = Registry.Register("fungus", BlockDef.Cube("fungus", TileFungus) with { Props = BlockProto, Emission = 5 });
-        RustMetal = Registry.Register("rust_metal", BlockDef.Cube("rust_metal", TileMetal) with { Props = BlockProto.Derive("metal").Float("durability", 4f) });
-        Salt = Registry.Register("salt", BlockDef.Cube("salt", TileSalt) with { Props = BlockProto });
-        Ash = Registry.Register("ash", BlockDef.Cube("ash", TileAsh) with { Props = BlockProto });
-        Panel = Registry.Register("panel", BlockDef.Cube("panel", TilePanel) with { Props = BlockProto.Derive("metal").Float("durability", 4f) });
-        SandRed = Registry.Register("sand_red", BlockDef.Cube("sand_red", TileSandRed) with { Props = BlockProto });
-        SandBlack = Registry.Register("sand_black", BlockDef.Cube("sand_black", TileSandBlack) with { Props = BlockProto });
-        Clay = Registry.Register("clay", BlockDef.Cube("clay", TileClay) with { Props = BlockProto });
-        DarkSoil = Registry.Register("dark_soil", BlockDef.Cube("dark_soil", TileDarkSoil) with { Props = BlockProto });
-        Moss = Registry.Register("moss", BlockDef.TopSideBottom("moss", TileMossTop, TileMossSide, TileDirt) with { Props = BlockProto });
-        Lichen = Registry.Register("lichen", BlockDef.TopSideBottom("lichen", TileLichenTop, TileLichenSide, TileDirt) with { Props = BlockProto });
-        Basalt = Registry.Register("basalt", BlockDef.Cube("basalt", TileBasalt) with { Props = BlockProto.Derive("piedra").Float("durability", 4f) });
-        Strata = Registry.Register("strata", BlockDef.Cube("strata", TileStrata) with { Props = BlockProto.Derive("piedra").Float("durability", 3f) });
-        Chalk = Registry.Register("chalk", BlockDef.Cube("chalk", TileChalk) with { Props = BlockProto.Derive("piedra").Float("durability", 2f) });
-        StemWood = Registry.Register("stem_wood", BlockDef.TopSideBottom("stem_wood", TileStemTop, TileStemSide, TileStemTop) with { Props = TrunkProto.Derive("tallo").Float("durability", 2f) });
-        Petrified = Registry.Register("petrified_wood", BlockDef.TopSideBottom("petrified_wood", TilePetrifiedTop, TilePetrifiedSide, TilePetrifiedTop) with { Props = TrunkProto.Derive("petrificada").Float("durability", 4f) });
-        Fronds = Registry.Register("fronds", BlockDef.Cube("fronds", TileFronds, solid: true, opaque: false) with { Props = LeafProto.Derive("fronda"), LightFilter = new Color(150, 150, 150) });
-        SporeCap = Registry.Register("spore_cap", BlockDef.Cube("spore_cap", TileSporeCap) with { Props = LeafProto.Derive("sombrero"), Emission = 3 });
+        Crystal = Registry.Define("crystal").Tile(TileCrystal).NotOpaque().Translucent().Parent(BlockProto).Emits(12).Register();   // cuarzo: blanquecino y parcialmente transparente
+        Fungus = Registry.Define("fungus").Tile(TileFungus).Parent(BlockProto).Emits(5).Register();
+        RustMetal = Registry.Define("rust_metal").Tile(TileMetal).Props(Hard(BlockProto, "metal", 4f)).Register();
+        Salt = Registry.Define("salt").Tile(TileSalt).Parent(BlockProto).Register();
+        Ash = Registry.Define("ash").Tile(TileAsh).Parent(BlockProto).Register();
+        Panel = Registry.Define("panel").Tile(TilePanel).Props(Hard(BlockProto, "metal", 4f)).Register();
+        SandRed = Registry.Define("sand_red").Tile(TileSandRed).Parent(BlockProto).Register();
+        SandBlack = Registry.Define("sand_black").Tile(TileSandBlack).Parent(BlockProto).Register();
+        Clay = Registry.Define("clay").Tile(TileClay).Parent(BlockProto).Register();
+        DarkSoil = Registry.Define("dark_soil").Tile(TileDarkSoil).Parent(BlockProto).Register();
+        Moss = Registry.Define("moss").Tiles(TileMossTop, TileMossSide, TileDirt).Parent(BlockProto).Register();
+        Lichen = Registry.Define("lichen").Tiles(TileLichenTop, TileLichenSide, TileDirt).Parent(BlockProto).Register();
+        Basalt = Registry.Define("basalt").Tile(TileBasalt).Props(Hard(BlockProto, "piedra", 4f)).Register();
+        Strata = Registry.Define("strata").Tile(TileStrata).Props(Hard(BlockProto, "piedra", 3f)).Register();
+        Chalk = Registry.Define("chalk").Tile(TileChalk).Props(Hard(BlockProto, "piedra", 2f)).Register();
+        StemWood = Registry.Define("stem_wood").Tiles(TileStemTop, TileStemSide, TileStemTop).Props(Hard(TrunkProto, "tallo", 2f)).Register();
+        Petrified = Registry.Define("petrified_wood").Tiles(TilePetrifiedTop, TilePetrifiedSide, TilePetrifiedTop).Props(Hard(TrunkProto, "petrificada", 4f)).Register();
+        Fronds = Registry.Define("fronds").Tile(TileFronds).NotOpaque().Parent(LeafProto.Derive("fronda")).FilterLight(new Color(150, 150, 150)).Register();
+        SporeCap = Registry.Define("spore_cap").Tile(TileSporeCap).Parent(LeafProto.Derive("sombrero")).Emits(3).Register();
         for (int i = 0; i < FloraSprites.Length; i++)   // sprites de flora: añadidos AL FINAL
-            FloraSprites[i] = Registry.Register($"flora_sprite_{i}", BlockDef.Sprite($"flora_sprite_{i}", $"flora_{i}", BlockRender.Cross));
+            FloraSprites[i] = Registry.Define($"flora_sprite_{i}").Sprite($"flora_{i}").Register();
     }
 }

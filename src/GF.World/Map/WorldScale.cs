@@ -18,7 +18,7 @@ public sealed record WorldScale(int MapWidth, int MapHeight, int RegionChunksX, 
     public int ChunkCountX => MapWidth * RegionChunksX;
     public int ChunkCountZ => MapHeight * RegionChunksZ;
 
-    public int WrapX(int wx) => ((wx % WidthBlocks) + WidthBlocks) % WidthBlocks;
+    public int WrapX(int wx) => IntMath.Mod(wx, WidthBlocks);
 
     public float WrapX(float wx)
     {
@@ -42,7 +42,7 @@ public sealed record WorldScale(int MapWidth, int MapHeight, int RegionChunksX, 
         return d - w * Math.Round(d / w);
     }
 
-    public int WrapChunkX(int cx) => ((cx % ChunkCountX) + ChunkCountX) % ChunkCountX;
+    public int WrapChunkX(int cx) => IntMath.Mod(cx, ChunkCountX);
 
     /// <summary>Región que contiene la columna (wx, wz). X se envuelve y Z se limita a los polos.</summary>
     public (int X, int Z) RegionOf(int wx, int wz) =>
