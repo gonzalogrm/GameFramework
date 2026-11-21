@@ -80,9 +80,9 @@ internal static class MysterySites
         }
     }
 
-    private static float Rand(int seed, int a, int b, int c) => (Hashing.Combine(seed, a, b, c) >> 40) * (1f / (1 << 24));
+	private static float Rand(int seed, int a, int b, int c) => Hashing.Unit(Hashing.Combine(seed, a, b, c));
 
-    public static void Apply(Chunk<ushort> chunk, GenerationContext ctx, MiniCraftClimate climate, WorldScale scale, TerrainColumnCache columns, CityPlanner planner)
+	public static void Apply(Chunk<ushort> chunk, GenerationContext ctx, MiniCraftClimate climate, WorldScale scale, TerrainColumnCache columns, CityPlanner planner)
     {
         float density = climate.Settings.MysteryDensity;
         if (density <= 0f) return;
